@@ -934,15 +934,15 @@ if held_key not in st.session_state:
 
 selected_indices = list(st.session_state[held_key])
 
-# V10 dice picker. This uses Streamlit's multi-select pills so all five dice
-# stay in one tight row on mobile, duplicate dice are tracked by position, and
-# tapping a die updates the hold without URL navigation.
+# V12 dice picker. This uses Streamlit's multi-select pills so all five dice
+# stay in one tight row on mobile. Labels include invisible zero-width characters
+# so duplicate dice (like three 2s) remain separately tappable by position.
 dice_positions = list(range(len(dice)))
 selected_indices = st.pills(
     "Dice to hold",
     options=dice_positions,
     default=st.session_state.get(held_key, []),
-    format_func=lambda die_index: DICE_FACE.get(int(dice[die_index]), str(dice[die_index])),
+    format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
     selection_mode="multi",
     key=f"dice_pills_{round_id}",
     label_visibility="collapsed",
