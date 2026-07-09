@@ -768,8 +768,45 @@ def process_dice_toggle_query(held_key, round_id, answer_submitted=False):
     st.rerun()
 
 
+def app_challenge_signature(challenge):
+    """Small session-level signature used to prevent repetitive practice rounds."""
+    scorecard = challenge.get("scorecard", {}) or {}
+    categories = getattr(yc, "YAHTZEE_CATEGORIES", list(scorecard.keys()))
+    filled = tuple(
+        (category, scorecard.get(category))
+        for category in categories
+        if scorecard.get(category) is not None
+    )
+    return (
+        challenge.get("scenario_name"),
+        challenge.get("roll_number"),
+        tuple(sorted(challenge.get("dice", []))),
+        filled,
+    )
+
+
 def new_round(scroll_to_top=False):
-    st.session_state.challenge = yc.generate_practice_challenge()
+    recent_scenarios = list(st.session_state.get("recent_scenario_names", []))
+    recent_signatures = list(st.session_state.get("recent_challenge_signatures", []))
+
+    try:
+        challenge = yc.generate_practice_challenge(
+            avoid_recent_scenarios=recent_scenarios[-4:],
+            avoid_recent_signatures=recent_signatures[-8:],
+        )
+    except TypeError:
+        # Backward-compatible fallback for older engine files.
+        challenge = yc.generate_practice_challenge()
+
+    st.session_state.challenge = challenge
+
+    scenario_name = challenge.get("scenario_name")
+    if scenario_name:
+        st.session_state.recent_scenario_names = (recent_scenarios + [scenario_name])[-5:]
+
+    signature = app_challenge_signature(challenge)
+    st.session_state.recent_challenge_signatures = (recent_signatures + [signature])[-10:]
+
     st.session_state.report = None
     st.session_state.round_id = st.session_state.get("round_id", 0) + 1
     st.session_state.scroll_to_result = False
@@ -781,6 +818,10 @@ def new_round(scroll_to_top=False):
 def initialize_state():
     if "history" not in st.session_state:
         st.session_state.history = []
+    if "recent_scenario_names" not in st.session_state:
+        st.session_state.recent_scenario_names = []
+    if "recent_challenge_signatures" not in st.session_state:
+        st.session_state.recent_challenge_signatures = []
     if "scroll_to_result" not in st.session_state:
         st.session_state.scroll_to_result = False
     if "scroll_to_top" not in st.session_state:

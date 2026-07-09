@@ -390,15 +390,36 @@ def run_speed_tests(verbose: bool = True) -> Dict[str, Any]:
 
     return {"passed": passed, "failed": failed, "details": result}
 
+
+
+def run_v21_playtest_tests(verbose: bool = True) -> Dict[str, Any]:
+    """Run the collected v21 playtest regressions stored in the engine."""
+    if not hasattr(yc, "run_v21_playtest_regression_tests"):
+        return {"passed": 0, "failed": 1, "details": ["Missing run_v21_playtest_regression_tests"]}
+
+    result = yc.run_v21_playtest_regression_tests(verbose=verbose)
+
+    if verbose:
+        print()
+        print("V21 PLAYTEST PATCH TESTS")
+        print("=" * 60)
+        if result.get("failed", 0) == 0:
+            print("PASS: collected v21 playtest strategy cases are protected")
+        else:
+            print("FAIL: one or more collected v21 playtest cases failed")
+
+    return result
+
 def run_all_tests(verbose: bool = True) -> Dict[str, Any]:
     strategy = run_strategy_regression_tests(verbose=verbose)
     reports = run_coach_report_smoke_tests(verbose=verbose)
     scope = run_scope_guard_tests(verbose=verbose)
     deck = run_practice_deck_tests(verbose=verbose)
     speed = run_speed_tests(verbose=verbose)
+    v21 = run_v21_playtest_tests(verbose=verbose)
 
-    total_passed = strategy["passed"] + reports["passed"] + scope["passed"] + deck["passed"] + speed["passed"]
-    total_failed = strategy["failed"] + reports["failed"] + scope["failed"] + deck["failed"] + speed["failed"]
+    total_passed = strategy["passed"] + reports["passed"] + scope["passed"] + deck["passed"] + speed["passed"] + v21["passed"]
+    total_failed = strategy["failed"] + reports["failed"] + scope["failed"] + deck["failed"] + speed["failed"] + v21["failed"]
 
     if verbose:
         print()
@@ -414,6 +435,7 @@ def run_all_tests(verbose: bool = True) -> Dict[str, Any]:
         "scope": scope,
         "deck": deck,
         "speed": speed,
+        "v21": v21,
     }
 
 

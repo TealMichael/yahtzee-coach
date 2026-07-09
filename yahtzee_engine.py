@@ -11170,3 +11170,354 @@ def analyze_all_holds_by_roll_number(dice, scorecard, roll_number):
         return results
 
     raise ValueError("This coach currently supports Roll 1 and Roll 2 hold decisions only.")
+
+# ============================================================
+# v21 PLAYTEST PATCH: strategy cleanup + practice variety hooks
+# ============================================================
+# Collected live-test notes addressed here:
+# 1) With four of a kind already showing on Roll 2, keeping all four should not
+#    lose to keeping only three except in extremely unusual states.
+# 2) Upper Bonus Pressure / Chance Crossroads was still over-valuing extra side
+#    dice attached to a clean high pair, mostly because Chance fallback made the
+#    raw one-roll EV look better.
+# 3) Keep the low-triple vs high-straight case as a documented verification case
+#    instead of blindly patching it; the current math can be defensible when
+#    Yahtzee/FH/LS are already gone.
+# 4) Add anti-repetition hooks for the titled practice deck.
+
+if "_BASE_v21_analyze_all_holds_future_aware" not in globals():
+    _BASE_v21_analyze_all_holds_future_aware = analyze_all_holds_future_aware
+if "_BASE_v21_analyze_all_holds_by_roll_number" not in globals():
+    _BASE_v21_analyze_all_holds_by_roll_number = analyze_all_holds_by_roll_number
+if "_BASE_v21_generate_practice_challenge" not in globals():
+    _BASE_v21_generate_practice_challenge = generate_practice_challenge
+
+
+def v21_upper_bonus_live(scorecard):
+    """Upper bonus is still strategically relevant."""
+    try:
+        if upper_bonus_status(scorecard).get("bonus_already_earned"):
+            return False
+        return upper_bonus_still_possible(scorecard)
+    except Exception:
+        current = upper_section_total(scorecard)
+        remaining = upper_max_possible_remaining(scorecard)
+        return current + remaining >= UPPER_BONUS_TARGET
+
+
+def v21_hold_count(hold, face):
+    return Counter(hold).get(face, 0)
+
+
+def v21_chance_share(result):
+    counter = result.get("category_counter") or Counter()
+    total = sum(counter.values())
+    if total <= 0:
+        return 0.0
+    return counter.get("chance", 0) / total
+
+
+def v21_is_two_pair_hold(hold):
+    counts = sorted(Counter(hold).values())
+    return counts == [2, 2]
+
+
+def v21_high_pair_faces(dice, scorecard):
+    """High pairs whose upper boxes are open and bonus is still alive."""
+    if not v21_upper_bonus_live(scorecard):
+        return []
+
+    counts = Counter(dice)
+    face_to_category = {4: "fours", 5: "fives", 6: "sixes"}
+    faces = []
+    for face in [6, 5, 4]:
+        category = face_to_category[face]
+        if counts.get(face, 0) >= 2 and scorecard.get(category) is None:
+            faces.append(face)
+    return faces
+
+
+def v21_four_kind_adjustment(dice, hold):
+    """Prefer keeping all four matching dice over dropping back to a triple."""
+    dice_counts = Counter(dice)
+    hold_counts = Counter(hold)
+    adjustment = 0.0
+    tags = []
+
+    for face, count in dice_counts.items():
+        if count >= 4:
+            kept = hold_counts.get(face, 0)
+            if kept == 4 and len(hold) == 4:
+                # A made four-of-a-kind keeps the Yahtzee path and locks in the
+                # strong 4K/3K/upper/Chance floor. This fixes the live-test case
+                # where [4,4,4] barely beat [4,4,4,4].
+                adjustment += 1.75
+                tags.append(f"quad_{face}_kept")
+            elif kept == 3 and len(hold) == 3:
+                adjustment -= 1.00
+                tags.append(f"quad_{face}_dropped_to_triple")
+
+    return adjustment, tags
+
+
+def v21_high_pair_adjustment(dice, scorecard, result):
+    """Generalize the v20 clean high-pair lesson.
+
+    When a high pair is the main upper-bonus asset, do not let an extra side die
+    win merely because it raises Chance fallback. We still avoid penalizing true
+    two-pair Full House holds when Full House is open.
+    """
+    hold = list(result.get("hold", []))
+    high_faces = v21_high_pair_faces(dice, scorecard)
+    if not high_faces:
+        return 0.0, []
+
+    adjustment = 0.0
+    tags = []
+
+    full_house_open = scorecard.get("full_house") is None
+    # If the roll itself contains two pairs and Full House is open, do not let
+    # the upper-pair patch break the older Full House protection rule.
+    dice_pair_count = sum(1 for count in Counter(dice).values() if count >= 2)
+    if full_house_open and dice_pair_count >= 2:
+        return 0.0, []
+
+    chance_open = scorecard.get("chance") is None
+    small_straight_open = scorecard.get("small_straight") is None
+    large_straight_open = scorecard.get("large_straight") is None
+    chance_share = v21_chance_share(result)
+
+    for face in high_faces:
+        kept = v21_hold_count(hold, face)
+
+        # Clean high pair: explicitly reward the upper-bonus chase and the extra
+        # reroll die it preserves.
+        if len(hold) == 2 and kept == 2:
+            bonus = 2.10
+            # If the board has already consumed several big lower-section exits,
+            # the clean upper pair should beat straight-ish/Chance-floor holds.
+            closed_lower_exits = sum(
+                1
+                for category in ["full_house", "large_straight", "yahtzee"]
+                if scorecard.get(category) is not None
+            )
+            bonus += 0.90 * closed_lower_exits
+            # If straights are already gone, an attached side die is almost
+            # always just Chance floor. The clean pair should be especially clear.
+            if not small_straight_open and not large_straight_open:
+                bonus += 0.75
+            # If Yahtzee is closed/zero, upper bonus becomes an even larger part
+            # of the strategic reason to keep the high pair.
+            if scorecard.get("yahtzee") is not None:
+                bonus += 0.50
+            adjustment += bonus
+            tags.append(f"clean_{face}_pair_bonus")
+
+        # Pair + unrelated side dice: often a Chance-fallback mirage. Do not
+        # punish real two-pair Full House structures while FH is open.
+        elif kept == 2 and len(hold) > 2:
+            if full_house_open and v21_is_two_pair_hold(hold):
+                continue
+
+            extra_count = len(hold) - 2
+            penalty = 1.25 * extra_count
+
+            if chance_open and chance_share >= 0.40:
+                penalty += 1.15 + max(0.0, chance_share - 0.40) * 3.0
+
+            if not small_straight_open and not large_straight_open:
+                penalty += 0.75
+
+            # Four-dice holds such as [4,5,5,6] were the main live-test problem:
+            # they looked strong because almost every miss went to Chance.
+            if len(hold) >= 4:
+                penalty += 0.85
+
+            adjustment -= penalty
+            tags.append(f"bloated_{face}_pair_penalty")
+
+    return adjustment, tags
+
+
+def v21_apply_playtest_strategy_patch(dice, scorecard, roll_number, results):
+    if roll_number != 2:
+        return results
+
+    adjusted = []
+    for result in results:
+        new_result = dict(result)
+        hold = list(new_result.get("hold", []))
+        adjustment = 0.0
+        tags = []
+
+        quad_adjustment, quad_tags = v21_four_kind_adjustment(dice, hold)
+        adjustment += quad_adjustment
+        tags.extend(quad_tags)
+
+        high_pair_adjustment, high_pair_tags = v21_high_pair_adjustment(
+            dice,
+            scorecard,
+            new_result,
+        )
+        adjustment += high_pair_adjustment
+        tags.extend(high_pair_tags)
+
+        if adjustment:
+            new_result["strategy_value_before_v21"] = new_result.get("strategy_value", 0)
+            new_result["strategy_value"] = round(new_result.get("strategy_value", 0) + adjustment, 6)
+            new_result["v21_playtest_adjustment"] = round(adjustment, 3)
+            new_result["v21_playtest_tags"] = tags
+            if "future_aware_value" in new_result:
+                new_result["future_aware_value"] = new_result["strategy_value"]
+
+        adjusted.append(new_result)
+
+    adjusted.sort(key=lambda item: item.get("strategy_value", 0), reverse=True)
+    return adjusted
+
+
+def analyze_all_holds_future_aware(dice, scorecard):
+    base_results = _BASE_v21_analyze_all_holds_future_aware(dice, scorecard)
+    return v21_apply_playtest_strategy_patch(dice, scorecard, 2, base_results)
+
+
+def analyze_all_holds_by_roll_number(dice, scorecard, roll_number):
+    base_results = _BASE_v21_analyze_all_holds_by_roll_number(dice, scorecard, roll_number)
+    if roll_number == 2:
+        base_results = v21_apply_playtest_strategy_patch(dice, scorecard, roll_number, base_results)
+        for result in base_results:
+            result["roll_number"] = 2
+            result["rolls_remaining"] = 1
+    return base_results
+
+
+def v21_challenge_signature(challenge):
+    """Stable signature for avoiding exact repeat practice rounds."""
+    scorecard = challenge.get("scorecard", {}) or {}
+    filled = tuple(
+        (category, scorecard.get(category))
+        for category in YAHTZEE_CATEGORIES
+        if scorecard.get(category) is not None
+    )
+    return (
+        challenge.get("scenario_name"),
+        challenge.get("roll_number"),
+        tuple(sorted(challenge.get("dice", []))),
+        filled,
+    )
+
+
+def generate_practice_challenge(avoid_recent_scenarios=None, avoid_recent_signatures=None, max_attempts=35):
+    """Generate a practice round while avoiding recent repeats when possible.
+
+    Existing callers can still use generate_practice_challenge() with no args.
+    The Streamlit app can pass session-level recent scenario names/signatures to
+    keep titles like Joker Doorway from appearing too often.
+    """
+    avoid_recent_scenarios = set(avoid_recent_scenarios or [])
+    avoid_recent_signatures = set(avoid_recent_signatures or [])
+
+    best_fallback = None
+    for attempt in range(max_attempts):
+        challenge = _BASE_v21_generate_practice_challenge()
+        scenario_name = challenge.get("scenario_name")
+        signature = v21_challenge_signature(challenge)
+
+        if best_fallback is None:
+            best_fallback = challenge
+
+        if signature in avoid_recent_signatures:
+            continue
+
+        # Strongest guard: do not repeat any of the recent titles if the deck can
+        # easily avoid it. This directly addresses Joker Doorway showing too often.
+        if scenario_name in avoid_recent_scenarios:
+            continue
+
+        return challenge
+
+    # If the random draw somehow misses too many times, relax the title rule but
+    # still try not to repeat the exact same setup.
+    for attempt in range(max_attempts):
+        challenge = _BASE_v21_generate_practice_challenge()
+        if v21_challenge_signature(challenge) not in avoid_recent_signatures:
+            return challenge
+
+    return best_fallback if best_fallback is not None else _BASE_v21_generate_practice_challenge()
+
+
+def run_v21_playtest_regression_tests(verbose=True):
+    cases = []
+
+    # Four-of-a-kind should not lose to the matching triple.
+    cases.append((
+        "Roll 2 four 4s keeps all four",
+        [4, 4, 4, 4, 6],
+        make_scorecard({"three_of_a_kind": 20, "full_house": 25, "yahtzee": 0}),
+        [4, 4, 4, 4],
+    ))
+    cases.append((
+        "Roll 2 four 2s keeps all four",
+        [2, 2, 2, 2, 6],
+        create_empty_scorecard(),
+        [2, 2, 2, 2],
+    ))
+
+    # Generalized Upper Bonus Pressure cases.
+    cases.append((
+        "Upper Bonus Pressure all upper open keeps 5s",
+        [1, 4, 5, 5, 6],
+        make_scorecard({"full_house": 25, "large_straight": 40, "yahtzee": 0}),
+        [5, 5],
+    ))
+    cases.append((
+        "Upper Bonus Pressure 3K/FH/YTZ filled keeps 5s",
+        [1, 4, 5, 5, 6],
+        make_scorecard({"three_of_a_kind": 20, "full_house": 25, "yahtzee": 0}),
+        [5, 5],
+    ))
+
+    # Chance Crossroads: do not attach a 5 to 6,6 just to create Chance floor
+    # when both straights are already scored.
+    cases.append((
+        "Chance Crossroads pair of 6s stays clean",
+        [2, 3, 5, 6, 6],
+        make_scorecard({"small_straight": 30, "large_straight": 40}),
+        [6, 6],
+    ))
+
+    # Verification case: this one can still prefer [5,6] because Yahtzee/FH/LS
+    # are already unavailable and SS/Chance/high upper fallback are live.
+    cases.append((
+        "Verified low triple exception can keep 5,6",
+        [2, 2, 2, 5, 6],
+        make_scorecard({"full_house": 25, "large_straight": 40, "yahtzee": 0}),
+        [5, 6],
+    ))
+
+    details = []
+    failed = 0
+    for name, dice, scorecard, expected in cases:
+        results = analyze_all_holds_by_roll_number(dice, scorecard, 2)
+        best = list(results[0]["hold"])
+        ok = best == expected
+        failed += 0 if ok else 1
+        details.append({
+            "name": name,
+            "passed": ok,
+            "best_hold": best,
+            "expected": expected,
+            "top_5": [(r["hold"], round(r["strategy_value"], 2), r.get("v21_playtest_tags")) for r in results[:5]],
+        })
+
+    if verbose:
+        print("v21 PLAYTEST REGRESSION TESTS")
+        print("=" * 60)
+        for item in details:
+            print(("PASS" if item["passed"] else "FAIL") + ":", item["name"])
+            print("  Best:", item["best_hold"], "Expected:", item["expected"])
+            if not item["passed"]:
+                print("  Top 5:", item["top_5"])
+        print("Summary:", len(details) - failed, "PASS /", failed, "FAIL")
+
+    return {"passed": len(details) - failed, "failed": failed, "details": details}

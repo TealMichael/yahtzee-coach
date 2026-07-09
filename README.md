@@ -1,27 +1,26 @@
-# Yahtzee Coach - Game UI v20
+# Yahtzee Coach - Game UI v21
 
 Roll 1 / Roll 2 Yahtzee hold-strategy trainer.
 
-## v20 Upper Bonus Pressure strategy patch
+## v21 playtest strategy + deck-variety patch
 
-This update keeps the app UI exactly as-is, keeps the v19 speed patch, and adds one targeted strategy correction for an Upper Bonus Pressure case.
+This update keeps the app UI, dice size, dice layout, scorecard layout, and report layout unchanged. It only patches collected v21 playtest strategy issues and adds session-level variety control for the titled practice deck.
 
 What changed:
 
-- Corrected the Roll 2 case `[1, 4, 5, 5, 6]` with `1s=0, 2s=4, 3s=6` so the best hold is the clean high pair `[5, 5]`
-- Reduced overvaluing mostly-Chance fallback holds like `[4, 5, 5, 6]` when the upper bonus is behind pace but still alive
-- Added a regression test for this exact case
-- Kept Roll 1 report generation much faster
-- Replaced repeated raw roll permutations with compressed unique outcome distributions
-- Cached final category decisions used inside Roll 1 lookahead
-- Cached category scoring for repeated dice states
-- Kept the expanded v18 titled practice deck
-- Kept the v16 strategy patch, including the Verhoeff-style straight correction
-- Dice size, dice layout, scorecard, and report layout are unchanged
+- Fixed Roll 2 four-of-a-kind cases so keeping all four matching dice does not lose to keeping only three
+- Generalized the Upper Bonus Pressure pair-of-5s correction beyond the exact v20 scorecard
+- Fixed the Chance Crossroads high-pair issue so a clean pair of 6s can beat attaching an extra 5 just for Chance fallback
+- Preserved the older Full House two-pair rule so `[4, 4, 5, 5]` still wins when Full House is open
+- Verified the low-triple case `[2, 2, 2, 5, 6]`; the engine can still prefer `[5, 6]` on that specific cramped card, so this was added as a verification case rather than blindly patched
+- Added practice anti-repetition hooks so the app avoids repeating the same titled section or exact setup too soon
+- Kept the v19 Roll 1 speed patch
+- Kept the v18 expanded titled practice deck
+- Kept the v16/v20 strategy corrections
 
 ## Titled sections
 
-The v18 expanded titled deck is still active:
+The expanded titled deck is still active:
 
 1. Small Straight Spark
 2. Large Straight Temptation
@@ -40,7 +39,7 @@ Each titled section has:
 - 10 scorecard templates
 - Roll 1 / Roll 2 weighting depending on the scenario
 
-This creates at least 1,000 base titled combinations before roll-number weighting.
+The app now tracks recent practice rounds during a session and tries to avoid showing the same title or exact setup too soon.
 
 ## How to run the tests
 
@@ -53,13 +52,17 @@ python strategy_tests.py
 Expected result for this version:
 
 ```text
-Total: 20 PASS / 0 FAIL
+Total: 26 PASS / 0 FAIL
 ```
 
 The tests check:
 
 - Verhoeff-inspired Roll 2 straight correction
-- Upper-section chase decisions, including the Upper Bonus Pressure pair-of-5s correction
+- Upper-section chase decisions
+- v21 four-of-a-kind dominance cases
+- v21 generalized Upper Bonus Pressure pair-of-5s cases
+- v21 Chance Crossroads clean pair-of-6s case
+- Low-triple verification case
 - Full House/two-pair behavior
 - Triple protection
 - Low-pair avoidance
