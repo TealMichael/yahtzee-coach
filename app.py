@@ -1012,32 +1012,30 @@ held_key = f"held_indices_{round_id}"
 if held_key not in st.session_state:
     st.session_state[held_key] = []
 
-selected_indices = list(st.session_state[held_key])
-
-# Keep the page from jumping when dice taps trigger Streamlit reruns.
-install_dice_scroll_guard()
-
-# V12 dice picker. This uses Streamlit's multi-select pills so all five dice
-# stay in one tight row on mobile. Labels include invisible zero-width characters
-# so duplicate dice (like three 2s) remain separately tappable by position.
 dice_positions = list(range(len(dice)))
-selected_indices = st.pills(
-    "Dice to hold",
-    options=dice_positions,
-    default=st.session_state.get(held_key, []),
-    format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
-    selection_mode="multi",
-    key=f"dice_pills_{round_id}",
-    label_visibility="collapsed",
-    disabled=answer_submitted,
-)
-selected_indices = list(selected_indices or [])
-st.session_state[held_key] = sorted(selected_indices)
-selected_hold = selected_hold_from_indices(dice, selected_indices)
-st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 
+# V14 dice picker behavior fix:
+# The dice live inside a Streamlit form so tapping dice changes the red held state
+# without immediately rerunning the whole page. That prevents the mobile page from
+# jumping to the top on the first dice tap. Submit Hold still runs the coach.
 if not answer_submitted:
-    if st.button("Submit hold", type="primary", use_container_width=True):
+    with st.form(key=f"hold_form_{round_id}", clear_on_submit=False):
+        selected_indices = st.pills(
+            "Dice to hold",
+            options=dice_positions,
+            default=st.session_state.get(held_key, []),
+            format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
+            selection_mode="multi",
+            key=f"dice_pills_{round_id}",
+            label_visibility="collapsed",
+        )
+        selected_indices = list(selected_indices or [])
+        selected_hold = selected_hold_from_indices(dice, selected_indices)
+        st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
+        submitted = st.form_submit_button("Submit hold", type="primary", use_container_width=True)
+
+    if submitted:
+        st.session_state[held_key] = sorted(selected_indices)
         report = yc.coach_report_for_user_hold_by_roll_number(
             dice,
             scorecard,
@@ -1056,6 +1054,20 @@ if not answer_submitted:
         st.session_state.scroll_to_result = True
         st.session_state.scroll_to_top = False
         st.rerun()
+else:
+    selected_indices = list(st.session_state.get(held_key, []))
+    selected_hold = selected_hold_from_indices(dice, selected_indices)
+    st.pills(
+        "Dice to hold",
+        options=dice_positions,
+        default=selected_indices,
+        format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
+        selection_mode="multi",
+        key=f"dice_pills_done_{round_id}",
+        label_visibility="collapsed",
+        disabled=True,
+    )
+    st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 
 if st.session_state.report:
     render_result(st.session_state.report)
