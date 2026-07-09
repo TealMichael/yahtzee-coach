@@ -102,6 +102,15 @@ def build_strategy_cases() -> List[StrategyCase]:
             note="Protects straight flexibility; should not over-keep the loose 6.",
         ),
 
+        StrategyCase(
+            name="Upper Bonus Pressure keeps clean pair of 5s",
+            dice=[1, 4, 5, 5, 6],
+            roll_number=2,
+            scorecard=yc.make_scorecard({"ones": 0, "twos": 4, "threes": 6}),
+            acceptable_best_holds=[[5, 5]],
+            note="Guards against overvaluing a mostly-Chance fallback straight-ish hold like [4,5,5,6].",
+        ),
+
         # Original smoke-test protections
         StrategyCase(
             name="Roll 2 pair of fours chases Fours",
@@ -234,6 +243,7 @@ def run_coach_report_smoke_tests(verbose: bool = True) -> Dict[str, Any]:
     empty = yc.create_empty_scorecard()
     samples = [
         ("Optimal Verhoeff-style hold", [1, 1, 3, 4, 6], [3, 4], 2, dict(empty)),
+        ("Upper pressure pair of fives", [1, 4, 5, 5, 6], [5, 5], 2, yc.make_scorecard({"ones": 0, "twos": 4, "threes": 6})),
         ("Suboptimal low-pair choice", [1, 1, 2, 5, 6], [1, 1], 1, dict(empty)),
         ("Triple protection choice", [1, 1, 6, 6, 6], [6, 6, 6], 1, dict(empty)),
     ]
@@ -353,14 +363,42 @@ def run_practice_deck_tests(verbose: bool = True) -> Dict[str, Any]:
     return {"passed": passed, "failed": failed, "details": failures}
 
 
+
+def run_speed_tests(verbose: bool = True) -> Dict[str, Any]:
+    """Protect the Roll 1 speed path that became slow after the strategy/deck updates."""
+    if not hasattr(yc, "run_v19_speed_smoke_tests"):
+        return {"passed": 0, "failed": 1, "details": ["Missing run_v19_speed_smoke_tests"]}
+
+    result = yc.run_v19_speed_smoke_tests(verbose=verbose)
+
+    # Keep this threshold generous so slower machines do not fail unfairly, while
+    # still catching the 15–20 second regression we saw in Streamlit.
+    failed = result.get("failed", 0)
+    if result.get("total_seconds", 999) > 5.0:
+        failed += 1
+
+    passed = 1 if failed == 0 else 0
+
+    if verbose:
+        print()
+        print("ROLL 1 SPEED GUARD")
+        print("=" * 60)
+        if failed == 0:
+            print("PASS: cold Roll 1 report path stayed under the speed guard")
+        else:
+            print("FAIL: Roll 1 report path was too slow")
+
+    return {"passed": passed, "failed": failed, "details": result}
+
 def run_all_tests(verbose: bool = True) -> Dict[str, Any]:
     strategy = run_strategy_regression_tests(verbose=verbose)
     reports = run_coach_report_smoke_tests(verbose=verbose)
     scope = run_scope_guard_tests(verbose=verbose)
     deck = run_practice_deck_tests(verbose=verbose)
+    speed = run_speed_tests(verbose=verbose)
 
-    total_passed = strategy["passed"] + reports["passed"] + scope["passed"] + deck["passed"]
-    total_failed = strategy["failed"] + reports["failed"] + scope["failed"] + deck["failed"]
+    total_passed = strategy["passed"] + reports["passed"] + scope["passed"] + deck["passed"] + speed["passed"]
+    total_failed = strategy["failed"] + reports["failed"] + scope["failed"] + deck["failed"] + speed["failed"]
 
     if verbose:
         print()
@@ -375,6 +413,7 @@ def run_all_tests(verbose: bool = True) -> Dict[str, Any]:
         "reports": reports,
         "scope": scope,
         "deck": deck,
+        "speed": speed,
     }
 
 

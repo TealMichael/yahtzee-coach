@@ -10479,3 +10479,694 @@ def run_fast_strategy_smoke_tests():
 
 if "clear_speed_caches" in globals():
     clear_speed_caches()
+
+# ===== Source notebook cell 202 =====
+# ============================
+# v19 SPEED PATCH: COMPRESSED ROLL-OUTS FOR ROLL 1 REPORTS
+# ============================
+# Problem fixed:
+# Roll 1 reports became too slow on Streamlit after the strategy patches and the
+# larger v18 practice deck made Roll 1 scenarios appear more often.
+#
+# Strategy is unchanged. This patch only makes the same math faster by:
+# - evaluating unique sorted reroll outcomes with counts instead of every raw
+#   permutation separately;
+# - caching the future-aware value of each hold/scorecard/category set;
+# - preserving the already-good Roll 1/Roll 2 routing and UI behavior.
+
+V19_FUTURE_EV_CACHE = {}
+V19_MAX_FUTURE_EV_CACHE_SIZE = 20000
+
+
+def v19_scorecard_key(scorecard):
+    try:
+        return scorecard_to_key(scorecard)
+    except Exception:
+        return tuple((category, scorecard.get(category)) for category in YAHTZEE_CATEGORIES)
+
+
+def v19_available_categories_key(available_categories):
+    return tuple(available_categories)
+
+
+def v19_clear_speed_caches():
+    if "V19_FUTURE_EV_CACHE" in globals():
+        V19_FUTURE_EV_CACHE.clear()
+    if "ROLL1_LOOKAHEAD_CACHE" in globals():
+        ROLL1_LOOKAHEAD_CACHE.clear()
+    if "FAST_ROLL2_VALUE_FOR_ROLL1_CACHE" in globals():
+        FAST_ROLL2_VALUE_FOR_ROLL1_CACHE.clear()
+
+
+def expected_value_of_hold_future_aware(hold, available_categories, scorecard):
+    """
+    v19 replacement.
+
+    Same expected-value math as before, but faster:
+    - Before: looped over all 6^n final-roll permutations.
+    - Now: loops over unique sorted outcomes and multiplies by their frequency.
+
+    This is mathematically equivalent because Yahtzee scoring ignores dice order.
+    """
+    hold = tuple(sorted(hold))
+    available_categories = tuple(available_categories)
+    scorecard_key = v19_scorecard_key(scorecard)
+
+    cache_key = (hold, available_categories, scorecard_key)
+    cached = V19_FUTURE_EV_CACHE.get(cache_key)
+    if cached is not None:
+        future_aware_value, raw_expected_score, category_items, shape_adjustment = cached
+        return future_aware_value, raw_expected_score, Counter(dict(category_items)), shape_adjustment
+
+    number_to_reroll = 5 - len(hold)
+    outcome_distribution = GAME_AWARE_ROLL_DISTRIBUTIONS[number_to_reroll]
+
+    total_future_value = 0.0
+    total_raw_score = 0.0
+    total_count = 0
+    category_counter = Counter()
+
+    for outcome, count in outcome_distribution:
+        final_roll = tuple(sorted(hold + outcome))
+
+        best_category, raw_score, future_value = best_score_for_roll_future_aware(
+            final_roll,
+            available_categories,
+            scorecard
+        )
+
+        total_raw_score += raw_score * count
+        total_future_value += future_value * count
+        category_counter[best_category] += count
+        total_count += count
+
+    raw_expected_score = total_raw_score / total_count
+    future_aware_value = total_future_value / total_count
+
+    shape_adjustment = hold_shape_future_adjustment(hold, scorecard)
+    future_aware_value += shape_adjustment
+
+    result = (
+        future_aware_value,
+        raw_expected_score,
+        tuple(sorted(category_counter.items())),
+        shape_adjustment,
+    )
+
+    if len(V19_FUTURE_EV_CACHE) > V19_MAX_FUTURE_EV_CACHE_SIZE:
+        V19_FUTURE_EV_CACHE.clear()
+
+    V19_FUTURE_EV_CACHE[cache_key] = result
+
+    return future_aware_value, raw_expected_score, category_counter, shape_adjustment
+
+
+# Keep the working v16/v18 strategic behavior, but route through the faster
+# compressed expected-value function above.
+if "_BASE_v19_analyze_all_holds_roll1" not in globals():
+    _BASE_v19_analyze_all_holds_roll1 = analyze_all_holds_roll1
+
+
+def analyze_all_holds_roll1(dice, scorecard):
+    """
+    v19 Roll 1 analyzer.
+
+    Do not clear the new future-EV cache on every Roll 1 report. The scorecard is
+    part of each cache key, so this is safe and gives Streamlit repeated-round
+    speedups during a session.
+    """
+    holds = generate_unique_holds(dice)
+    results = []
+
+    for hold in holds:
+        roll1_value = roll1_expected_value_of_hold(
+            hold,
+            dice,
+            scorecard
+        )
+
+        results.append({
+            "hold": hold,
+            "strategy_value": roll1_value,
+            "roll1_value": roll1_value,
+            "roll_number": 1,
+            "rolls_remaining": 2
+        })
+
+    results = sorted(
+        results,
+        key=lambda result: result["strategy_value"],
+        reverse=True
+    )
+
+    return results
+
+
+# Rebind the router after replacing Roll 1 analysis.
+def analyze_all_holds_by_roll_number(dice, scorecard, roll_number):
+    if roll_number == 1:
+        results = analyze_all_holds_roll1(dice, scorecard)
+        for result in results:
+            result["roll_number"] = 1
+            result["rolls_remaining"] = 2
+        return results
+
+    if roll_number == 2:
+        results = analyze_all_holds_future_aware(dice, scorecard)
+        for result in results:
+            result["roll_number"] = 2
+            result["rolls_remaining"] = 1
+        return results
+
+    raise ValueError("This coach currently supports Roll 1 and Roll 2 hold decisions only.")
+
+
+def run_v19_speed_smoke_tests(verbose=True):
+    """
+    Lightweight timing check for the slow path: Roll 1 report generation.
+    This is intentionally informational rather than a strategy change.
+    """
+    import time
+
+    empty = create_empty_scorecard()
+    samples = [
+        ("Roll 1 triple fives", [2, 3, 5, 5, 5], [5, 5, 5], dict(empty)),
+        ("Roll 1 low pair avoidance", [1, 1, 2, 5, 6], [6], dict(empty)),
+        ("Roll 1 straight/upper mix", [1, 2, 3, 5, 6], [3, 5, 6], dict(empty)),
+        ("Roll 1 four-of-kind chase", [2, 6, 6, 6, 5], [6, 6, 6], dict(empty)),
+    ]
+
+    details = []
+    total_start = time.perf_counter()
+
+    for name, dice, hold, scorecard in samples:
+        start = time.perf_counter()
+        report = coach_report_for_user_hold_by_roll_number(
+            dice=dice,
+            scorecard=scorecard,
+            user_hold=hold,
+            roll_number=1,
+        )
+        elapsed = time.perf_counter() - start
+        details.append({
+            "name": name,
+            "seconds": elapsed,
+            "report_ok": isinstance(report, str) and len(report.strip()) > 20,
+        })
+
+    total_seconds = time.perf_counter() - total_start
+
+    if verbose:
+        print("v19 ROLL 1 SPEED SMOKE TESTS")
+        print("=" * 50)
+        for item in details:
+            print(f"{item['name']}: {item['seconds']:.3f}s")
+        print(f"Total: {total_seconds:.3f}s")
+
+    failed = [item for item in details if not item["report_ok"]]
+    return {
+        "passed": len(details) - len(failed),
+        "failed": len(failed),
+        "total_seconds": total_seconds,
+        "details": details,
+    }
+
+# ===== Source notebook cell 203 =====
+# ============================
+# v19 SPEED PATCH B: CACHE FINAL CATEGORY DECISIONS
+# ============================
+# The first v19 pass made repeated Roll 1 reports fast, but the very first Roll 1
+# report in a fresh Streamlit session could still be slow. The main cost was
+# repeatedly recalculating all category scores inside Roll 1 lookahead. These
+# caches keep the exact same strategy decisions but remove redundant scoring work.
+
+V19_SCORE_CACHE = {}
+V19_BEST_SCORE_CACHE = {}
+V19_FINAL_DECISION_CACHE = {}
+V19_EXACT_ROLL2_CACHE = {}
+V19_MAX_SCORE_CACHE_SIZE = 50000
+
+
+def v19_cached_all_scores(dice):
+    dice = tuple(sorted(dice))
+    cached = V19_SCORE_CACHE.get(dice)
+    if cached is not None:
+        return cached
+
+    scores = _BASE_calculate_all_scores_for_v19(list(dice)) if "_BASE_calculate_all_scores_for_v19" in globals() else calculate_all_scores(list(dice))
+
+    if len(V19_SCORE_CACHE) > V19_MAX_SCORE_CACHE_SIZE:
+        V19_SCORE_CACHE.clear()
+    V19_SCORE_CACHE[dice] = scores
+    return scores
+
+
+if "_BASE_calculate_all_scores_for_v19" not in globals():
+    _BASE_calculate_all_scores_for_v19 = calculate_all_scores
+
+
+def calculate_all_scores(dice):
+    """v19 cached scorer. Strategy and scores are unchanged."""
+    return dict(v19_cached_all_scores(tuple(sorted(dice))))
+
+
+def v19_raw_score_from_scores(dice, category, scorecard, base_scores):
+    raw_score = base_scores[category]
+
+    if not v16_extra_yahtzee_bonus_available(dice, scorecard):
+        return raw_score
+
+    matching_upper = v16_matching_upper_category_for_yahtzee(dice)
+
+    if scorecard.get(matching_upper) is None and category != matching_upper:
+        return raw_score
+
+    if scorecard.get(matching_upper) is not None:
+        if category == "full_house":
+            return 25
+        if category == "small_straight":
+            return 30
+        if category == "large_straight":
+            return 40
+
+    return raw_score
+
+
+def v16_raw_score_with_joker_rules(dice, category, scorecard):
+    """v19 optimized version of the v16 Joker-aware raw scorer."""
+    dice = tuple(sorted(dice))
+    base_scores = v19_cached_all_scores(dice)
+    return v19_raw_score_from_scores(dice, category, scorecard, base_scores)
+
+
+def best_score_for_roll_future_aware(dice, available_categories, scorecard):
+    """v19 cached future-aware final category picker."""
+    dice = tuple(sorted(dice))
+    available_categories = tuple(available_categories)
+    scorecard_key = v19_scorecard_key(scorecard)
+    cache_key = (dice, available_categories, scorecard_key)
+
+    cached = V19_BEST_SCORE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    base_scores = v19_cached_all_scores(dice)
+
+    best_category = None
+    best_raw_score = -1
+    best_future_value = -999999
+
+    for category in available_categories:
+        raw_score = v19_raw_score_from_scores(dice, category, scorecard, base_scores)
+        future_value = future_aware_category_value(category, raw_score, scorecard)
+        future_value += v16_value_bonus_for_extra_yahtzee(dice, category, scorecard)
+
+        if future_value > best_future_value:
+            best_category = category
+            best_raw_score = raw_score
+            best_future_value = future_value
+
+    result = (best_category, best_raw_score, best_future_value)
+
+    if len(V19_BEST_SCORE_CACHE) > V19_MAX_SCORE_CACHE_SIZE:
+        V19_BEST_SCORE_CACHE.clear()
+    V19_BEST_SCORE_CACHE[cache_key] = result
+
+    return result
+
+
+def best_final_category_decision_exact(final_dice, scorecard, value_mode="future"):
+    """v19 cached exact final category choice for Full House/tactical cases."""
+    final_dice = tuple(sorted(final_dice))
+    scorecard_key = v19_scorecard_key(scorecard)
+    cache_key = (final_dice, scorecard_key, value_mode)
+
+    cached = V19_FINAL_DECISION_CACHE.get(cache_key)
+    if cached is not None:
+        return dict(cached)
+
+    available_categories = get_available_categories(scorecard)
+    base_scores = v19_cached_all_scores(final_dice)
+
+    best_category = None
+    best_raw_score = None
+    best_value = None
+
+    for category in available_categories:
+        raw_score = v19_raw_score_from_scores(final_dice, category, scorecard, base_scores)
+
+        if value_mode == "raw":
+            value = raw_score + v16_value_bonus_for_extra_yahtzee(final_dice, category, scorecard)
+        elif value_mode == "future":
+            value = future_aware_category_value(category, raw_score, scorecard)
+            value += v16_value_bonus_for_extra_yahtzee(final_dice, category, scorecard)
+        else:
+            raise ValueError("value_mode must be 'raw' or 'future'.")
+
+        if best_value is None or value > best_value:
+            best_category = category
+            best_raw_score = raw_score
+            best_value = value
+
+    result = {
+        "category": best_category,
+        "raw_score": best_raw_score,
+        "value": best_value,
+    }
+
+    if len(V19_FINAL_DECISION_CACHE) > V19_MAX_SCORE_CACHE_SIZE:
+        V19_FINAL_DECISION_CACHE.clear()
+    V19_FINAL_DECISION_CACHE[cache_key] = tuple(result.items())
+
+    return result
+
+
+def roll2_exact_expected_category_decision_value(hold, scorecard, value_mode="future"):
+    """v19 cached exact Roll 2 evaluator used by Full House/two-pair logic."""
+    hold = tuple(sorted(hold))
+    scorecard_key = v19_scorecard_key(scorecard)
+    cache_key = (hold, scorecard_key, value_mode)
+
+    cached = V19_EXACT_ROLL2_CACHE.get(cache_key)
+    if cached is not None:
+        expected_value, expected_raw_score, category_items = cached
+        return expected_value, expected_raw_score, Counter(dict(category_items))
+
+    number_to_reroll = 5 - len(hold)
+    outcome_distribution = GAME_AWARE_ROLL_DISTRIBUTIONS[number_to_reroll]
+
+    total_value = 0.0
+    total_raw_score = 0.0
+    total_count = 0
+    category_counter = Counter()
+
+    for outcome, count in outcome_distribution:
+        final_dice = tuple(sorted(hold + outcome))
+
+        best_decision_by_value = best_final_category_decision_exact(
+            final_dice,
+            scorecard,
+            value_mode=value_mode
+        )
+
+        best_decision_by_raw = best_final_category_decision_exact(
+            final_dice,
+            scorecard,
+            value_mode="raw"
+        )
+
+        total_value += best_decision_by_value["value"] * count
+        total_raw_score += best_decision_by_raw["raw_score"] * count
+        total_count += count
+        category_counter[best_decision_by_value["category"]] += count
+
+    expected_value = total_value / total_count
+    expected_raw_score = total_raw_score / total_count
+
+    result = (expected_value, expected_raw_score, tuple(sorted(category_counter.items())))
+
+    if len(V19_EXACT_ROLL2_CACHE) > V19_MAX_SCORE_CACHE_SIZE:
+        V19_EXACT_ROLL2_CACHE.clear()
+    V19_EXACT_ROLL2_CACHE[cache_key] = result
+
+    return expected_value, expected_raw_score, category_counter
+
+
+def v19_clear_speed_caches():
+    for cache_name in [
+        "V19_FUTURE_EV_CACHE",
+        "V19_SCORE_CACHE",
+        "V19_BEST_SCORE_CACHE",
+        "V19_FINAL_DECISION_CACHE",
+        "V19_EXACT_ROLL2_CACHE",
+        "ROLL1_LOOKAHEAD_CACHE",
+        "FAST_ROLL2_VALUE_FOR_ROLL1_CACHE",
+        "FAST_ANALYSIS_CACHE",
+    ]:
+        cache = globals().get(cache_name)
+        if hasattr(cache, "clear"):
+            cache.clear()
+
+
+def run_v19_speed_smoke_tests(verbose=True):
+    import time
+
+    # Clear caches first so this measures the cold-start path, which is what was
+    # slow in Streamlit.
+    v19_clear_speed_caches()
+
+    empty = create_empty_scorecard()
+    samples = [
+        ("Roll 1 triple fives", [2, 3, 5, 5, 5], [5, 5, 5], dict(empty)),
+        ("Roll 1 low pair avoidance", [1, 1, 2, 5, 6], [6], dict(empty)),
+        ("Roll 1 straight/upper mix", [1, 2, 3, 5, 6], [3, 5, 6], dict(empty)),
+        ("Roll 1 four-of-kind chase", [2, 6, 6, 6, 5], [6, 6, 6], dict(empty)),
+    ]
+
+    details = []
+    total_start = time.perf_counter()
+
+    for name, dice, hold, scorecard in samples:
+        start = time.perf_counter()
+        report = coach_report_for_user_hold_by_roll_number(
+            dice=dice,
+            scorecard=scorecard,
+            user_hold=hold,
+            roll_number=1,
+        )
+        elapsed = time.perf_counter() - start
+        details.append({
+            "name": name,
+            "seconds": elapsed,
+            "report_ok": isinstance(report, str) and len(report.strip()) > 20,
+        })
+
+    total_seconds = time.perf_counter() - total_start
+
+    if verbose:
+        print("v19 ROLL 1 SPEED SMOKE TESTS")
+        print("=" * 50)
+        for item in details:
+            print(f"{item['name']}: {item['seconds']:.3f}s")
+        print(f"Total: {total_seconds:.3f}s")
+
+    failed = [item for item in details if not item["report_ok"]]
+    return {
+        "passed": len(details) - len(failed),
+        "failed": len(failed),
+        "total_seconds": total_seconds,
+        "details": details,
+    }
+
+
+# ============================================================
+# v20 STRATEGY PATCH: Upper Bonus Pressure / Chance Fallback Fix
+# ============================================================
+# Problem found in live testing:
+#   Dice: [1, 4, 5, 5, 6]
+#   Scorecard: 1s=0, 2s=4, 3s=6; 4s/5s/6s and lower board open
+#   Roll 2: one roll remaining
+#
+# v19 could prefer holding [4, 5, 5, 6]. That hold looks strong in raw one-roll
+# score because it can fall back to Chance on most misses, but this is an upper-
+# bonus-pressure board. Burning Chance for a low/mid score while the 5s/6s boxes
+# are still needed is not the long-term lesson we want the coach to teach.
+#
+# This patch keeps v19 speed and the expanded deck, but adds one targeted
+# correction: when the upper bonus is still live and the player has a clean high
+# pair, value the clean high-pair chase more strongly and discount straight-ish
+# holds that are mostly Chance fallback rather than real straight conversion.
+
+if "_BASE_v20_analyze_all_holds_future_aware" not in globals():
+    _BASE_v20_analyze_all_holds_future_aware = analyze_all_holds_future_aware
+if "_BASE_v20_analyze_all_holds_by_roll_number" not in globals():
+    _BASE_v20_analyze_all_holds_by_roll_number = analyze_all_holds_by_roll_number
+
+
+def v20_upper_bonus_is_under_pressure(scorecard):
+    """True when upper bonus is still possible but the card is behind pace."""
+    if upper_bonus_status(scorecard).get("bonus_already_earned"):
+        return False
+
+    upper_open = [cat for cat in ["fours", "fives", "sixes"] if scorecard.get(cat) is None]
+    if not upper_open:
+        return False
+
+    current_total = upper_section_total(scorecard)
+    filled_targets = 0
+    for cat in UPPER_CATEGORIES:
+        if scorecard.get(cat) is not None:
+            filled_targets += CATEGORY_TARGETS[cat]
+
+    # Behind pace by at least 4 points means the high boxes really matter.
+    return current_total <= filled_targets - 4 and bonus_still_possible_after_score(scorecard, "chance", 0)
+
+
+def v20_high_pair_faces_available(dice, scorecard):
+    counts = Counter(dice)
+    faces = []
+    face_to_category = {4: "fours", 5: "fives", 6: "sixes"}
+    for face in [6, 5, 4]:
+        category = face_to_category[face]
+        if counts.get(face, 0) >= 2 and scorecard.get(category) is None:
+            faces.append(face)
+    return faces
+
+
+def v20_chance_fallback_share(result):
+    counter = result.get("category_counter") or Counter()
+    total = sum(counter.values())
+    if total <= 0:
+        return 0.0
+    return counter.get("chance", 0) / total
+
+
+def v20_is_clean_high_pair_hold(hold, high_pair_faces):
+    hold = list(hold)
+    if len(hold) != 2:
+        return False
+    return any(hold.count(face) == 2 for face in high_pair_faces)
+
+
+def v20_is_pair_plus_one_upper_hold(hold, high_pair_faces):
+    hold = list(hold)
+    if len(hold) != 3:
+        return False
+    return any(hold.count(face) == 2 for face in high_pair_faces)
+
+
+def v20_is_bloated_chance_fallback_hold(result, high_pair_faces, scorecard):
+    hold = list(result.get("hold", []))
+    if len(hold) < 3:
+        return False
+
+    # The correction is aimed at holds like [4,5,5,6] or [4,5,6] that look
+    # attractive mainly because Chance catches the misses.
+    if v20_chance_fallback_share(result) < 0.50:
+        return False
+
+    unique = set(hold)
+    has_straight_core = any(
+        len(unique.intersection(pattern)) >= 3
+        for pattern in [
+            {1, 2, 3, 4},
+            {2, 3, 4, 5},
+            {3, 4, 5, 6},
+        ]
+    )
+
+    if not has_straight_core:
+        return False
+
+    # If the hold contains a clean high pair but adds extra dice, it may be
+    # shrinking the high-pair/Yahtzee/FH chase for a mostly-Chance fallback.
+    contains_high_pair = any(hold.count(face) >= 2 for face in high_pair_faces)
+    no_large_straight_hits = (result.get("category_counter") or Counter()).get("large_straight", 0) == 0
+
+    return contains_high_pair or no_large_straight_hits
+
+
+def v20_apply_upper_pressure_pair_patch(dice, scorecard, roll_number, results):
+    if roll_number != 2:
+        return results
+
+    if not v20_upper_bonus_is_under_pressure(scorecard):
+        return results
+
+    high_pair_faces = v20_high_pair_faces_available(dice, scorecard)
+    if not high_pair_faces:
+        return results
+
+    adjusted = []
+    for result in results:
+        new_result = dict(result)
+        hold = list(new_result.get("hold", []))
+        adjustment = 0.0
+
+        if v20_is_clean_high_pair_hold(hold, high_pair_faces):
+            # Strong enough to overcome the misleading raw Chance fallback in the
+            # tested Upper Bonus Pressure case, but narrow enough to require a
+            # real high pair and a behind-pace upper section.
+            adjustment += 4.45
+            new_result["v20_upper_pressure_pair_bonus"] = round(adjustment, 2)
+
+        elif v20_is_pair_plus_one_upper_hold(hold, high_pair_faces):
+            # Sometimes keeping one useful high side die is defensible, but it
+            # should not automatically beat the clean pair chase.
+            adjustment += 0.75
+            new_result["v20_upper_pressure_pair_plus_one_bonus"] = round(adjustment, 2)
+
+        if v20_is_bloated_chance_fallback_hold(new_result, high_pair_faces, scorecard):
+            chance_share = v20_chance_fallback_share(new_result)
+            penalty = 3.10 + max(0.0, chance_share - 0.50) * 4.0
+            adjustment -= penalty
+            new_result["v20_chance_fallback_penalty"] = round(-penalty, 2)
+
+        if adjustment:
+            new_result["strategy_value_before_v20"] = new_result.get("strategy_value", 0)
+            new_result["strategy_value"] = round(new_result.get("strategy_value", 0) + adjustment, 6)
+            # Keep compatibility with report/evaluation functions that read this key.
+            if "future_aware_value" in new_result:
+                new_result["future_aware_value"] = new_result["strategy_value"]
+
+        adjusted.append(new_result)
+
+    adjusted.sort(key=lambda item: item.get("strategy_value", 0), reverse=True)
+    return adjusted
+
+
+def analyze_all_holds_future_aware(dice, scorecard):
+    base_results = _BASE_v20_analyze_all_holds_future_aware(dice, scorecard)
+    return v20_apply_upper_pressure_pair_patch(dice, scorecard, 2, base_results)
+
+
+def analyze_all_holds_by_roll_number(dice, scorecard, roll_number):
+    base_results = _BASE_v20_analyze_all_holds_by_roll_number(dice, scorecard, roll_number)
+    if roll_number == 2:
+        base_results = v20_apply_upper_pressure_pair_patch(dice, scorecard, roll_number, base_results)
+        for result in base_results:
+            result["roll_number"] = 2
+            result["rolls_remaining"] = 1
+    return base_results
+
+
+def run_v20_upper_pressure_regression_test(verbose=True):
+    scorecard = make_scorecard({"ones": 0, "twos": 4, "threes": 6})
+    dice = [1, 4, 5, 5, 6]
+    results = analyze_all_holds_by_roll_number(dice, scorecard, 2)
+    best_hold = results[0]["hold"]
+    report = coach_report_for_user_hold_by_roll_number(dice, scorecard, [5, 5], 2)
+    passed = best_hold == [5, 5] and "Optimal choice: keep 5, 5" in report
+
+    if verbose:
+        print("v20 Upper Bonus Pressure regression")
+        print("=" * 50)
+        print("Dice:", dice)
+        print("Best hold:", best_hold)
+        print("Passed:", passed)
+        print("Top 5:")
+        for item in results[:5]:
+            print(item.get("hold"), item.get("strategy_value"), {
+                k: item[k] for k in item if k.startswith("v20_")
+            })
+
+    return {"passed": 1 if passed else 0, "failed": 0 if passed else 1, "best_hold": best_hold}
+
+# v20.1 router correction: avoid applying the v20 Roll 2 adjustment twice.
+def analyze_all_holds_by_roll_number(dice, scorecard, roll_number):
+    if roll_number == 1:
+        results = analyze_all_holds_roll1(dice, scorecard)
+        for result in results:
+            result["roll_number"] = 1
+            result["rolls_remaining"] = 2
+        return results
+
+    if roll_number == 2:
+        base_results = _BASE_v20_analyze_all_holds_future_aware(dice, scorecard)
+        results = v20_apply_upper_pressure_pair_patch(dice, scorecard, 2, base_results)
+        for result in results:
+            result["roll_number"] = 2
+            result["rolls_remaining"] = 1
+        return results
+
+    raise ValueError("This coach currently supports Roll 1 and Roll 2 hold decisions only.")

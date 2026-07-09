@@ -1,22 +1,27 @@
-# Yahtzee Coach - Game UI v18
+# Yahtzee Coach - Game UI v20
 
 Roll 1 / Roll 2 Yahtzee hold-strategy trainer.
 
-## v18 expanded titled practice deck
+## v20 Upper Bonus Pressure strategy patch
 
-This update keeps the app UI exactly as-is and expands the practice generator.
+This update keeps the app UI exactly as-is, keeps the v19 speed patch, and adds one targeted strategy correction for an Upper Bonus Pressure case.
 
 What changed:
 
-- Titled spicy deck is now the full practice source: `SPICY_PRACTICE_RATE = 1.00`
-- Expanded from 7 titled sections to 10 titled sections
-- Each section now has 10 unique dice rolls
-- Each section now has 10 scorecard templates
-- Added more whole-scorecard states, including upper-pressure, Chance-pressure, endgame, Four-of-a-Kind, and extra-Yahtzee/Joker-style situations
-- Strategy engine remains v16/v17 logic
-- App UI/dice layout unchanged
+- Corrected the Roll 2 case `[1, 4, 5, 5, 6]` with `1s=0, 2s=4, 3s=6` so the best hold is the clean high pair `[5, 5]`
+- Reduced overvaluing mostly-Chance fallback holds like `[4, 5, 5, 6]` when the upper bonus is behind pace but still alive
+- Added a regression test for this exact case
+- Kept Roll 1 report generation much faster
+- Replaced repeated raw roll permutations with compressed unique outcome distributions
+- Cached final category decisions used inside Roll 1 lookahead
+- Cached category scoring for repeated dice states
+- Kept the expanded v18 titled practice deck
+- Kept the v16 strategy patch, including the Verhoeff-style straight correction
+- Dice size, dice layout, scorecard, and report layout are unchanged
 
 ## Titled sections
+
+The v18 expanded titled deck is still active:
 
 1. Small Straight Spark
 2. Large Straight Temptation
@@ -48,13 +53,13 @@ python strategy_tests.py
 Expected result for this version:
 
 ```text
-Total: 17 PASS / 0 FAIL
+Total: 20 PASS / 0 FAIL
 ```
 
 The tests check:
 
 - Verhoeff-inspired Roll 2 straight correction
-- Upper-section chase decisions
+- Upper-section chase decisions, including the Upper Bonus Pressure pair-of-5s correction
 - Full House/two-pair behavior
 - Triple protection
 - Low-pair avoidance
@@ -62,6 +67,7 @@ The tests check:
 - Coach report generation smoke tests
 - Scope guard that keeps the app Roll 1 / Roll 2 only
 - Expanded practice deck shape: 10 sections, 10 dice rolls each, 10 scorecards each
+- Roll 1 speed guard for the formerly slow report path
 
 ## Files
 
