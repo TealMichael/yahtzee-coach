@@ -367,6 +367,137 @@ st.markdown(
         div[data-testid="stPills"] button span { font-size:clamp(2.55rem, 10.5vw, 3.05rem) !important; }
     }
 
+
+
+    /* V11 dice picker override: keep the working st.pills behavior, but make the dice visually large.
+       Streamlit has used both stPills and stButtonGroup test ids, so target both. */
+    div[data-testid="stButtonGroup"],
+    div[data-testid="stPills"] {
+        width:100% !important;
+        margin:0.5rem auto 0.7rem auto !important;
+    }
+    div[data-testid="stButtonGroup"] div[role="group"],
+    div[data-testid="stPills"] div[role="group"] {
+        display:flex !important;
+        flex-direction:row !important;
+        justify-content:center !important;
+        align-items:center !important;
+        gap:0.42rem !important;
+        flex-wrap:nowrap !important;
+        width:100% !important;
+    }
+
+    /* The actual die button. This is intentionally sized like the approved mockup. */
+    div[data-testid="stButtonGroup"] button,
+    div[data-testid="stPills"] button,
+    button[role="checkbox"] {
+        width:clamp(58px, 17vw, 68px) !important;
+        min-width:clamp(58px, 17vw, 68px) !important;
+        max-width:clamp(58px, 17vw, 68px) !important;
+        height:clamp(58px, 17vw, 68px) !important;
+        min-height:clamp(58px, 17vw, 68px) !important;
+        max-height:clamp(58px, 17vw, 68px) !important;
+        padding:0 !important;
+        margin:0 !important;
+        border-radius:15px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        background:#f8fafc !important;
+        color:#111827 !important;
+        border:2px solid #d1d5db !important;
+        box-shadow:0 4px 0 #c7c9cc, 0 7px 14px rgba(0,0,0,0.16) !important;
+        -webkit-tap-highlight-color:transparent !important;
+        overflow:hidden !important;
+    }
+    div[data-testid="stButtonGroup"] button:hover,
+    div[data-testid="stPills"] button:hover,
+    button[role="checkbox"]:hover {
+        background:#ffffff !important;
+        border-color:#9ca3af !important;
+    }
+    div[data-testid="stButtonGroup"] button:active,
+    div[data-testid="stPills"] button:active,
+    button[role="checkbox"]:active {
+        transform:translateY(3px) !important;
+        box-shadow:0 1px 0 #c7c9cc, 0 3px 8px rgba(0,0,0,0.18) !important;
+    }
+
+    /* Make the die face itself large. Streamlit wraps pill text differently by version,
+       so this targets every likely inner text container. */
+    div[data-testid="stButtonGroup"] button *,
+    div[data-testid="stButtonGroup"] button p,
+    div[data-testid="stButtonGroup"] button span,
+    div[data-testid="stButtonGroup"] button div,
+    div[data-testid="stPills"] button *,
+    div[data-testid="stPills"] button p,
+    div[data-testid="stPills"] button span,
+    div[data-testid="stPills"] button div,
+    button[role="checkbox"] *,
+    button[role="checkbox"] p,
+    button[role="checkbox"] span,
+    button[role="checkbox"] div {
+        font-size:clamp(3.05rem, 13vw, 3.9rem) !important;
+        line-height:0.95 !important;
+        margin:0 !important;
+        padding:0 !important;
+        color:#111827 !important;
+        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
+        font-weight:500 !important;
+    }
+
+    /* Selected/held dice turn red. Cover all Streamlit selection attribute variants. */
+    div[data-testid="stButtonGroup"] button[aria-selected="true"],
+    div[data-testid="stButtonGroup"] button[aria-pressed="true"],
+    div[data-testid="stButtonGroup"] button[aria-checked="true"],
+    div[data-testid="stButtonGroup"] button[data-selected="true"],
+    div[data-testid="stPills"] button[aria-selected="true"],
+    div[data-testid="stPills"] button[aria-pressed="true"],
+    div[data-testid="stPills"] button[aria-checked="true"],
+    div[data-testid="stPills"] button[data-selected="true"],
+    button[role="checkbox"][aria-selected="true"],
+    button[role="checkbox"][aria-pressed="true"],
+    button[role="checkbox"][aria-checked="true"],
+    button[role="checkbox"][data-selected="true"] {
+        background:#ff4b4b !important;
+        border-color:#ff4b4b !important;
+        color:#ffffff !important;
+        box-shadow:0 4px 0 #b91c1c, 0 7px 14px rgba(255,75,75,0.25) !important;
+    }
+    div[data-testid="stButtonGroup"] button[aria-selected="true"] *,
+    div[data-testid="stButtonGroup"] button[aria-pressed="true"] *,
+    div[data-testid="stButtonGroup"] button[aria-checked="true"] *,
+    div[data-testid="stButtonGroup"] button[data-selected="true"] *,
+    div[data-testid="stPills"] button[aria-selected="true"] *,
+    div[data-testid="stPills"] button[aria-pressed="true"] *,
+    div[data-testid="stPills"] button[aria-checked="true"] *,
+    div[data-testid="stPills"] button[data-selected="true"] *,
+    button[role="checkbox"][aria-selected="true"] *,
+    button[role="checkbox"][aria-pressed="true"] *,
+    button[role="checkbox"][aria-checked="true"] *,
+    button[role="checkbox"][data-selected="true"] * {
+        color:#ffffff !important;
+    }
+
+    @media (max-width:380px) {
+        div[data-testid="stButtonGroup"] div[role="group"],
+        div[data-testid="stPills"] div[role="group"] { gap:0.32rem !important; }
+        div[data-testid="stButtonGroup"] button,
+        div[data-testid="stPills"] button,
+        button[role="checkbox"] {
+            width:clamp(54px, 16.2vw, 62px) !important;
+            min-width:clamp(54px, 16.2vw, 62px) !important;
+            max-width:clamp(54px, 16.2vw, 62px) !important;
+            height:clamp(54px, 16.2vw, 62px) !important;
+            min-height:clamp(54px, 16.2vw, 62px) !important;
+            max-height:clamp(54px, 16.2vw, 62px) !important;
+            border-radius:14px !important;
+        }
+        div[data-testid="stButtonGroup"] button *,
+        div[data-testid="stPills"] button *,
+        button[role="checkbox"] * { font-size:clamp(2.8rem, 12vw, 3.4rem) !important; }
+    }
+
     /* Old HTML dice styles kept harmless in case a cached browser sees them. */
     .die-button { display:none; }
 
