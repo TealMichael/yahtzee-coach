@@ -1,24 +1,45 @@
-# Yahtzee Coach - Game UI v16
+# Yahtzee Coach - Game UI v17
 
 Roll 1 / Roll 2 Yahtzee hold-strategy trainer.
 
-## v16 strategy patch
+## v17 testing-file update
 
-The UI is intentionally unchanged from the working version. This update tightens the strategy engine only:
+The app/UI and strategy engine are unchanged from v16. This update adds a dedicated testing file:
 
-- Adds a Verhoeff-inspired early-game straight flexibility correction.
-- Fixes the article-style Roll 2 case `[1,1,3,4,6]` so the coach prefers `[3,4]` instead of over-keeping `[3,4,6]`.
-- Makes upper-section bonus valuation more asymmetric, so Fours/Fives/Sixes shortfalls matter more than Ones/Twos shortfalls.
-- Adds a slightly stronger opportunity-cost penalty for using Chance while the upper bonus is still alive.
-- Adds minimum extra-Yahtzee / Joker-rule awareness inside Roll 1 / Roll 2 final-reroll valuation.
-- Keeps the proven Roll 1 fast path for app speed.
+- `strategy_tests.py`
+
+This file gives us a stable regression checklist before future strategy changes. It tests:
+
+- Verhoeff-inspired Roll 2 straight correction
+- Upper-section chase decisions
+- Full House/two-pair behavior
+- Triple protection
+- Low-pair avoidance
+- Extra-Yahtzee / Joker awareness guardrail
+- Coach report generation smoke tests
+- Scope guard that keeps the app Roll 1 / Roll 2 only
+
+## How to run the tests
+
+From the repo folder, run:
+
+```bash
+python strategy_tests.py
+```
+
+Expected result for this version:
+
+```text
+Total: 16 PASS / 0 FAIL
+```
 
 ## Files
 
-Upload these four files to Streamlit/GitHub:
+Upload these five files to Streamlit/GitHub:
 
 - `app.py`
 - `yahtzee_engine.py`
+- `strategy_tests.py`
 - `requirements.txt`
 - `README.md`
 
