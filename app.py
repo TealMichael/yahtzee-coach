@@ -285,11 +285,37 @@ st.markdown(
     }
     ul.tight-list li { margin-bottom: 0.2rem; }
 
-    /* Streamlit button polish */
+    /* Streamlit button polish: keep action buttons big enough, but not enormous. */
     div[data-testid="stButton"] > button {
         border-radius: 15px;
-        min-height: 2.85rem;
+        min-height: 2.65rem;
         font-weight: 800;
+    }
+
+    /* Dice picker: the dice themselves are the buttons. */
+    div[data-testid="stPills"] {
+        margin-top: 0.25rem;
+        margin-bottom: 0.25rem;
+    }
+    div[data-testid="stPills"] button {
+        font-size: 2.15rem !important;
+        line-height: 1 !important;
+        min-width: 3.45rem !important;
+        min-height: 3.45rem !important;
+        border-radius: 16px !important;
+        padding: 0.25rem 0.55rem !important;
+        font-weight: 900 !important;
+    }
+    div[data-testid="stPills"] button p {
+        font-size: 2.15rem !important;
+        line-height: 1 !important;
+        margin: 0 !important;
+    }
+    .dice-help {
+        text-align: center;
+        color: #5f6368;
+        font-size: 0.88rem;
+        margin: 0.1rem 0 0.55rem 0;
     }
 
     @media (max-width: 640px) {
@@ -306,6 +332,15 @@ st.markdown(
         .score-value { font-size: 0.9rem; }
         .grade-badge { font-size: 1.85rem; min-width: 4.1rem; }
         .result-mini { grid-template-columns: 1fr; }
+        div[data-testid="stPills"] button {
+            font-size: 2.05rem !important;
+            min-width: 3.25rem !important;
+            min-height: 3.25rem !important;
+            padding: 0.2rem 0.45rem !important;
+        }
+        div[data-testid="stPills"] button p {
+            font-size: 2.05rem !important;
+        }
     }
     </style>
     """,
@@ -596,8 +631,6 @@ with st.expander("Session details", expanded=False):
 roll_number = challenge["roll_number"]
 dice = challenge["dice"]
 scorecard = challenge["scorecard"]
-selected_indices = get_selected_indices(round_id)
-selected_hold = selected_hold_from_indices(dice, selected_indices)
 answer_submitted = st.session_state.report is not None
 
 st.markdown("<div class='game-card'>", unsafe_allow_html=True)
@@ -606,21 +639,40 @@ st.markdown(f"<div class='muted'>{challenge.get('scenario_description', '')}</di
 st.markdown(f"**Roll {roll_number} of 3** · **{challenge.get('rolls_remaining', 3 - roll_number)} roll(s) remaining**")
 st.markdown("</div>", unsafe_allow_html=True)
 
+# Show the current scorecard before the dice decision so players can reason first.
+render_scorecard(scorecard)
+
 st.markdown("<div class='game-card'>", unsafe_allow_html=True)
 st.markdown("### Tap dice to hold")
-st.markdown(dice_html(dice, selected_indices), unsafe_allow_html=True)
-st.caption("Blue outline = held. Tap a die again to unhold it. Select none to reroll everything.")
+st.markdown("<div class='dice-help'>Tap the dice you want to keep. Tap again to unhold. Leave all unselected to reroll everything.</div>", unsafe_allow_html=True)
 
-button_cols = st.columns(5)
-for i, die in enumerate(dice):
-    held = i in selected_indices
-    label = f"✅ {DICE_EMOJI.get(int(die), die)}" if held else f"{DICE_EMOJI.get(int(die), die)}"
-    help_text = "Tap to unhold this die" if held else "Tap to hold this die"
-    with button_cols[i]:
-        if st.button(label, key=f"die_button_{round_id}_{i}", help=help_text, use_container_width=True, disabled=answer_submitted):
-            toggle_die(round_id, i)
-            st.rerun()
+# One control only: the dice picker itself. No duplicate dice display + separate huge buttons.
+dice_key = f"dice_picker_{round_id}"
+if dice_key not in st.session_state:
+    st.session_state[dice_key] = []
 
+try:
+    selected_indices = st.pills(
+        "Dice",
+        options=list(range(len(dice))),
+        format_func=lambda i: str(dice[i]),
+        selection_mode="multi",
+        key=dice_key,
+        label_visibility="collapsed",
+        disabled=answer_submitted,
+    ) or []
+except AttributeError:
+    # Fallback for older Streamlit versions. The requirements file asks for a
+    # modern Streamlit, but this keeps the app from crashing if hosted elsewhere.
+    st.warning("This app needs Streamlit 1.46+ for the compact dice picker. Upgrade Streamlit if the dice look wrong.")
+    selected_indices = []
+    cols = st.columns(5)
+    for i, die in enumerate(dice):
+        with cols[i]:
+            if st.checkbox(str(die), key=f"fallback_die_{round_id}_{i}", disabled=answer_submitted):
+                selected_indices.append(i)
+
+selected_hold = selected_hold_from_indices(dice, selected_indices)
 st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 
 submit_col, next_col = st.columns(2)
@@ -647,8 +699,6 @@ with next_col:
         new_round()
         st.rerun()
 st.markdown("</div>", unsafe_allow_html=True)
-
-render_scorecard(scorecard)
 
 if st.session_state.report:
     render_result(st.session_state.report)

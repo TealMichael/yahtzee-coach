@@ -39,3 +39,9 @@ This app teaches dice-hold strategy only:
 - The top of the app only shows the important session stats: rounds and average grade.
 - Coach feedback is shorter and more game-like.
 - Full detailed report is still available in an expander.
+
+
+## v4 UI update
+- Scorecard appears before dice selection.
+- Dice picker uses one compact row of large number-dice buttons.
+- Removed duplicate dice display and stacked mobile buttons.
