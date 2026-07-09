@@ -801,6 +801,86 @@ def render_scorecard(scorecard):
         st.markdown(score_grid_html(scorecard, LOWER_CATEGORIES, lower=True), unsafe_allow_html=True)
 
 
+
+
+def install_dice_scroll_guard():
+    """Preserve scroll position when the user taps dice.
+
+    Streamlit reruns the page after pill/button clicks. On mobile, that can
+    cause the page to jump. This tiny JS guard saves the current scroll
+    position before a dice tap and restores it right after the rerun.
+    It only targets the dice picker controls; Submit and Next Round keep
+    their normal intentional scrolling behavior.
+    """
+    components.html(
+        """
+        <script>
+        (function() {
+            const STORAGE_KEY = "yc_dice_scroll_y";
+            const PENDING_KEY = "yc_dice_scroll_pending";
+            const parentWindow = window.parent;
+            const doc = parentWindow.document;
+
+            function currentScrollY() {
+                return parentWindow.scrollY || doc.documentElement.scrollTop || doc.body.scrollTop || 0;
+            }
+
+            function restoreIfNeeded() {
+                try {
+                    if (parentWindow.localStorage.getItem(PENDING_KEY) !== "1") {
+                        return;
+                    }
+                    const y = parseInt(parentWindow.localStorage.getItem(STORAGE_KEY) || "0", 10);
+
+                    // Streamlit may finish layout a moment after this component loads,
+                    // so restore a few times over a short window.
+                    [20, 90, 180, 320].forEach(function(delay) {
+                        setTimeout(function() {
+                            parentWindow.scrollTo({ top: y, behavior: "auto" });
+                        }, delay);
+                    });
+
+                    setTimeout(function() {
+                        parentWindow.scrollTo({ top: y, behavior: "auto" });
+                        parentWindow.localStorage.removeItem(PENDING_KEY);
+                        parentWindow.localStorage.removeItem(STORAGE_KEY);
+                    }, 430);
+                } catch (err) {}
+            }
+
+            restoreIfNeeded();
+
+            if (doc.__yahtzeeDiceScrollGuardInstalled) {
+                return;
+            }
+            doc.__yahtzeeDiceScrollGuardInstalled = true;
+
+            doc.addEventListener("pointerdown", function(event) {
+                const target = event.target;
+                if (!target || !target.closest) {
+                    return;
+                }
+
+                // Dice picker is rendered by st.pills / button-group depending
+                // on Streamlit version. Do not target regular action buttons.
+                const diceButton = target.closest(
+                    'div[data-testid="stPills"] button, div[data-testid="stButtonGroup"] button, button[role="checkbox"]'
+                );
+                if (!diceButton) {
+                    return;
+                }
+
+                try {
+                    parentWindow.localStorage.setItem(STORAGE_KEY, String(currentScrollY()));
+                    parentWindow.localStorage.setItem(PENDING_KEY, "1");
+                } catch (err) {}
+            }, true);
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
 def render_result(report):
     st.markdown("<div id='coach-result-anchor'></div>", unsafe_allow_html=True)
     if st.session_state.get("scroll_to_result", False):
@@ -933,6 +1013,9 @@ if held_key not in st.session_state:
     st.session_state[held_key] = []
 
 selected_indices = list(st.session_state[held_key])
+
+# Keep the page from jumping when dice taps trigger Streamlit reruns.
+install_dice_scroll_guard()
 
 # V12 dice picker. This uses Streamlit's multi-select pills so all five dice
 # stay in one tight row on mobile. Labels include invisible zero-width characters

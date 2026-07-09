@@ -23,3 +23,8 @@ Streamlit should redeploy automatically.
 
 ## v10
 - Dice picker only: large tight one-row dice using Streamlit pills.
+
+
+## v13 update
+- Preserves scroll position when tapping dice.
+- No dice size/appearance changes from v12.
