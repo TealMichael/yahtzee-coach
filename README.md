@@ -1,47 +1,25 @@
-# Yahtzee Coach
+# Yahtzee Coach — Game UI v5
 
 A Streamlit web app for practicing Yahtzee Roll 1 and Roll 2 hold decisions.
 
+## v5 changes
+
+- Fixed duplicate dice tapping bug: duplicate values like multiple 4s can now be selected separately.
+- Dice picker now uses one compact row of tappable dice instead of giant stacked buttons.
+- Dice look like dice again, with selected/held dice intended to show in red.
+- Removed clunky oversized gray section bars and replaced them with lighter section labels/cards.
+- Current scorecard remains above the dice selection.
+
 ## Files
 
-- `app.py` — Streamlit interface
-- `yahtzee_engine.py` — strategy engine, practice generator, and coach reports
-- `requirements.txt` — Python packages needed by Streamlit Cloud
+- `app.py` — Streamlit app interface
+- `yahtzee_engine.py` — strategy engine and practice generator
+- `requirements.txt` — dependencies
+- `README.md` — this file
 
-## Deploy on Streamlit Community Cloud
-
-1. Upload these files to the root of your GitHub repository.
-2. In Streamlit Community Cloud, create or manage your app.
-3. Choose this repository.
-4. Set the main file path to `app.py`.
-5. Deploy or reboot.
-
-## Local run
+## Run locally
 
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
-
-## Current scope
-
-This app teaches dice-hold strategy only:
-
-- Roll 1 hold decisions
-- Roll 2 hold decisions
-- No Roll 3 scoring mode
-- No full-game simulator
-
-## Game UI v3
-
-- Dice are selected by tapping dice buttons instead of using a long list or checkboxes.
-- The scorecard is organized into compact Upper and Lower sections.
-- The top of the app only shows the important session stats: rounds and average grade.
-- Coach feedback is shorter and more game-like.
-- Full detailed report is still available in an expander.
-
-
-## v4 UI update
-- Scorecard appears before dice selection.
-- Dice picker uses one compact row of large number-dice buttons.
-- Removed duplicate dice display and stacked mobile buttons.

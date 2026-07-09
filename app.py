@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-DICE_EMOJI = {
+DICE_FACE = {
     1: "⚀",
     2: "⚁",
     3: "⚂",
@@ -57,21 +57,12 @@ LOWER_CATEGORIES = [
     "three_of_a_kind", "four_of_a_kind", "full_house",
     "small_straight", "large_straight", "yahtzee", "chance"
 ]
-CATEGORIES = UPPER_CATEGORIES + LOWER_CATEGORIES
 
 GRADE_POINTS = {
-    "A+": 4.3,
-    "A": 4.0,
-    "A-": 3.7,
-    "B+": 3.3,
-    "B": 3.0,
-    "B-": 2.7,
-    "C+": 2.3,
-    "C": 2.0,
-    "C-": 1.7,
-    "D+": 1.3,
-    "D": 1.0,
-    "D-": 0.7,
+    "A+": 4.3, "A": 4.0, "A-": 3.7,
+    "B+": 3.3, "B": 3.0, "B-": 2.7,
+    "C+": 2.3, "C": 2.0, "C-": 1.7,
+    "D+": 1.3, "D": 1.0, "D-": 0.7,
     "F": 0.0,
 }
 
@@ -83,264 +74,214 @@ GRADE_BADGE_CLASS = {
     "F": "grade-f",
 }
 
-# Streamlit has limited button styling hooks, so this CSS creates a cleaner,
-# game-screen feel without relying on custom JavaScript.
 st.markdown(
     """
     <style>
     .block-container {
-        padding-top: 0.8rem;
-        padding-bottom: 2.5rem;
+        padding-top: 0.7rem;
+        padding-bottom: 2.2rem;
         max-width: 760px;
     }
-    h1, h2, h3 { letter-spacing: -0.03em; }
-    .top-title {
-        text-align: center;
-        margin-bottom: 0.2rem;
-    }
-    .subtitle {
-        text-align: center;
-        color: #5f6368;
-        font-size: 0.95rem;
-        margin-top: -0.35rem;
-        margin-bottom: 0.9rem;
-    }
-    .game-card, .result-card, .score-card {
-        border: 1px solid rgba(49, 51, 63, 0.13);
-        border-radius: 20px;
-        padding: 1rem;
-        background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(250,250,250,0.88));
-        box-shadow: 0 3px 14px rgba(0,0,0,0.045);
-        margin-bottom: 0.8rem;
-    }
-    .scenario-pill {
-        display: inline-flex;
-        align-items: center;
-        border-radius: 999px;
-        background: #eef4ff;
-        color: #174ea6;
-        border: 1px solid #d2e3fc;
-        font-weight: 700;
-        padding: 0.22rem 0.55rem;
-        font-size: 0.82rem;
-        margin-bottom: 0.35rem;
-    }
-    .muted {
-        color: #5f6368;
-        font-size: 0.92rem;
-    }
-    .session-strip {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 0.55rem;
-        margin-bottom: 0.85rem;
-    }
-    .session-box {
-        border: 1px solid rgba(49, 51, 63, 0.12);
-        border-radius: 16px;
-        padding: 0.7rem 0.8rem;
-        background: white;
-        text-align: center;
-    }
-    .session-label {
-        color: #5f6368;
-        font-size: 0.8rem;
-        margin-bottom: 0.1rem;
-    }
-    .session-value {
-        font-size: 1.35rem;
-        font-weight: 850;
-        line-height: 1.15;
-    }
-    .dice-row-display {
-        display: flex;
-        gap: 0.42rem;
-        align-items: center;
-        justify-content: center;
-        margin: 0.55rem 0 0.35rem 0;
-        flex-wrap: nowrap;
-    }
-    .die-display {
-        width: 3.45rem;
-        height: 3.45rem;
-        border: 1px solid rgba(49, 51, 63, 0.18);
-        border-radius: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: white;
-        font-size: 2.35rem;
-        line-height: 1;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.06);
-    }
-    .selected-summary {
-        border-radius: 14px;
-        background: #f6f8fa;
-        border: 1px solid rgba(49, 51, 63, 0.12);
-        padding: 0.55rem 0.7rem;
-        margin-top: 0.65rem;
-        font-weight: 700;
-        text-align: center;
-    }
-    .score-section-title {
-        font-weight: 800;
-        margin: 0.7rem 0 0.35rem 0;
-        color: #202124;
-    }
-    .score-grid {
-        display: grid;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
-        gap: 0.35rem;
-    }
-    .score-grid.lower {
-        grid-template-columns: repeat(7, minmax(0, 1fr));
-    }
-    .score-box {
-        border: 1px solid rgba(49, 51, 63, 0.14);
-        border-radius: 13px;
-        padding: 0.42rem 0.25rem;
-        background: white;
-        text-align: center;
-        min-height: 3.2rem;
-    }
-    .score-label {
-        font-size: 0.72rem;
-        color: #5f6368;
-        margin-bottom: 0.12rem;
-        white-space: nowrap;
-    }
-    .score-value {
-        font-size: 0.95rem;
-        font-weight: 850;
-    }
-    .open-value { color: #188038; }
-    .filled-value { color: #3c4043; }
-    .open-chip-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.32rem;
-        margin-top: 0.35rem;
-        margin-bottom: 0.2rem;
-    }
-    .open-chip {
-        border-radius: 999px;
-        background: #e6f4ea;
-        border: 1px solid #ceead6;
-        color: #137333;
-        font-size: 0.78rem;
-        font-weight: 700;
-        padding: 0.22rem 0.5rem;
-    }
-    .grade-row {
-        display: flex;
-        gap: 0.75rem;
-        align-items: center;
-        margin-bottom: 0.6rem;
-    }
-    .grade-badge {
-        border-radius: 20px;
-        padding: 0.34rem 0.8rem;
-        font-size: 2.15rem;
-        font-weight: 900;
-        min-width: 4.7rem;
-        text-align: center;
-        color: white;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-    }
-    .grade-a { background: #188038; }
-    .grade-b { background: #1967d2; }
-    .grade-c { background: #f29900; }
-    .grade-d { background: #d93025; }
-    .grade-f { background: #a50e0e; }
-    .result-mini {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 0.45rem;
-        margin: 0.45rem 0 0.65rem 0;
-    }
-    .result-mini-box {
-        border: 1px solid rgba(49, 51, 63, 0.12);
-        border-radius: 14px;
-        padding: 0.55rem 0.65rem;
-        background: white;
-    }
-    .result-mini-label {
-        color: #5f6368;
-        font-size: 0.77rem;
-    }
-    .result-mini-value {
-        font-weight: 800;
-        font-size: 0.96rem;
-    }
-    .coach-says {
-        border-left: 5px solid #1967d2;
-        background: #f3f7ff;
-        border-radius: 14px;
-        padding: 0.65rem 0.75rem;
+    h1, h2, h3 { letter-spacing: -0.035em; }
+    .top-title { text-align:center; margin:0.05rem 0 0.05rem 0; }
+    .subtitle { text-align:center; color:#6b7280; font-size:0.95rem; margin: -0.2rem 0 0.7rem 0; }
+
+    /* Lighter cards: no big gray separator bars. */
+    .soft-card {
+        border: 1px solid rgba(127,127,127,0.22);
+        border-radius: 18px;
+        padding: 0.78rem 0.88rem;
+        background: rgba(255,255,255,0.72);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.04);
         margin: 0.55rem 0;
     }
-    ul.tight-list {
-        margin-top: 0.35rem;
-        padding-left: 1.15rem;
+    .section-label {
+        color:#6b7280;
+        font-size:0.78rem;
+        text-transform:uppercase;
+        letter-spacing:0.055em;
+        font-weight:800;
+        margin:0.65rem 0 0.32rem 0;
     }
-    ul.tight-list li { margin-bottom: 0.2rem; }
-
-    /* Streamlit button polish: keep action buttons big enough, but not enormous. */
-    div[data-testid="stButton"] > button {
-        border-radius: 15px;
-        min-height: 2.65rem;
-        font-weight: 800;
+    .scenario-pill {
+        display:inline-flex;
+        align-items:center;
+        border-radius:999px;
+        background:#eef4ff;
+        color:#174ea6;
+        border:1px solid #d2e3fc;
+        font-weight:800;
+        padding:0.22rem 0.6rem;
+        font-size:0.8rem;
+        margin-bottom:0.35rem;
     }
+    .muted { color:#6b7280; font-size:0.92rem; }
+    .round-line { font-weight:800; margin-top:0.35rem; }
 
-    /* Dice picker: the dice themselves are the buttons. */
-    div[data-testid="stPills"] {
-        margin-top: 0.25rem;
-        margin-bottom: 0.25rem;
+    .session-strip {
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:0.45rem;
+        margin:0.55rem 0 0.65rem 0;
+    }
+    .session-box {
+        border:1px solid rgba(127,127,127,0.22);
+        border-radius:16px;
+        padding:0.6rem 0.7rem;
+        background:rgba(255,255,255,0.74);
+        text-align:center;
+    }
+    .session-label { color:#6b7280; font-size:0.78rem; margin-bottom:0.1rem; }
+    .session-value { font-size:1.24rem; font-weight:900; line-height:1.1; }
+
+    .open-chip-row { display:flex; flex-wrap:wrap; gap:0.28rem; margin:0.2rem 0 0.45rem 0; }
+    .open-chip {
+        border-radius:999px;
+        background:#e6f4ea;
+        border:1px solid #ceead6;
+        color:#137333;
+        font-size:0.76rem;
+        font-weight:800;
+        padding:0.2rem 0.46rem;
+    }
+    .score-section-title { font-weight:900; margin:0.45rem 0 0.3rem 0; }
+    .score-grid { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:0.32rem; }
+    .score-grid.lower { grid-template-columns:repeat(7, minmax(0,1fr)); }
+    .score-box {
+        border:1px solid rgba(127,127,127,0.22);
+        border-radius:12px;
+        padding:0.38rem 0.2rem;
+        background:rgba(255,255,255,0.78);
+        text-align:center;
+        min-height:2.85rem;
+    }
+    .score-label { font-size:0.68rem; color:#6b7280; margin-bottom:0.1rem; white-space:nowrap; }
+    .score-value { font-size:0.92rem; font-weight:900; }
+    .open-value { color:#188038; }
+    .filled-value { color:#3c4043; }
+
+    .selected-summary {
+        border-radius:14px;
+        background:#fff7ed;
+        border:1px solid #fed7aa;
+        padding:0.55rem 0.65rem;
+        margin:0.65rem 0 0.55rem 0;
+        font-weight:900;
+        text-align:center;
+        color:#9a3412;
+    }
+    .dice-help { text-align:center; color:#6b7280; font-size:0.86rem; margin:0.15rem 0 0.5rem 0; }
+
+    /* Dice picker: one compact row. Duplicate dice are internally unique with zero-width spaces. */
+    div[data-testid="stPills"] { margin:0.1rem 0 0.2rem 0; }
+    div[data-testid="stPills"] div[role="group"] {
+        display:flex !important;
+        flex-direction:row !important;
+        flex-wrap:nowrap !important;
+        justify-content:center !important;
+        gap:0.42rem !important;
+        width:100% !important;
     }
     div[data-testid="stPills"] button {
-        font-size: 2.15rem !important;
-        line-height: 1 !important;
-        min-width: 3.45rem !important;
-        min-height: 3.45rem !important;
-        border-radius: 16px !important;
-        padding: 0.25rem 0.55rem !important;
-        font-weight: 900 !important;
+        flex:0 0 auto !important;
+        width:3.72rem !important;
+        height:3.72rem !important;
+        min-width:3.72rem !important;
+        min-height:3.72rem !important;
+        max-width:3.72rem !important;
+        border-radius:15px !important;
+        padding:0 !important;
+        background:#ffffff !important;
+        color:#111827 !important;
+        border:2px solid #d1d5db !important;
+        box-shadow:0 3px 0 #c7c9cc, 0 5px 12px rgba(0,0,0,0.12) !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
     }
     div[data-testid="stPills"] button p {
-        font-size: 2.15rem !important;
-        line-height: 1 !important;
-        margin: 0 !important;
+        font-size:2.65rem !important;
+        line-height:1 !important;
+        margin:0 !important;
+        color:#111827 !important;
     }
-    .dice-help {
-        text-align: center;
-        color: #5f6368;
-        font-size: 0.88rem;
-        margin: 0.1rem 0 0.55rem 0;
+    div[data-testid="stPills"] button[aria-pressed="true"],
+    div[data-testid="stPills"] button[aria-selected="true"],
+    div[data-testid="stPills"] button[data-selected="true"] {
+        background:#ff4b4b !important;
+        color:#ffffff !important;
+        border-color:#ff4b4b !important;
+        box-shadow:0 3px 0 #b91c1c, 0 5px 12px rgba(255,75,75,0.25) !important;
+    }
+    div[data-testid="stPills"] button[aria-pressed="true"] p,
+    div[data-testid="stPills"] button[aria-selected="true"] p,
+    div[data-testid="stPills"] button[data-selected="true"] p {
+        color:#ffffff !important;
     }
 
-    @media (max-width: 640px) {
-        .block-container { padding-left: 0.65rem; padding-right: 0.65rem; }
-        .game-card, .result-card, .score-card { padding: 0.8rem; border-radius: 18px; }
-        .session-strip { grid-template-columns: 1fr 1fr; gap: 0.45rem; }
-        .session-value { font-size: 1.18rem; }
-        .dice-row-display { gap: 0.28rem; }
-        .die-display { width: 2.82rem; height: 2.82rem; font-size: 1.95rem; border-radius: 13px; }
-        .score-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-        .score-grid.lower { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-        .score-box { min-height: 2.85rem; padding: 0.36rem 0.2rem; }
-        .score-label { font-size: 0.68rem; }
-        .score-value { font-size: 0.9rem; }
-        .grade-badge { font-size: 1.85rem; min-width: 4.1rem; }
-        .result-mini { grid-template-columns: 1fr; }
+    /* Normal action buttons should not become dice-sized or huge section bars. */
+    div[data-testid="stButton"] > button {
+        border-radius:14px;
+        min-height:2.55rem;
+        font-weight:850;
+    }
+
+    .grade-row { display:flex; gap:0.7rem; align-items:center; margin-bottom:0.58rem; }
+    .grade-badge {
+        border-radius:18px;
+        padding:0.3rem 0.76rem;
+        font-size:2.05rem;
+        font-weight:950;
+        min-width:4.4rem;
+        text-align:center;
+        color:white;
+        box-shadow:0 2px 8px rgba(0,0,0,0.12);
+    }
+    .grade-a { background:#188038; }
+    .grade-b { background:#1967d2; }
+    .grade-c { background:#f29900; }
+    .grade-d { background:#d93025; }
+    .grade-f { background:#a50e0e; }
+    .result-mini { display:grid; grid-template-columns:1fr 1fr; gap:0.45rem; margin:0.45rem 0 0.62rem 0; }
+    .result-mini-box {
+        border:1px solid rgba(127,127,127,0.22);
+        border-radius:13px;
+        padding:0.52rem 0.62rem;
+        background:rgba(255,255,255,0.72);
+    }
+    .result-mini-label { color:#6b7280; font-size:0.76rem; }
+    .result-mini-value { font-weight:850; font-size:0.94rem; }
+    .coach-says {
+        border-left:5px solid #1967d2;
+        background:#f3f7ff;
+        border-radius:13px;
+        padding:0.62rem 0.72rem;
+        margin:0.54rem 0;
+    }
+    ul.tight-list { margin-top:0.33rem; padding-left:1.15rem; }
+    ul.tight-list li { margin-bottom:0.18rem; }
+
+    @media (max-width:640px) {
+        .block-container { padding-left:0.7rem; padding-right:0.7rem; }
+        .soft-card { padding:0.7rem 0.75rem; border-radius:16px; margin:0.48rem 0; }
+        .session-value { font-size:1.12rem; }
+        .score-grid { grid-template-columns:repeat(3, minmax(0,1fr)); }
+        .score-grid.lower { grid-template-columns:repeat(4, minmax(0,1fr)); }
+        .score-box { min-height:2.65rem; padding:0.32rem 0.16rem; }
+        .score-label { font-size:0.66rem; }
+        .score-value { font-size:0.86rem; }
+        div[data-testid="stPills"] div[role="group"] { gap:0.3rem !important; }
         div[data-testid="stPills"] button {
-            font-size: 2.05rem !important;
-            min-width: 3.25rem !important;
-            min-height: 3.25rem !important;
-            padding: 0.2rem 0.45rem !important;
+            width:3.18rem !important;
+            height:3.18rem !important;
+            min-width:3.18rem !important;
+            min-height:3.18rem !important;
+            max-width:3.18rem !important;
+            border-radius:13px !important;
         }
-        div[data-testid="stPills"] button p {
-            font-size: 2.05rem !important;
-        }
+        div[data-testid="stPills"] button p { font-size:2.28rem !important; }
+        .grade-badge { font-size:1.8rem; min-width:4rem; }
+        .result-mini { grid-template-columns:1fr; }
     }
     </style>
     """,
@@ -355,15 +296,9 @@ def hold_label(hold):
     return "keep " + ", ".join(str(d) for d in hold)
 
 
-def dice_html(dice, selected_indices=None):
-    selected_indices = set(selected_indices or [])
-    parts = []
-    for index, die in enumerate(dice):
-        extra = " box-shadow: 0 0 0 3px #1967d2 inset; background:#eef4ff;" if index in selected_indices else ""
-        parts.append(
-            f"<div class='die-display' style='{extra}'>{DICE_EMOJI.get(int(die), str(die))}</div>"
-        )
-    return "<div class='dice-row-display'>" + "".join(parts) + "</div>"
+def unique_dice_label(index, die):
+    # Zero-width spaces make duplicate dice tappable separately while looking identical.
+    return DICE_FACE.get(int(die), str(die)) + ("\u200b" * (index + 1))
 
 
 def extract_line(report, prefix):
@@ -422,8 +357,7 @@ def grade_to_points(grade):
 
 
 def points_to_letter(points):
-    if points is None:
-        return "—"
+    if points is None: return "—"
     if points >= 4.15: return "A+"
     if points >= 3.85: return "A"
     if points >= 3.5: return "A-"
@@ -469,46 +403,22 @@ def score_grid_html(scorecard, categories, lower=False):
 def open_chips_html(scorecard):
     open_upper = [CATEGORY_SHORT[c] for c in UPPER_CATEGORIES if scorecard.get(c) is None]
     open_lower = [CATEGORY_SHORT[c] for c in LOWER_CATEGORIES if scorecard.get(c) is None]
-    chips = []
-    for label in open_upper[:6]:
-        chips.append(f"<span class='open-chip'>{label}</span>")
-    for label in open_lower[:7]:
-        chips.append(f"<span class='open-chip'>{label}</span>")
+    chips = [f"<span class='open-chip'>{label}</span>" for label in (open_upper + open_lower)]
     if not chips:
         return "<span class='muted'>No open categories found.</span>"
     return "<div class='open-chip-row'>" + "".join(chips) + "</div>"
 
 
-def get_selected_indices(round_id):
-    return list(st.session_state.get(f"selected_indices_{round_id}", []))
-
-
-def set_selected_indices(round_id, indices):
-    st.session_state[f"selected_indices_{round_id}"] = sorted(set(indices))
-
-
 def selected_hold_from_indices(dice, indices):
-    return sorted([dice[i] for i in sorted(indices)])
-
-
-def toggle_die(round_id, index):
-    selected = set(get_selected_indices(round_id))
-    if index in selected:
-        selected.remove(index)
-    else:
-        selected.add(index)
-    set_selected_indices(round_id, selected)
-
-
-def reset_selection(round_id):
-    set_selected_indices(round_id, [])
+    return sorted([dice[int(i)] for i in sorted(indices)])
 
 
 def new_round():
     st.session_state.challenge = yc.generate_practice_challenge()
     st.session_state.report = None
     st.session_state.round_id = st.session_state.get("round_id", 0) + 1
-    reset_selection(st.session_state.round_id)
+    # Reset dice picker for the new round.
+    st.session_state[f"dice_picker_{st.session_state.round_id}"] = []
 
 
 def initialize_state():
@@ -521,15 +431,13 @@ def initialize_state():
 
 
 def render_scorecard(scorecard):
-    st.markdown("<div class='score-card'>", unsafe_allow_html=True)
-    st.markdown("**Open boxes**")
+    st.markdown("<div class='section-label'>Current scorecard</div>", unsafe_allow_html=True)
     st.markdown(open_chips_html(scorecard), unsafe_allow_html=True)
     with st.expander("Full scorecard", expanded=True):
         st.markdown("<div class='score-section-title'>Upper</div>", unsafe_allow_html=True)
         st.markdown(score_grid_html(scorecard, UPPER_CATEGORIES), unsafe_allow_html=True)
         st.markdown("<div class='score-section-title'>Lower</div>", unsafe_allow_html=True)
         st.markdown(score_grid_html(scorecard, LOWER_CATEGORIES, lower=True), unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_result(report):
@@ -545,27 +453,20 @@ def render_result(report):
     note_items = extract_section(report, "Narrow upper-box note:")
     grade_class = GRADE_BADGE_CLASS.get(grade, "grade-b")
 
-    st.markdown("<div class='result-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='section-label'>Coach result</div>", unsafe_allow_html=True)
     st.markdown(
+        f"<div class='soft-card'>"
         f"<div class='grade-row'><div class='grade-badge {grade_class}'>{grade or '—'}</div>"
         f"<div><b>{rating or 'Coach feedback'}</b><br>"
-        f"<span class='muted'>Best hold: {optimal_choice or '—'}</span></div></div>",
+        f"<span class='muted'>Best hold: {optimal_choice or '—'}</span></div></div>"
+        f"<div class='result-mini'>"
+        f"<div class='result-mini-box'><div class='result-mini-label'>You kept</div><div class='result-mini-value'>{your_choice or '—'}</div></div>"
+        f"<div class='result-mini-box'><div class='result-mini-label'>Efficiency</div><div class='result-mini-value'>{efficiency or '—'}</div></div>"
+        f"</div>"
+        + (f"<div class='coach-says'><b>Coach says:</b><br>{recommendation}</div>" if recommendation else "")
+        + "</div>",
         unsafe_allow_html=True,
     )
-
-    st.markdown("<div class='result-mini'>", unsafe_allow_html=True)
-    st.markdown(
-        f"<div class='result-mini-box'><div class='result-mini-label'>You kept</div><div class='result-mini-value'>{your_choice or '—'}</div></div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f"<div class='result-mini-box'><div class='result-mini-label'>Efficiency</div><div class='result-mini-value'>{efficiency or '—'}</div></div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    if recommendation:
-        st.markdown(f"<div class='coach-says'><b>Coach says:</b><br>{recommendation}</div>", unsafe_allow_html=True)
 
     short_lines = []
     if note_items:
@@ -575,7 +476,6 @@ def render_result(report):
     if why_items:
         short_lines.extend(why_items[:2])
 
-    # Keep it punchy: at most 4 useful bullets in the main card.
     if short_lines:
         seen = set()
         unique_lines = []
@@ -594,8 +494,6 @@ def render_result(report):
 
     with st.expander("Full coach report"):
         st.code(report, language="text")
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 initialize_state()
@@ -633,20 +531,23 @@ dice = challenge["dice"]
 scorecard = challenge["scorecard"]
 answer_submitted = st.session_state.report is not None
 
-st.markdown("<div class='game-card'>", unsafe_allow_html=True)
-st.markdown(f"<span class='scenario-pill'>{challenge.get('scenario_name', 'Practice Round')}</span>", unsafe_allow_html=True)
-st.markdown(f"<div class='muted'>{challenge.get('scenario_description', '')}</div>", unsafe_allow_html=True)
-st.markdown(f"**Roll {roll_number} of 3** · **{challenge.get('rolls_remaining', 3 - roll_number)} roll(s) remaining**")
-st.markdown("</div>", unsafe_allow_html=True)
+st.markdown(
+    f"""
+    <div class='soft-card'>
+        <span class='scenario-pill'>{challenge.get('scenario_name', 'Practice Round')}</span>
+        <div class='muted'>{challenge.get('scenario_description', '')}</div>
+        <div class='round-line'>Roll {roll_number} of 3 · {challenge.get('rolls_remaining', 3 - roll_number)} roll(s) remaining</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-# Show the current scorecard before the dice decision so players can reason first.
+# Scorecard first, then dice selection.
 render_scorecard(scorecard)
 
-st.markdown("<div class='game-card'>", unsafe_allow_html=True)
-st.markdown("### Tap dice to hold")
-st.markdown("<div class='dice-help'>Tap the dice you want to keep. Tap again to unhold. Leave all unselected to reroll everything.</div>", unsafe_allow_html=True)
+st.markdown("<div class='section-label'>Tap dice to hold</div>", unsafe_allow_html=True)
+st.markdown("<div class='dice-help'>Tap each die you want to keep. Red dice are held. Leave all unselected to reroll everything.</div>", unsafe_allow_html=True)
 
-# One control only: the dice picker itself. No duplicate dice display + separate huge buttons.
 dice_key = f"dice_picker_{round_id}"
 if dice_key not in st.session_state:
     st.session_state[dice_key] = []
@@ -655,21 +556,19 @@ try:
     selected_indices = st.pills(
         "Dice",
         options=list(range(len(dice))),
-        format_func=lambda i: str(dice[i]),
+        format_func=lambda i: unique_dice_label(i, dice[i]),
         selection_mode="multi",
         key=dice_key,
         label_visibility="collapsed",
         disabled=answer_submitted,
     ) or []
 except AttributeError:
-    # Fallback for older Streamlit versions. The requirements file asks for a
-    # modern Streamlit, but this keeps the app from crashing if hosted elsewhere.
     st.warning("This app needs Streamlit 1.46+ for the compact dice picker. Upgrade Streamlit if the dice look wrong.")
     selected_indices = []
     cols = st.columns(5)
     for i, die in enumerate(dice):
         with cols[i]:
-            if st.checkbox(str(die), key=f"fallback_die_{round_id}_{i}", disabled=answer_submitted):
+            if st.checkbox(DICE_FACE.get(die, str(die)), key=f"fallback_die_{round_id}_{i}", disabled=answer_submitted):
                 selected_indices.append(i)
 
 selected_hold = selected_hold_from_indices(dice, selected_indices)
@@ -698,7 +597,6 @@ with next_col:
     if st.button("Next round", use_container_width=True):
         new_round()
         st.rerun()
-st.markdown("</div>", unsafe_allow_html=True)
 
 if st.session_state.report:
     render_result(st.session_state.report)
