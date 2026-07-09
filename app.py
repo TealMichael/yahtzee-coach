@@ -7,7 +7,8 @@ import yahtzee_engine as yc
 st.set_page_config(
     page_title="Yahtzee Coach",
     page_icon="🎲",
-    layout="centered"
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
 DICE_EMOJI = {
@@ -47,15 +48,16 @@ CATEGORY_SHORT = {
     "full_house": "FH",
     "small_straight": "SS",
     "large_straight": "LS",
-    "yahtzee": "Ytz",
-    "chance": "Ch",
+    "yahtzee": "YTZ",
+    "chance": "CH",
 }
 
-CATEGORIES = getattr(yc, "YAHTZEE_CATEGORIES", [
-    "ones", "twos", "threes", "fours", "fives", "sixes",
+UPPER_CATEGORIES = ["ones", "twos", "threes", "fours", "fives", "sixes"]
+LOWER_CATEGORIES = [
     "three_of_a_kind", "four_of_a_kind", "full_house",
     "small_straight", "large_straight", "yahtzee", "chance"
-])
+]
+CATEGORIES = UPPER_CATEGORIES + LOWER_CATEGORIES
 
 GRADE_POINTS = {
     "A+": 4.3,
@@ -81,121 +83,229 @@ GRADE_BADGE_CLASS = {
     "F": "grade-f",
 }
 
+# Streamlit has limited button styling hooks, so this CSS creates a cleaner,
+# game-screen feel without relying on custom JavaScript.
 st.markdown(
     """
     <style>
     .block-container {
-        padding-top: 1.1rem;
-        padding-bottom: 2rem;
-        max-width: 980px;
+        padding-top: 0.8rem;
+        padding-bottom: 2.5rem;
+        max-width: 760px;
     }
-    .hero-card, .coach-card, .score-card, .dice-card {
-        border: 1px solid rgba(49, 51, 63, 0.14);
-        border-radius: 18px;
+    h1, h2, h3 { letter-spacing: -0.03em; }
+    .top-title {
+        text-align: center;
+        margin-bottom: 0.2rem;
+    }
+    .subtitle {
+        text-align: center;
+        color: #5f6368;
+        font-size: 0.95rem;
+        margin-top: -0.35rem;
+        margin-bottom: 0.9rem;
+    }
+    .game-card, .result-card, .score-card {
+        border: 1px solid rgba(49, 51, 63, 0.13);
+        border-radius: 20px;
         padding: 1rem;
-        background: rgba(250, 250, 250, 0.72);
+        background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(250,250,250,0.88));
+        box-shadow: 0 3px 14px rgba(0,0,0,0.045);
         margin-bottom: 0.8rem;
     }
-    .big-dice-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.45rem;
+    .scenario-pill {
+        display: inline-flex;
         align-items: center;
-        margin: 0.35rem 0 0.6rem 0;
+        border-radius: 999px;
+        background: #eef4ff;
+        color: #174ea6;
+        border: 1px solid #d2e3fc;
+        font-weight: 700;
+        padding: 0.22rem 0.55rem;
+        font-size: 0.82rem;
+        margin-bottom: 0.35rem;
     }
-    .die-pill {
-        font-size: 2.4rem;
-        line-height: 1;
-        border: 1px solid rgba(49, 51, 63, 0.18);
-        border-radius: 14px;
-        padding: 0.42rem 0.55rem;
+    .muted {
+        color: #5f6368;
+        font-size: 0.92rem;
+    }
+    .session-strip {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.55rem;
+        margin-bottom: 0.85rem;
+    }
+    .session-box {
+        border: 1px solid rgba(49, 51, 63, 0.12);
+        border-radius: 16px;
+        padding: 0.7rem 0.8rem;
         background: white;
-        min-width: 3.25rem;
         text-align: center;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .session-label {
+        color: #5f6368;
+        font-size: 0.8rem;
+        margin-bottom: 0.1rem;
+    }
+    .session-value {
+        font-size: 1.35rem;
+        font-weight: 850;
+        line-height: 1.15;
+    }
+    .dice-row-display {
+        display: flex;
+        gap: 0.42rem;
+        align-items: center;
+        justify-content: center;
+        margin: 0.55rem 0 0.35rem 0;
+        flex-wrap: nowrap;
+    }
+    .die-display {
+        width: 3.45rem;
+        height: 3.45rem;
+        border: 1px solid rgba(49, 51, 63, 0.18);
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: white;
+        font-size: 2.35rem;
+        line-height: 1;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.06);
+    }
+    .selected-summary {
+        border-radius: 14px;
+        background: #f6f8fa;
+        border: 1px solid rgba(49, 51, 63, 0.12);
+        padding: 0.55rem 0.7rem;
+        margin-top: 0.65rem;
+        font-weight: 700;
+        text-align: center;
+    }
+    .score-section-title {
+        font-weight: 800;
+        margin: 0.7rem 0 0.35rem 0;
+        color: #202124;
     }
     .score-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
-        gap: 0.42rem;
-        margin-top: 0.45rem;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 0.35rem;
+    }
+    .score-grid.lower {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
     }
     .score-box {
         border: 1px solid rgba(49, 51, 63, 0.14);
-        border-radius: 12px;
-        padding: 0.42rem 0.5rem;
+        border-radius: 13px;
+        padding: 0.42rem 0.25rem;
         background: white;
-        min-height: 3.05rem;
+        text-align: center;
+        min-height: 3.2rem;
     }
     .score-label {
-        font-size: 0.78rem;
+        font-size: 0.72rem;
         color: #5f6368;
-        margin-bottom: 0.15rem;
+        margin-bottom: 0.12rem;
         white-space: nowrap;
     }
     .score-value {
-        font-size: 1.05rem;
-        font-weight: 700;
+        font-size: 0.95rem;
+        font-weight: 850;
     }
-    .open-value { color: #2e7d32; }
+    .open-value { color: #188038; }
     .filled-value { color: #3c4043; }
-    .grade-row {
+    .open-chip-row {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.7rem;
+        gap: 0.32rem;
+        margin-top: 0.35rem;
+        margin-bottom: 0.2rem;
+    }
+    .open-chip {
+        border-radius: 999px;
+        background: #e6f4ea;
+        border: 1px solid #ceead6;
+        color: #137333;
+        font-size: 0.78rem;
+        font-weight: 700;
+        padding: 0.22rem 0.5rem;
+    }
+    .grade-row {
+        display: flex;
+        gap: 0.75rem;
         align-items: center;
-        margin: 0.3rem 0 0.7rem 0;
+        margin-bottom: 0.6rem;
     }
     .grade-badge {
-        border-radius: 18px;
-        padding: 0.3rem 0.72rem;
-        font-size: 2.05rem;
-        font-weight: 800;
-        letter-spacing: -0.02em;
-        min-width: 4.6rem;
+        border-radius: 20px;
+        padding: 0.34rem 0.8rem;
+        font-size: 2.15rem;
+        font-weight: 900;
+        min-width: 4.7rem;
         text-align: center;
         color: white;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
     }
-    .grade-a { background: #1b7f37; }
-    .grade-b { background: #1976d2; }
-    .grade-c { background: #f57c00; }
-    .grade-d { background: #d84315; }
-    .grade-f { background: #b71c1c; }
-    .mini-stat-row {
+    .grade-a { background: #188038; }
+    .grade-b { background: #1967d2; }
+    .grade-c { background: #f29900; }
+    .grade-d { background: #d93025; }
+    .grade-f { background: #a50e0e; }
+    .result-mini {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        grid-template-columns: 1fr 1fr;
         gap: 0.45rem;
-        margin: 0.5rem 0;
+        margin: 0.45rem 0 0.65rem 0;
     }
-    .mini-stat {
+    .result-mini-box {
         border: 1px solid rgba(49, 51, 63, 0.12);
-        border-radius: 12px;
-        padding: 0.55rem;
+        border-radius: 14px;
+        padding: 0.55rem 0.65rem;
         background: white;
     }
-    .mini-label {
+    .result-mini-label {
         color: #5f6368;
-        font-size: 0.8rem;
+        font-size: 0.77rem;
     }
-    .mini-value {
-        font-weight: 750;
-        font-size: 1rem;
+    .result-mini-value {
+        font-weight: 800;
+        font-size: 0.96rem;
     }
-    ul.compact-list {
-        margin-top: 0.2rem;
-        padding-left: 1.1rem;
+    .coach-says {
+        border-left: 5px solid #1967d2;
+        background: #f3f7ff;
+        border-radius: 14px;
+        padding: 0.65rem 0.75rem;
+        margin: 0.55rem 0;
     }
-    ul.compact-list li {
-        margin-bottom: 0.25rem;
+    ul.tight-list {
+        margin-top: 0.35rem;
+        padding-left: 1.15rem;
     }
+    ul.tight-list li { margin-bottom: 0.2rem; }
+
+    /* Streamlit button polish */
+    div[data-testid="stButton"] > button {
+        border-radius: 15px;
+        min-height: 2.85rem;
+        font-weight: 800;
+    }
+
     @media (max-width: 640px) {
-        .block-container { padding-left: 0.75rem; padding-right: 0.75rem; }
-        .die-pill { font-size: 2rem; min-width: 2.8rem; padding: 0.35rem 0.45rem; }
-        .score-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; }
-        .score-box { padding: 0.35rem; min-height: 2.75rem; }
-        .score-label { font-size: 0.72rem; }
-        .score-value { font-size: 0.95rem; }
-        .grade-badge { font-size: 1.75rem; }
+        .block-container { padding-left: 0.65rem; padding-right: 0.65rem; }
+        .game-card, .result-card, .score-card { padding: 0.8rem; border-radius: 18px; }
+        .session-strip { grid-template-columns: 1fr 1fr; gap: 0.45rem; }
+        .session-value { font-size: 1.18rem; }
+        .dice-row-display { gap: 0.28rem; }
+        .die-display { width: 2.82rem; height: 2.82rem; font-size: 1.95rem; border-radius: 13px; }
+        .score-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .score-grid.lower { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .score-box { min-height: 2.85rem; padding: 0.36rem 0.2rem; }
+        .score-label { font-size: 0.68rem; }
+        .score-value { font-size: 0.9rem; }
+        .grade-badge { font-size: 1.85rem; min-width: 4.1rem; }
+        .result-mini { grid-template-columns: 1fr; }
     }
     </style>
     """,
@@ -204,17 +314,21 @@ st.markdown(
 
 
 def hold_label(hold):
-    hold = list(hold)
+    hold = list(sorted(hold))
     if not hold:
         return "reroll everything"
     return "keep " + ", ".join(str(d) for d in hold)
 
 
-def dice_display_html(dice):
+def dice_html(dice, selected_indices=None):
+    selected_indices = set(selected_indices or [])
     parts = []
-    for die in dice:
-        parts.append(f"<span class='die-pill'>{DICE_EMOJI.get(int(die), str(die))}</span>")
-    return "<div class='big-dice-row'>" + "".join(parts) + "</div>"
+    for index, die in enumerate(dice):
+        extra = " box-shadow: 0 0 0 3px #1967d2 inset; background:#eef4ff;" if index in selected_indices else ""
+        parts.append(
+            f"<div class='die-display' style='{extra}'>{DICE_EMOJI.get(int(die), str(die))}</div>"
+        )
+    return "<div class='dice-row-display'>" + "".join(parts) + "</div>"
 
 
 def extract_line(report, prefix):
@@ -224,25 +338,13 @@ def extract_line(report, prefix):
     return ""
 
 
-def extract_float_line(report, prefix):
-    raw = extract_line(report, prefix)
-    if not raw:
-        return "—"
-    return raw
-
-
 def extract_section(report, header):
     lines = report.splitlines()
     headers = {
-        "Roll 1 lookahead note:",
-        "Game-aware note:",
-        "Yahtzee-path note:",
-        "What was good about your move?",
-        "Bonus-chase check:",
-        "Narrow upper-box note:",
-        "Why was the optimal move better?",
-        "Top Roll 1 options:",
-        "Coach recommendation:",
+        "Roll 1 lookahead note:", "Game-aware note:", "Yahtzee-path note:",
+        "What was good about your move?", "Bonus-chase check:",
+        "Narrow upper-box note:", "Why was the optimal move better?",
+        "Top Roll 1 options:", "Coach recommendation:",
     }
     capture = False
     items = []
@@ -272,37 +374,33 @@ def extract_recommendation(report):
     return " ".join(rec_lines)
 
 
+def clean_coach_sentence(text):
+    text = re.sub(r"\s+", " ", text or "").strip()
+    text = text.replace("The stronger mathematical play was to ", "Best play: ")
+    text = text.replace(" because it produced the highest strategy value.", ".")
+    text = text.replace("Stay with this thinking. ", "")
+    return text
+
+
 def grade_to_points(grade):
-    return GRADE_POINTS.get(grade.strip(), None)
+    return GRADE_POINTS.get((grade or "").strip(), None)
 
 
 def points_to_letter(points):
     if points is None:
         return "—"
-    if points >= 4.15:
-        return "A+"
-    if points >= 3.85:
-        return "A"
-    if points >= 3.5:
-        return "A-"
-    if points >= 3.15:
-        return "B+"
-    if points >= 2.85:
-        return "B"
-    if points >= 2.5:
-        return "B-"
-    if points >= 2.15:
-        return "C+"
-    if points >= 1.85:
-        return "C"
-    if points >= 1.5:
-        return "C-"
-    if points >= 1.15:
-        return "D+"
-    if points >= 0.85:
-        return "D"
-    if points >= 0.5:
-        return "D-"
+    if points >= 4.15: return "A+"
+    if points >= 3.85: return "A"
+    if points >= 3.5: return "A-"
+    if points >= 3.15: return "B+"
+    if points >= 2.85: return "B"
+    if points >= 2.5: return "B-"
+    if points >= 2.15: return "C+"
+    if points >= 1.85: return "C"
+    if points >= 1.5: return "C-"
+    if points >= 1.15: return "D+"
+    if points >= 0.85: return "D"
+    if points >= 0.5: return "D-"
     return "F"
 
 
@@ -318,39 +416,64 @@ def session_average_grade(history):
     return points_to_letter(avg), avg
 
 
-def scorecard_grid_html(scorecard):
-    boxes = []
-    for category in CATEGORIES:
-        value = scorecard.get(category)
-        label = CATEGORY_SHORT.get(category, CATEGORY_DISPLAY.get(category, category))
-        if value is None:
-            value_html = "<span class='open-value'>OPEN</span>"
-        else:
-            value_html = f"<span class='filled-value'>{value}</span>"
-        boxes.append(
-            f"<div class='score-box'><div class='score-label'>{label}</div><div class='score-value'>{value_html}</div></div>"
-        )
-    return "<div class='score-grid'>" + "".join(boxes) + "</div>"
+def score_box_html(category, scorecard):
+    value = scorecard.get(category)
+    label = CATEGORY_SHORT.get(category, CATEGORY_DISPLAY.get(category, category))
+    if value is None:
+        value_html = "<span class='open-value'>OPEN</span>"
+    else:
+        value_html = f"<span class='filled-value'>{value}</span>"
+    return f"<div class='score-box'><div class='score-label'>{label}</div><div class='score-value'>{value_html}</div></div>"
 
 
-def selected_hold_from_dice(dice, round_id):
-    selected = []
-    for i, die in enumerate(dice):
-        if st.session_state.get(f"die_select_{round_id}_{i}", False):
-            selected.append(die)
-    return sorted(selected)
+def score_grid_html(scorecard, categories, lower=False):
+    class_name = "score-grid lower" if lower else "score-grid"
+    return f"<div class='{class_name}'>" + "".join(score_box_html(cat, scorecard) for cat in categories) + "</div>"
 
 
-def reset_die_selection_for_round(dice, round_id):
-    for i in range(len(dice)):
-        st.session_state[f"die_select_{round_id}_{i}"] = False
+def open_chips_html(scorecard):
+    open_upper = [CATEGORY_SHORT[c] for c in UPPER_CATEGORIES if scorecard.get(c) is None]
+    open_lower = [CATEGORY_SHORT[c] for c in LOWER_CATEGORIES if scorecard.get(c) is None]
+    chips = []
+    for label in open_upper[:6]:
+        chips.append(f"<span class='open-chip'>{label}</span>")
+    for label in open_lower[:7]:
+        chips.append(f"<span class='open-chip'>{label}</span>")
+    if not chips:
+        return "<span class='muted'>No open categories found.</span>"
+    return "<div class='open-chip-row'>" + "".join(chips) + "</div>"
+
+
+def get_selected_indices(round_id):
+    return list(st.session_state.get(f"selected_indices_{round_id}", []))
+
+
+def set_selected_indices(round_id, indices):
+    st.session_state[f"selected_indices_{round_id}"] = sorted(set(indices))
+
+
+def selected_hold_from_indices(dice, indices):
+    return sorted([dice[i] for i in sorted(indices)])
+
+
+def toggle_die(round_id, index):
+    selected = set(get_selected_indices(round_id))
+    if index in selected:
+        selected.remove(index)
+    else:
+        selected.add(index)
+    set_selected_indices(round_id, selected)
+
+
+def reset_selection(round_id):
+    set_selected_indices(round_id, [])
 
 
 def new_round():
     st.session_state.challenge = yc.generate_practice_challenge()
     st.session_state.report = None
     st.session_state.round_id = st.session_state.get("round_id", 0) + 1
-    reset_die_selection_for_round(st.session_state.challenge["dice"], st.session_state.round_id)
+    reset_selection(st.session_state.round_id)
 
 
 def initialize_state():
@@ -362,57 +485,79 @@ def initialize_state():
         new_round()
 
 
-def render_grade_report(report):
+def render_scorecard(scorecard):
+    st.markdown("<div class='score-card'>", unsafe_allow_html=True)
+    st.markdown("**Open boxes**")
+    st.markdown(open_chips_html(scorecard), unsafe_allow_html=True)
+    with st.expander("Full scorecard", expanded=True):
+        st.markdown("<div class='score-section-title'>Upper</div>", unsafe_allow_html=True)
+        st.markdown(score_grid_html(scorecard, UPPER_CATEGORIES), unsafe_allow_html=True)
+        st.markdown("<div class='score-section-title'>Lower</div>", unsafe_allow_html=True)
+        st.markdown(score_grid_html(scorecard, LOWER_CATEGORIES, lower=True), unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_result(report):
     grade = extract_line(report, "Grade:")
     rating = extract_line(report, "Coach rating:")
     your_choice = extract_line(report, "Your choice:")
     optimal_choice = extract_line(report, "Optimal choice:")
-    efficiency = extract_float_line(report, "Efficiency:")
-    lost = extract_float_line(report, "Strategy value lost:")
-    recommendation = extract_recommendation(report)
+    efficiency = extract_line(report, "Efficiency:")
+    lost = extract_line(report, "Strategy value lost:")
+    recommendation = clean_coach_sentence(extract_recommendation(report))
     good_items = extract_section(report, "What was good about your move?")
     why_items = extract_section(report, "Why was the optimal move better?")
     note_items = extract_section(report, "Narrow upper-box note:")
-
     grade_class = GRADE_BADGE_CLASS.get(grade, "grade-b")
 
-    st.markdown("<div class='coach-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='result-card'>", unsafe_allow_html=True)
     st.markdown(
-        f"<div class='grade-row'><div class='grade-badge {grade_class}'>{grade or '—'}</div><div><b>{rating or 'Coach feedback'}</b><br><span style='color:#5f6368;'>Best hold: {optimal_choice or '—'}</span></div></div>",
+        f"<div class='grade-row'><div class='grade-badge {grade_class}'>{grade or '—'}</div>"
+        f"<div><b>{rating or 'Coach feedback'}</b><br>"
+        f"<span class='muted'>Best hold: {optimal_choice or '—'}</span></div></div>",
         unsafe_allow_html=True,
     )
 
-    st.markdown("<div class='mini-stat-row'>", unsafe_allow_html=True)
+    st.markdown("<div class='result-mini'>", unsafe_allow_html=True)
     st.markdown(
-        f"<div class='mini-stat'><div class='mini-label'>Your hold</div><div class='mini-value'>{your_choice or '—'}</div></div>",
+        f"<div class='result-mini-box'><div class='result-mini-label'>You kept</div><div class='result-mini-value'>{your_choice or '—'}</div></div>",
         unsafe_allow_html=True,
     )
     st.markdown(
-        f"<div class='mini-stat'><div class='mini-label'>Efficiency</div><div class='mini-value'>{efficiency}</div></div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f"<div class='mini-stat'><div class='mini-label'>Value lost</div><div class='mini-value'>{lost}</div></div>",
+        f"<div class='result-mini-box'><div class='result-mini-label'>Efficiency</div><div class='result-mini-value'>{efficiency or '—'}</div></div>",
         unsafe_allow_html=True,
     )
     st.markdown("</div>", unsafe_allow_html=True)
 
     if recommendation:
-        st.success(recommendation)
+        st.markdown(f"<div class='coach-says'><b>Coach says:</b><br>{recommendation}</div>", unsafe_allow_html=True)
 
-    if good_items:
-        st.markdown("**What you did well**")
-        st.markdown("<ul class='compact-list'>" + "".join(f"<li>{item}</li>" for item in good_items[:3]) + "</ul>", unsafe_allow_html=True)
-
+    short_lines = []
     if note_items:
-        st.markdown("**Quick coach note**")
-        st.markdown("<ul class='compact-list'>" + "".join(f"<li>{item}</li>" for item in note_items[:3]) + "</ul>", unsafe_allow_html=True)
-
+        short_lines.extend(note_items[:2])
+    if good_items:
+        short_lines.append(good_items[0])
     if why_items:
-        st.markdown("**Why the best hold works**")
-        st.markdown("<ul class='compact-list'>" + "".join(f"<li>{item}</li>" for item in why_items[:5]) + "</ul>", unsafe_allow_html=True)
+        short_lines.extend(why_items[:2])
 
-    with st.expander("Show full coach report"):
+    # Keep it punchy: at most 4 useful bullets in the main card.
+    if short_lines:
+        seen = set()
+        unique_lines = []
+        for line in short_lines:
+            if line not in seen:
+                seen.add(line)
+                unique_lines.append(line)
+        st.markdown("**Quick breakdown**")
+        st.markdown(
+            "<ul class='tight-list'>" + "".join(f"<li>{line}</li>" for line in unique_lines[:4]) + "</ul>",
+            unsafe_allow_html=True,
+        )
+
+    if lost:
+        st.caption(f"Strategy value lost: {lost}")
+
+    with st.expander("Full coach report"):
         st.code(report, language="text")
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -421,21 +566,26 @@ def render_grade_report(report):
 initialize_state()
 challenge = st.session_state.challenge
 round_id = st.session_state.round_id
+history = st.session_state.history
 
-st.title("🎲 Yahtzee Coach")
-st.caption("Hold Strategy Trainer — click dice to choose your hold")
+st.markdown("<h1 class='top-title'>🎲 Yahtzee Coach</h1>", unsafe_allow_html=True)
+st.markdown("<div class='subtitle'>Hold Strategy Trainer</div>", unsafe_allow_html=True)
 
-avg_letter, avg_points = session_average_grade(st.session_state.history)
-optimal_count = sum(1 for item in st.session_state.history if item.get("grade") == "A+")
-rounds_completed = len(st.session_state.history)
+avg_letter, avg_points = session_average_grade(history)
+best_holds = sum(1 for item in history if item.get("grade") == "A+")
 
-stats_cols = st.columns(4)
-stats_cols[0].metric("Rounds", rounds_completed)
-stats_cols[1].metric("Average grade", avg_letter if avg_letter != "—" else "—")
-stats_cols[2].metric("Best holds", optimal_count)
-stats_cols[3].metric("Last grade", st.session_state.history[-1]["grade"] if st.session_state.history else "—")
+st.markdown(
+    f"""
+    <div class='session-strip'>
+        <div class='session-box'><div class='session-label'>Rounds</div><div class='session-value'>{len(history)}</div></div>
+        <div class='session-box'><div class='session-label'>Session Grade</div><div class='session-value'>{avg_letter}</div></div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 with st.expander("Session details", expanded=False):
+    st.write(f"Best holds: {best_holds} / {len(history)}")
     if avg_points is not None:
         st.write(f"Average grade points: {avg_points:.2f}")
     if st.button("Clear session", use_container_width=True):
@@ -443,86 +593,69 @@ with st.expander("Session details", expanded=False):
         new_round()
         st.rerun()
 
-st.markdown("<div class='hero-card'>", unsafe_allow_html=True)
-st.subheader(challenge.get("scenario_name", "Practice Round"))
-st.write(challenge.get("scenario_description", ""))
-
 roll_number = challenge["roll_number"]
-rolls_remaining = challenge.get("rolls_remaining", 3 - roll_number)
 dice = challenge["dice"]
+scorecard = challenge["scorecard"]
+selected_indices = get_selected_indices(round_id)
+selected_hold = selected_hold_from_indices(dice, selected_indices)
+answer_submitted = st.session_state.report is not None
 
-info_cols = st.columns(2)
-info_cols[0].markdown(f"**Roll:** {roll_number} of 3")
-info_cols[1].markdown(f"**Rolls remaining:** {rolls_remaining}")
+st.markdown("<div class='game-card'>", unsafe_allow_html=True)
+st.markdown(f"<span class='scenario-pill'>{challenge.get('scenario_name', 'Practice Round')}</span>", unsafe_allow_html=True)
+st.markdown(f"<div class='muted'>{challenge.get('scenario_description', '')}</div>", unsafe_allow_html=True)
+st.markdown(f"**Roll {roll_number} of 3** · **{challenge.get('rolls_remaining', 3 - roll_number)} roll(s) remaining**")
 st.markdown("</div>", unsafe_allow_html=True)
 
-st.markdown("<div class='dice-card'>", unsafe_allow_html=True)
-st.markdown("### Dice")
-st.markdown(dice_display_html(dice), unsafe_allow_html=True)
-st.caption("Click/select the dice you want to hold. Leave all unselected to reroll everything.")
+st.markdown("<div class='game-card'>", unsafe_allow_html=True)
+st.markdown("### Tap dice to hold")
+st.markdown(dice_html(dice, selected_indices), unsafe_allow_html=True)
+st.caption("Blue outline = held. Tap a die again to unhold it. Select none to reroll everything.")
 
-check_cols = st.columns(5)
+button_cols = st.columns(5)
 for i, die in enumerate(dice):
-    with check_cols[i]:
-        st.checkbox(
-            f"Hold {DICE_EMOJI.get(int(die), str(die))} {die}",
-            key=f"die_select_{round_id}_{i}",
-        )
+    held = i in selected_indices
+    label = f"✅ {DICE_EMOJI.get(int(die), die)}" if held else f"{DICE_EMOJI.get(int(die), die)}"
+    help_text = "Tap to unhold this die" if held else "Tap to hold this die"
+    with button_cols[i]:
+        if st.button(label, key=f"die_button_{round_id}_{i}", help=help_text, use_container_width=True, disabled=answer_submitted):
+            toggle_die(round_id, i)
+            st.rerun()
 
-selected_hold = selected_hold_from_dice(dice, round_id)
-st.markdown(f"**Your selected hold:** {hold_label(selected_hold)}")
+st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 
 submit_col, next_col = st.columns(2)
 with submit_col:
-    if st.button("Submit hold", type="primary", use_container_width=True):
+    if st.button("Submit hold", type="primary", use_container_width=True, disabled=answer_submitted):
         report = yc.coach_report_for_user_hold_by_roll_number(
             dice,
-            challenge["scorecard"],
+            scorecard,
             selected_hold,
             roll_number=roll_number,
         )
         st.session_state.report = report
-        grade = extract_line(report, "Grade:")
-        optimal = extract_line(report, "Optimal choice:")
         st.session_state.history.append({
             "scenario": challenge.get("scenario_name", ""),
             "roll": roll_number,
             "dice": str(dice),
             "choice": hold_label(selected_hold),
-            "optimal": optimal,
-            "grade": grade,
+            "optimal": extract_line(report, "Optimal choice:"),
+            "grade": extract_line(report, "Grade:"),
         })
         st.rerun()
-
 with next_col:
-    if st.button("Skip / next round", use_container_width=True):
+    if st.button("Next round", use_container_width=True):
         new_round()
         st.rerun()
-
 st.markdown("</div>", unsafe_allow_html=True)
 
-st.markdown("<div class='score-card'>", unsafe_allow_html=True)
-st.markdown("### Scorecard")
-st.markdown(scorecard_grid_html(challenge["scorecard"]), unsafe_allow_html=True)
-with st.expander("Show full scorecard names"):
-    rows = []
-    for category in CATEGORIES:
-        value = challenge["scorecard"].get(category)
-        rows.append({
-            "Category": CATEGORY_DISPLAY.get(category, category),
-            "Score": "OPEN" if value is None else value,
-        })
-    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-st.markdown("</div>", unsafe_allow_html=True)
+render_scorecard(scorecard)
 
 if st.session_state.report:
-    st.markdown("---")
-    render_grade_report(st.session_state.report)
-
-    if st.button("Next round", type="primary", use_container_width=True):
+    render_result(st.session_state.report)
+    if st.button("Play another round", type="primary", use_container_width=True):
         new_round()
         st.rerun()
 
-if st.session_state.history:
-    with st.expander("Session history"):
-        st.dataframe(pd.DataFrame(st.session_state.history), hide_index=True, use_container_width=True)
+if history:
+    with st.expander("Session history", expanded=False):
+        st.dataframe(pd.DataFrame(history), hide_index=True, use_container_width=True)
