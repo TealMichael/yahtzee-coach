@@ -1,6 +1,7 @@
 import re
 import streamlit as st
 import pandas as pd
+import streamlit.components.v1 as components
 
 import yahtzee_engine as yc
 
@@ -91,10 +92,12 @@ st.markdown(
         border: 1px solid rgba(127,127,127,0.22);
         border-radius: 18px;
         padding: 0.78rem 0.88rem;
-        background: rgba(255,255,255,0.72);
+        background: rgba(255,255,255,0.90);
         box-shadow: 0 2px 10px rgba(0,0,0,0.04);
         margin: 0.55rem 0;
+        color:#111827 !important;
     }
+    .soft-card * { color: inherit; }
     .section-label {
         color:#6b7280;
         font-size:0.78rem;
@@ -120,17 +123,19 @@ st.markdown(
 
     .session-strip {
         display:grid;
-        grid-template-columns:1fr 1fr;
+        grid-template-columns:repeat(4, minmax(0, 1fr));
         gap:0.45rem;
         margin:0.55rem 0 0.65rem 0;
     }
     .session-box {
-        border:1px solid rgba(127,127,127,0.22);
+        border:1px solid rgba(127,127,127,0.24);
         border-radius:16px;
-        padding:0.6rem 0.7rem;
-        background:rgba(255,255,255,0.74);
+        padding:0.58rem 0.42rem;
+        background:#f3f4f6;
         text-align:center;
+        color:#111827 !important;
     }
+    .session-box * { color:inherit; }
     .session-label { color:#6b7280; font-size:0.78rem; margin-bottom:0.1rem; }
     .session-value { font-size:1.24rem; font-weight:900; line-height:1.1; }
 
@@ -184,12 +189,12 @@ st.markdown(
     }
     div[data-testid="stPills"] button {
         flex:0 0 auto !important;
-        width:3.72rem !important;
-        height:3.72rem !important;
-        min-width:3.72rem !important;
-        min-height:3.72rem !important;
-        max-width:3.72rem !important;
-        border-radius:15px !important;
+        width:4.45rem !important;
+        height:4.45rem !important;
+        min-width:4.45rem !important;
+        min-height:4.45rem !important;
+        max-width:4.45rem !important;
+        border-radius:18px !important;
         padding:0 !important;
         background:#ffffff !important;
         color:#111827 !important;
@@ -200,10 +205,11 @@ st.markdown(
         justify-content:center !important;
     }
     div[data-testid="stPills"] button p {
-        font-size:2.65rem !important;
+        font-size:3.45rem !important;
         line-height:1 !important;
         margin:0 !important;
         color:#111827 !important;
+        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
     }
     div[data-testid="stPills"] button[aria-pressed="true"],
     div[data-testid="stPills"] button[aria-selected="true"],
@@ -247,8 +253,10 @@ st.markdown(
         border:1px solid rgba(127,127,127,0.22);
         border-radius:13px;
         padding:0.52rem 0.62rem;
-        background:rgba(255,255,255,0.72);
+        background:rgba(255,255,255,0.82);
+        color:#111827 !important;
     }
+    .result-mini-box * { color:inherit; }
     .result-mini-label { color:#6b7280; font-size:0.76rem; }
     .result-mini-value { font-weight:850; font-size:0.94rem; }
     .coach-says {
@@ -257,29 +265,33 @@ st.markdown(
         border-radius:13px;
         padding:0.62rem 0.72rem;
         margin:0.54rem 0;
+        color:#111827 !important;
     }
-    ul.tight-list { margin-top:0.33rem; padding-left:1.15rem; }
+    .coach-says * { color:#111827 !important; }
+    ul.tight-list { margin-top:0.33rem; padding-left:1.15rem; color:inherit; }
     ul.tight-list li { margin-bottom:0.18rem; }
 
     @media (max-width:640px) {
         .block-container { padding-left:0.7rem; padding-right:0.7rem; }
         .soft-card { padding:0.7rem 0.75rem; border-radius:16px; margin:0.48rem 0; }
-        .session-value { font-size:1.12rem; }
+        .session-strip { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+        .session-box { padding:0.52rem 0.35rem; }
+        .session-value { font-size:1.08rem; }
         .score-grid { grid-template-columns:repeat(3, minmax(0,1fr)); }
         .score-grid.lower { grid-template-columns:repeat(4, minmax(0,1fr)); }
         .score-box { min-height:2.65rem; padding:0.32rem 0.16rem; }
         .score-label { font-size:0.66rem; }
         .score-value { font-size:0.86rem; }
-        div[data-testid="stPills"] div[role="group"] { gap:0.3rem !important; }
+        div[data-testid="stPills"] div[role="group"] { gap:0.26rem !important; }
         div[data-testid="stPills"] button {
-            width:3.18rem !important;
-            height:3.18rem !important;
-            min-width:3.18rem !important;
-            min-height:3.18rem !important;
-            max-width:3.18rem !important;
-            border-radius:13px !important;
+            width:4.05rem !important;
+            height:4.05rem !important;
+            min-width:4.05rem !important;
+            min-height:4.05rem !important;
+            max-width:4.05rem !important;
+            border-radius:16px !important;
         }
-        div[data-testid="stPills"] button p { font-size:2.28rem !important; }
+        div[data-testid="stPills"] button p { font-size:3.1rem !important; }
         .grade-badge { font-size:1.8rem; min-width:4rem; }
         .result-mini { grid-template-columns:1fr; }
     }
@@ -413,10 +425,12 @@ def selected_hold_from_indices(dice, indices):
     return sorted([dice[int(i)] for i in sorted(indices)])
 
 
-def new_round():
+def new_round(scroll_to_top=False):
     st.session_state.challenge = yc.generate_practice_challenge()
     st.session_state.report = None
     st.session_state.round_id = st.session_state.get("round_id", 0) + 1
+    st.session_state.scroll_to_result = False
+    st.session_state.scroll_to_top = scroll_to_top
     # Reset dice picker for the new round.
     st.session_state[f"dice_picker_{st.session_state.round_id}"] = []
 
@@ -424,10 +438,14 @@ def new_round():
 def initialize_state():
     if "history" not in st.session_state:
         st.session_state.history = []
+    if "scroll_to_result" not in st.session_state:
+        st.session_state.scroll_to_result = False
+    if "scroll_to_top" not in st.session_state:
+        st.session_state.scroll_to_top = False
     if "round_id" not in st.session_state:
         st.session_state.round_id = 0
     if "challenge" not in st.session_state:
-        new_round()
+        new_round(scroll_to_top=False)
 
 
 def render_scorecard(scorecard):
@@ -441,6 +459,11 @@ def render_scorecard(scorecard):
 
 
 def render_result(report):
+    st.markdown("<div id='coach-result-anchor'></div>", unsafe_allow_html=True)
+    if st.session_state.get("scroll_to_result", False):
+        components.html("\n            <script>\n            setTimeout(function() {\n                const el = window.parent.document.getElementById('coach-result-anchor');\n                if (el) { el.scrollIntoView({behavior:'smooth', block:'start'}); }\n            }, 250);\n            </script>\n            ", height=0)
+        st.session_state.scroll_to_result = False
+
     grade = extract_line(report, "Grade:")
     rating = extract_line(report, "Coach rating:")
     your_choice = extract_line(report, "Your choice:")
@@ -507,15 +530,25 @@ st.markdown("<div class='subtitle'>Hold Strategy Trainer</div>", unsafe_allow_ht
 avg_letter, avg_points = session_average_grade(history)
 best_holds = sum(1 for item in history if item.get("grade") == "A+")
 
+last_grade = history[-1].get("grade", "—") if history else "—"
+best_hold_text = f"{best_holds}/{len(history)}" if history else "—"
+avg_points_text = f"{avg_points:.2f}" if avg_points is not None else "—"
+
 st.markdown(
     f"""
     <div class='session-strip'>
         <div class='session-box'><div class='session-label'>Rounds</div><div class='session-value'>{len(history)}</div></div>
         <div class='session-box'><div class='session-label'>Session Grade</div><div class='session-value'>{avg_letter}</div></div>
+        <div class='session-box'><div class='session-label'>Best Holds</div><div class='session-value'>{best_hold_text}</div></div>
+        <div class='session-box'><div class='session-label'>Last Grade</div><div class='session-value'>{last_grade}</div></div>
     </div>
     """,
     unsafe_allow_html=True,
 )
+
+if st.session_state.get("scroll_to_top", False):
+    components.html("\n        <script>\n        setTimeout(function() {\n            window.parent.scrollTo({top: 0, behavior: 'smooth'});\n        }, 200);\n        </script>\n        ", height=0)
+    st.session_state.scroll_to_top = False
 
 with st.expander("Session details", expanded=False):
     st.write(f"Best holds: {best_holds} / {len(history)}")
@@ -523,7 +556,7 @@ with st.expander("Session details", expanded=False):
         st.write(f"Average grade points: {avg_points:.2f}")
     if st.button("Clear session", use_container_width=True):
         st.session_state.history = []
-        new_round()
+        new_round(scroll_to_top=True)
         st.rerun()
 
 roll_number = challenge["roll_number"]
@@ -574,9 +607,8 @@ except AttributeError:
 selected_hold = selected_hold_from_indices(dice, selected_indices)
 st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 
-submit_col, next_col = st.columns(2)
-with submit_col:
-    if st.button("Submit hold", type="primary", use_container_width=True, disabled=answer_submitted):
+if not answer_submitted:
+    if st.button("Submit hold", type="primary", use_container_width=True):
         report = yc.coach_report_for_user_hold_by_roll_number(
             dice,
             scorecard,
@@ -592,16 +624,14 @@ with submit_col:
             "optimal": extract_line(report, "Optimal choice:"),
             "grade": extract_line(report, "Grade:"),
         })
-        st.rerun()
-with next_col:
-    if st.button("Next round", use_container_width=True):
-        new_round()
+        st.session_state.scroll_to_result = True
+        st.session_state.scroll_to_top = False
         st.rerun()
 
 if st.session_state.report:
     render_result(st.session_state.report)
-    if st.button("Play another round", type="primary", use_container_width=True):
-        new_round()
+    if st.button("Next round", type="primary", use_container_width=True):
+        new_round(scroll_to_top=True)
         st.rerun()
 
 if history:

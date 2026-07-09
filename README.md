@@ -1,23 +1,17 @@
-# Yahtzee Coach — Game UI v5
+# Yahtzee Coach — Game UI v6
 
-A Streamlit web app for practicing Yahtzee Roll 1 and Roll 2 hold decisions.
+Mobile polish update:
 
-## v5 changes
+- Bigger tappable dice faces
+- Red held dice selection retained
+- Coach result text contrast fixed
+- Next Round button only appears after the coach result
+- Auto-scrolls to coach result after submitting a hold
+- Auto-scrolls to the top after starting the next round
+- Four compact session stat boxes at the top: Rounds, Session Grade, Best Holds, Last Grade
+- Scorecard remains above dice selection
 
-- Fixed duplicate dice tapping bug: duplicate values like multiple 4s can now be selected separately.
-- Dice picker now uses one compact row of tappable dice instead of giant stacked buttons.
-- Dice look like dice again, with selected/held dice intended to show in red.
-- Removed clunky oversized gray section bars and replaced them with lighter section labels/cards.
-- Current scorecard remains above the dice selection.
-
-## Files
-
-- `app.py` — Streamlit app interface
-- `yahtzee_engine.py` — strategy engine and practice generator
-- `requirements.txt` — dependencies
-- `README.md` — this file
-
-## Run locally
+Run locally:
 
 ```bash
 pip install -r requirements.txt
