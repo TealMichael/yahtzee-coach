@@ -177,51 +177,44 @@ st.markdown(
     }
     .dice-help { text-align:center; color:#6b7280; font-size:0.86rem; margin:0.15rem 0 0.5rem 0; }
 
-    /* Dice picker: one compact row. Duplicate dice are internally unique with zero-width spaces. */
-    div[data-testid="stPills"] { margin:0.1rem 0 0.2rem 0; }
-    div[data-testid="stPills"] div[role="group"] {
-        display:flex !important;
-        flex-direction:row !important;
-        flex-wrap:nowrap !important;
-        justify-content:center !important;
-        gap:0.42rem !important;
-        width:100% !important;
+    /* Dice picker: five large tap targets in one compact row. */
+    .dice-tap-row-note {
+        text-align:center;
+        color:#6b7280;
+        font-size:0.86rem;
+        margin:0.15rem 0 0.5rem 0;
     }
-    div[data-testid="stPills"] button {
-        flex:0 0 auto !important;
-        width:4.45rem !important;
-        height:4.45rem !important;
-        min-width:4.45rem !important;
-        min-height:4.45rem !important;
-        max-width:4.45rem !important;
+
+    /* Dice buttons live inside the only horizontal button row in the app. */
+    div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button {
+        height:4.9rem !important;
+        min-height:4.9rem !important;
+        max-height:4.9rem !important;
         border-radius:18px !important;
         padding:0 !important;
         background:#ffffff !important;
         color:#111827 !important;
         border:2px solid #d1d5db !important;
-        box-shadow:0 3px 0 #c7c9cc, 0 5px 12px rgba(0,0,0,0.12) !important;
+        box-shadow:0 4px 0 #c7c9cc, 0 6px 14px rgba(0,0,0,0.14) !important;
         display:flex !important;
         align-items:center !important;
         justify-content:center !important;
     }
-    div[data-testid="stPills"] button p {
-        font-size:3.45rem !important;
+    div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button p {
+        font-size:3.35rem !important;
         line-height:1 !important;
         margin:0 !important;
+        padding:0 !important;
         color:#111827 !important;
         font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
     }
-    div[data-testid="stPills"] button[aria-pressed="true"],
-    div[data-testid="stPills"] button[aria-selected="true"],
-    div[data-testid="stPills"] button[data-selected="true"] {
+    div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button[kind="primary"] {
         background:#ff4b4b !important;
         color:#ffffff !important;
         border-color:#ff4b4b !important;
-        box-shadow:0 3px 0 #b91c1c, 0 5px 12px rgba(255,75,75,0.25) !important;
+        box-shadow:0 4px 0 #b91c1c, 0 6px 14px rgba(255,75,75,0.28) !important;
     }
-    div[data-testid="stPills"] button[aria-pressed="true"] p,
-    div[data-testid="stPills"] button[aria-selected="true"] p,
-    div[data-testid="stPills"] button[data-selected="true"] p {
+    div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button[kind="primary"] p {
         color:#ffffff !important;
     }
 
@@ -282,16 +275,13 @@ st.markdown(
         .score-box { min-height:2.65rem; padding:0.32rem 0.16rem; }
         .score-label { font-size:0.66rem; }
         .score-value { font-size:0.86rem; }
-        div[data-testid="stPills"] div[role="group"] { gap:0.26rem !important; }
-        div[data-testid="stPills"] button {
-            width:4.05rem !important;
-            height:4.05rem !important;
-            min-width:4.05rem !important;
-            min-height:4.05rem !important;
-            max-width:4.05rem !important;
+        div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button {
+            height:4.45rem !important;
+            min-height:4.45rem !important;
+            max-height:4.45rem !important;
             border-radius:16px !important;
         }
-        div[data-testid="stPills"] button p { font-size:3.1rem !important; }
+        div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button p { font-size:3.05rem !important; }
         .grade-badge { font-size:1.8rem; min-width:4rem; }
         .result-mini { grid-template-columns:1fr; }
     }
@@ -431,8 +421,8 @@ def new_round(scroll_to_top=False):
     st.session_state.round_id = st.session_state.get("round_id", 0) + 1
     st.session_state.scroll_to_result = False
     st.session_state.scroll_to_top = scroll_to_top
-    # Reset dice picker for the new round.
-    st.session_state[f"dice_picker_{st.session_state.round_id}"] = []
+    # Reset held dice for the new round.
+    st.session_state[f"held_indices_{st.session_state.round_id}"] = []
 
 
 def initialize_state():
@@ -524,6 +514,22 @@ challenge = st.session_state.challenge
 round_id = st.session_state.round_id
 history = st.session_state.history
 
+st.markdown("<div id='app-top-anchor'></div>", unsafe_allow_html=True)
+if st.session_state.get("scroll_to_top", False):
+    components.html("""
+        <script>
+        setTimeout(function() {
+            const doc = window.parent.document;
+            const el = doc.getElementById('app-top-anchor') || doc.querySelector('.block-container');
+            if (el) { el.scrollIntoView({behavior: 'smooth', block: 'start'}); }
+            window.parent.scrollTo({top: 0, behavior: 'smooth'});
+            doc.documentElement.scrollTop = 0;
+            doc.body.scrollTop = 0;
+        }, 250);
+        </script>
+        """, height=0)
+    st.session_state.scroll_to_top = False
+
 st.markdown("<h1 class='top-title'>🎲 Yahtzee Coach</h1>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>Hold Strategy Trainer</div>", unsafe_allow_html=True)
 
@@ -546,18 +552,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if st.session_state.get("scroll_to_top", False):
-    components.html("\n        <script>\n        setTimeout(function() {\n            window.parent.scrollTo({top: 0, behavior: 'smooth'});\n        }, 200);\n        </script>\n        ", height=0)
-    st.session_state.scroll_to_top = False
-
-with st.expander("Session details", expanded=False):
-    st.write(f"Best holds: {best_holds} / {len(history)}")
-    if avg_points is not None:
-        st.write(f"Average grade points: {avg_points:.2f}")
-    if st.button("Clear session", use_container_width=True):
-        st.session_state.history = []
-        new_round(scroll_to_top=True)
-        st.rerun()
 
 roll_number = challenge["roll_number"]
 dice = challenge["dice"]
@@ -581,29 +575,32 @@ render_scorecard(scorecard)
 st.markdown("<div class='section-label'>Tap dice to hold</div>", unsafe_allow_html=True)
 st.markdown("<div class='dice-help'>Tap each die you want to keep. Red dice are held. Leave all unselected to reroll everything.</div>", unsafe_allow_html=True)
 
-dice_key = f"dice_picker_{round_id}"
-if dice_key not in st.session_state:
-    st.session_state[dice_key] = []
+held_key = f"held_indices_{round_id}"
+if held_key not in st.session_state:
+    st.session_state[held_key] = []
 
-try:
-    selected_indices = st.pills(
-        "Dice",
-        options=list(range(len(dice))),
-        format_func=lambda i: unique_dice_label(i, dice[i]),
-        selection_mode="multi",
-        key=dice_key,
-        label_visibility="collapsed",
-        disabled=answer_submitted,
-    ) or []
-except AttributeError:
-    st.warning("This app needs Streamlit 1.46+ for the compact dice picker. Upgrade Streamlit if the dice look wrong.")
-    selected_indices = []
-    cols = st.columns(5)
-    for i, die in enumerate(dice):
-        with cols[i]:
-            if st.checkbox(DICE_FACE.get(die, str(die)), key=f"fallback_die_{round_id}_{i}", disabled=answer_submitted):
-                selected_indices.append(i)
+selected_indices = list(st.session_state[held_key])
 
+dice_cols = st.columns(5, gap="small")
+for i, die in enumerate(dice):
+    is_held = i in selected_indices
+    button_type = "primary" if is_held else "secondary"
+    with dice_cols[i]:
+        if st.button(
+            DICE_FACE.get(int(die), str(die)),
+            key=f"die_button_{round_id}_{i}",
+            type=button_type,
+            disabled=answer_submitted,
+            use_container_width=True,
+        ):
+            if i in st.session_state[held_key]:
+                st.session_state[held_key].remove(i)
+            else:
+                st.session_state[held_key].append(i)
+                st.session_state[held_key].sort()
+            st.rerun()
+
+selected_indices = list(st.session_state[held_key])
 selected_hold = selected_hold_from_indices(dice, selected_indices)
 st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 
