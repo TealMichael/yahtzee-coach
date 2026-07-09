@@ -181,89 +181,80 @@ st.markdown(
         display:flex;
         justify-content:center;
         align-items:center;
-        gap:0.52rem;
+        gap:0.45rem;
         flex-wrap:nowrap;
-        margin:0.6rem auto 0.72rem auto;
+        margin:0.55rem auto 0.7rem auto;
         width:100%;
     }
-    .die-button {
-        position:relative;
-        display:block;
-        flex:0 0 clamp(56px, 15.8vw, 66px);
-        width:clamp(56px, 15.8vw, 66px);
-        height:clamp(56px, 15.8vw, 66px);
-        border-radius:16px;
-        background:#f8fafc;
-        border:2px solid #d1d5db;
-        box-shadow:0 4px 0 #c7c9cc, 0 7px 14px rgba(0,0,0,0.16);
-        text-decoration:none !important;
-        -webkit-tap-highlight-color:transparent;
-        transition:transform 0.04s ease, box-shadow 0.04s ease;
-    }
-    .die-button:active {
-        transform:translateY(3px);
-        box-shadow:0 1px 0 #c7c9cc, 0 3px 8px rgba(0,0,0,0.18);
-    }
-    .die-button.held {
-        background:#ff4b4b;
-        border-color:#ff4b4b;
-        box-shadow:0 4px 0 #b91c1c, 0 7px 14px rgba(255,75,75,0.25);
-    }
-    .die-button.disabled {
-        opacity:0.72;
-        pointer-events:none;
-    }
-    .pip {
-        position:absolute;
-        width:12.5%;
-        height:12.5%;
-        border-radius:999px;
-        background:#1f2937;
-    }
-    .die-button.held .pip { background:#ffffff; }
-    .pip-tl { left:24%; top:24%; }
-    .pip-tr { right:24%; top:24%; }
-    .pip-ml { left:24%; top:43.75%; }
-    .pip-mr { right:24%; top:43.75%; }
-    .pip-bl { left:24%; bottom:24%; }
-    .pip-br { right:24%; bottom:24%; }
-    .pip-c { left:43.75%; top:43.75%; }
 
-    @media (max-width:380px) {
-        .dice-picker-row { gap:0.38rem; }
-        .die-button {
-            flex-basis:clamp(50px, 15.2vw, 58px);
-            width:clamp(50px, 15.2vw, 58px);
-            height:clamp(50px, 15.2vw, 58px);
-            border-radius:14px;
-        }
-    }
-
-    /* Dice picker: five large tap targets in one compact row. */
-    .dice-tap-row-note {
-        text-align:center;
-        color:#6b7280;
-        font-size:0.86rem;
-        margin:0.15rem 0 0.5rem 0;
-    }
-
-    /* Dice buttons live inside the only horizontal button row in the app. */
-    div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button {
-        height:4.9rem !important;
-        min-height:4.9rem !important;
-        max-height:4.9rem !important;
-        border-radius:18px !important;
-        padding:0 !important;
-        background:#ffffff !important;
-        color:#111827 !important;
-        border:2px solid #d1d5db !important;
-        box-shadow:0 4px 0 #c7c9cc, 0 6px 14px rgba(0,0,0,0.14) !important;
-        display:flex !important;
+    /* Dice picker buttons: tight square dice buttons, not full-width rows. */
+    .dice-picker-wrap div[data-testid="stHorizontalBlock"] {
+        gap:0.42rem !important;
         align-items:center !important;
         justify-content:center !important;
     }
+    .dice-picker-wrap div[data-testid="column"] {
+        flex:0 0 auto !important;
+        width:clamp(54px, 15vw, 64px) !important;
+        min-width:clamp(54px, 15vw, 64px) !important;
+    }
+    .dice-picker-wrap div[data-testid="stButton"] > button {
+        width:clamp(54px, 15vw, 64px) !important;
+        height:clamp(54px, 15vw, 64px) !important;
+        min-height:clamp(54px, 15vw, 64px) !important;
+        max-height:clamp(54px, 15vw, 64px) !important;
+        padding:0 !important;
+        border-radius:15px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        background:#f8fafc !important;
+        color:#111827 !important;
+        border:2px solid #d1d5db !important;
+        box-shadow:0 4px 0 #c7c9cc, 0 7px 14px rgba(0,0,0,0.16) !important;
+        -webkit-tap-highlight-color:transparent !important;
+    }
+    .dice-picker-wrap div[data-testid="stButton"] > button:active {
+        transform:translateY(3px) !important;
+        box-shadow:0 1px 0 #c7c9cc, 0 3px 8px rgba(0,0,0,0.18) !important;
+    }
+    .dice-picker-wrap div[data-testid="stButton"] > button p {
+        font-size:2.95rem !important;
+        line-height:1 !important;
+        margin:0 !important;
+        padding:0 !important;
+        color:#111827 !important;
+        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
+    }
+    .dice-picker-wrap div[data-testid="stButton"] > button[kind="primary"] {
+        background:#ff4b4b !important;
+        color:#ffffff !important;
+        border-color:#ff4b4b !important;
+        box-shadow:0 4px 0 #b91c1c, 0 7px 14px rgba(255,75,75,0.25) !important;
+    }
+    .dice-picker-wrap div[data-testid="stButton"] > button[kind="primary"] p {
+        color:#ffffff !important;
+    }
+
+    /* Fallback: Streamlit may not preserve the wrapper around widgets, so scope to horizontal button rows. */
+    div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button {
+        width:clamp(54px, 15vw, 64px) !important;
+        height:clamp(54px, 15vw, 64px) !important;
+        min-height:clamp(54px, 15vw, 64px) !important;
+        max-height:clamp(54px, 15vw, 64px) !important;
+        padding:0 !important;
+        border-radius:15px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        background:#f8fafc !important;
+        color:#111827 !important;
+        border:2px solid #d1d5db !important;
+        box-shadow:0 4px 0 #c7c9cc, 0 7px 14px rgba(0,0,0,0.16) !important;
+        -webkit-tap-highlight-color:transparent !important;
+    }
     div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button p {
-        font-size:3.35rem !important;
+        font-size:2.95rem !important;
         line-height:1 !important;
         margin:0 !important;
         padding:0 !important;
@@ -274,11 +265,30 @@ st.markdown(
         background:#ff4b4b !important;
         color:#ffffff !important;
         border-color:#ff4b4b !important;
-        box-shadow:0 4px 0 #b91c1c, 0 6px 14px rgba(255,75,75,0.28) !important;
+        box-shadow:0 4px 0 #b91c1c, 0 7px 14px rgba(255,75,75,0.25) !important;
     }
     div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button[kind="primary"] p {
         color:#ffffff !important;
     }
+
+    @media (max-width:380px) {
+        .dice-picker-wrap div[data-testid="stHorizontalBlock"] { gap:0.32rem !important; }
+        .dice-picker-wrap div[data-testid="column"] {
+            width:clamp(48px, 14.5vw, 56px) !important;
+            min-width:clamp(48px, 14.5vw, 56px) !important;
+        }
+        .dice-picker-wrap div[data-testid="stButton"] > button {
+            width:clamp(48px, 14.5vw, 56px) !important;
+            height:clamp(48px, 14.5vw, 56px) !important;
+            min-height:clamp(48px, 14.5vw, 56px) !important;
+            max-height:clamp(48px, 14.5vw, 56px) !important;
+            border-radius:13px !important;
+        }
+        .dice-picker-wrap div[data-testid="stButton"] > button p { font-size:2.65rem !important; }
+    }
+
+    /* Old HTML dice styles kept harmless in case a cached browser sees them. */
+    .die-button { display:none; }
 
     /* Normal action buttons should not become dice-sized or huge section bars. */
     div[data-testid="stButton"] > button {
@@ -337,13 +347,6 @@ st.markdown(
         .score-box { min-height:2.65rem; padding:0.32rem 0.16rem; }
         .score-label { font-size:0.66rem; }
         .score-value { font-size:0.86rem; }
-        div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button {
-            height:4.45rem !important;
-            min-height:4.45rem !important;
-            max-height:4.45rem !important;
-            border-radius:16px !important;
-        }
-        div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button p { font-size:3.05rem !important; }
         .grade-badge { font-size:1.8rem; min-width:4rem; }
         .result-mini { grid-template-columns:1fr; }
     }
@@ -718,13 +721,32 @@ held_key = f"held_indices_{round_id}"
 if held_key not in st.session_state:
     st.session_state[held_key] = []
 
-process_dice_toggle_query(held_key, round_id, answer_submitted=answer_submitted)
-
 selected_indices = list(st.session_state[held_key])
-st.markdown(
-    dice_picker_html(dice, selected_indices, round_id, disabled=answer_submitted),
-    unsafe_allow_html=True,
-)
+
+# Streamlit-native dice picker. Each die uses a unique key, so duplicate dice
+# are selectable by position and the app updates state without query-param reloads.
+st.markdown("<div class='dice-picker-wrap'>", unsafe_allow_html=True)
+dice_columns = st.columns(5, gap="small")
+for die_index, die_value in enumerate(dice):
+    is_held = die_index in st.session_state[held_key]
+    with dice_columns[die_index]:
+        if st.button(
+            DICE_FACE.get(int(die_value), str(die_value)),
+            key=f"die_button_{round_id}_{die_index}",
+            type="primary" if is_held else "secondary",
+            disabled=answer_submitted,
+            help=f"Die {die_index + 1}: {die_value}",
+            use_container_width=False,
+        ):
+            held = list(st.session_state.get(held_key, []))
+            if die_index in held:
+                held.remove(die_index)
+            else:
+                held.append(die_index)
+                held.sort()
+            st.session_state[held_key] = held
+            st.rerun()
+st.markdown("</div>", unsafe_allow_html=True)
 
 selected_indices = list(st.session_state[held_key])
 selected_hold = selected_hold_from_indices(dice, selected_indices)

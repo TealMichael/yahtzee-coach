@@ -1,18 +1,21 @@
-# Yahtzee Coach — Game UI v8
+# Yahtzee Coach - Game UI v9
 
-Focused update: dice picker only.
+This update changes only the dice picker interaction.
 
-Changes from v7:
-- Replaced Streamlit dice buttons with a custom compact HTML dice row.
+## v9 changes
+- Uses Streamlit-native buttons instead of URL/query-parameter links.
+- Clicking a die no longer triggers a browser URL reload.
+- Duplicate dice are still selectable by position.
 - Five dice stay in one row.
-- Dice are larger with visible pips.
-- Each die itself is the tap target.
+- Dice buttons stay tight around the dice.
 - Held dice turn red.
-- Duplicate dice are selected by position, so multiple 4s/6s work correctly.
-- No changes to coach report, scorecard, session stats, or strategy engine.
+- No intentional changes to coach report, scorecard, session stats, or engine logic.
 
-Deploy by uploading:
+## Deploy
+Upload these four files to GitHub:
 - app.py
 - yahtzee_engine.py
 - requirements.txt
 - README.md
+
+Streamlit should redeploy automatically.
