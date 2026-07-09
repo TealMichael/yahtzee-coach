@@ -13,6 +13,7 @@ future strategy patch.
 from __future__ import annotations
 
 import sys
+import random
 from dataclasses import dataclass
 from typing import Iterable, List, Dict, Any
 
@@ -283,13 +284,83 @@ def run_scope_guard_tests(verbose: bool = True) -> Dict[str, Any]:
     return {"passed": int(passed), "failed": int(not passed)}
 
 
+def run_practice_deck_tests(verbose: bool = True) -> Dict[str, Any]:
+    """Validate the expanded titled practice deck without touching the UI."""
+    failures = []
+
+    scenarios = getattr(yc, "SPICY_PRACTICE_SCENARIOS", [])
+    rate = getattr(yc, "SPICY_PRACTICE_RATE", None)
+
+    if len(scenarios) != 10:
+        failures.append(f"Expected 10 titled sections, found {len(scenarios)}")
+    if rate != 1.00:
+        failures.append(f"Expected SPICY_PRACTICE_RATE to be 1.00, found {rate}")
+
+    scenario_names = set()
+    for scenario in scenarios:
+        name = scenario.get("scenario_name", "<missing>")
+        scenario_names.add(name)
+        dice_options = scenario.get("dice_options", [])
+        scorecards = scenario.get("scorecards", [])
+        roll_numbers = scenario.get("roll_numbers", [])
+
+        if len(dice_options) != 10:
+            failures.append(f"{name}: expected 10 unique dice rolls, found {len(dice_options)}")
+        if len(scorecards) != 10:
+            failures.append(f"{name}: expected 10 scorecards, found {len(scorecards)}")
+        if not roll_numbers or any(r not in (1, 2) for r in roll_numbers):
+            failures.append(f"{name}: roll_numbers must only use Roll 1 or Roll 2")
+
+        normalized_dice = [tuple(sorted(dice)) for dice in dice_options]
+        if len(set(normalized_dice)) != len(normalized_dice):
+            failures.append(f"{name}: dice options are not unique after sorting")
+        for dice in dice_options:
+            if len(dice) != 5 or any(d < 1 or d > 6 for d in dice):
+                failures.append(f"{name}: invalid dice option {dice}")
+
+        # Keep deck validation lightweight. Full strategy correctness is covered
+        # by the regression cases above; this check protects the practice pool shape.
+
+    # Make sure the generator can actually produce every scenario name.
+    random.seed(20260709)
+    generated_names = set()
+    for _ in range(500):
+        challenge = yc.generate_practice_challenge()
+        generated_names.add(challenge.get("scenario_name"))
+        if challenge.get("roll_number") not in (1, 2):
+            failures.append(f"Generated invalid roll number: {challenge.get('roll_number')}")
+        if len(challenge.get("dice", [])) != 5:
+            failures.append(f"Generated invalid dice: {challenge.get('dice')}")
+
+    missing = scenario_names - generated_names
+    if missing:
+        failures.append(f"Generator did not produce these sections in 500 seeded draws: {sorted(missing)}")
+
+    passed = 1 if not failures else 0
+    failed = 0 if not failures else 1
+
+    if verbose:
+        print()
+        print("EXPANDED PRACTICE DECK TESTS")
+        print("=" * 60)
+        if failures:
+            for failure in failures:
+                print(f"FAIL: {failure}")
+        else:
+            print("PASS: 10 titled sections, 10 dice rolls each, 10 scorecards each")
+            print("PASS: generator stayed inside titled deck and produced valid Roll 1/Roll 2 challenges")
+
+    return {"passed": passed, "failed": failed, "details": failures}
+
+
 def run_all_tests(verbose: bool = True) -> Dict[str, Any]:
     strategy = run_strategy_regression_tests(verbose=verbose)
     reports = run_coach_report_smoke_tests(verbose=verbose)
     scope = run_scope_guard_tests(verbose=verbose)
+    deck = run_practice_deck_tests(verbose=verbose)
 
-    total_passed = strategy["passed"] + reports["passed"] + scope["passed"]
-    total_failed = strategy["failed"] + reports["failed"] + scope["failed"]
+    total_passed = strategy["passed"] + reports["passed"] + scope["passed"] + deck["passed"]
+    total_failed = strategy["failed"] + reports["failed"] + scope["failed"] + deck["failed"]
 
     if verbose:
         print()
@@ -303,6 +374,7 @@ def run_all_tests(verbose: bool = True) -> Dict[str, Any]:
         "strategy": strategy,
         "reports": reports,
         "scope": scope,
+        "deck": deck,
     }
 
 

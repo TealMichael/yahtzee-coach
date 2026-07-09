@@ -8584,43 +8584,47 @@ def coach_report_for_user_hold_by_roll_number(dice, scorecard, user_hold, roll_n
 
 # ===== Source notebook cell 126 =====
 # ============================
-# PRACTICE PATCH: SPICY SCENARIO DECK
+# PRACTICE PATCH: EXPANDED SPICY SCENARIO DECK v18
 # ============================
 # Purpose:
-# Adds more fun and varied practice rounds:
-# - Small Straight needs
-# - Large Straight needs
-# - Full House puzzles
-# - Yahtzee/Four of a Kind temptation
-# - Weird late-game decisions
-# - Scorecards where Ones, Twos, and Threes are NOT always already filled
+# Reduces repetition in Unlimited Practice by making the titled deck the
+# primary practice source and expanding it to:
+# - 10 titled sections
+# - 10 unique dice rolls per section
+# - 10 randomized scorecard templates per section
 #
-# This wraps the existing practice generator.
-# Most rounds will come from the spicy deck, but some original rounds remain.
+# The app remains a Roll 1 / Roll 2 hold trainer. These scenarios are not
+# hand-scored puzzles; they are repeatable strategy families that mix dice,
+# scorecard state, and roll number to create many possible practice rounds.
 
 import random
 import copy
 
 
-SPICY_PRACTICE_RATE = 0.80
+# Use the titled deck for every practice round. This keeps the app feeling
+# intentional and avoids the older untitled generator repeating too often.
+SPICY_PRACTICE_RATE = 1.00
+
+
+YAHTZEE_CATEGORIES = [
+    "ones",
+    "twos",
+    "threes",
+    "fours",
+    "fives",
+    "sixes",
+    "three_of_a_kind",
+    "four_of_a_kind",
+    "full_house",
+    "small_straight",
+    "large_straight",
+    "yahtzee",
+    "chance",
+]
 
 
 def make_scorecard(filled_values=None):
-    card = {
-        "ones": None,
-        "twos": None,
-        "threes": None,
-        "fours": None,
-        "fives": None,
-        "sixes": None,
-        "three_of_a_kind": None,
-        "four_of_a_kind": None,
-        "full_house": None,
-        "small_straight": None,
-        "large_straight": None,
-        "yahtzee": None,
-        "chance": None
-    }
+    card = {category: None for category in YAHTZEE_CATEGORIES}
 
     if filled_values:
         for category, value in filled_values.items():
@@ -8640,31 +8644,24 @@ SPICY_PRACTICE_SCENARIOS = [
             [2, 3, 4, 4, 6],
             [1, 3, 4, 5, 5],
             [2, 3, 4, 6, 6],
-            [1, 2, 3, 4, 6]
+            [1, 2, 3, 4, 6],
+            [1, 2, 2, 3, 5],
+            [2, 3, 3, 4, 6],
+            [1, 3, 4, 4, 5],
+            [2, 2, 3, 4, 5],
         ],
         "scorecards": [
-            {
-                "ones": 3,
-                "twos": 6,
-                "full_house": 25,
-                "chance": 23
-            },
-            {
-                "fours": 12,
-                "three_of_a_kind": 21,
-                "full_house": 25
-            },
-            {
-                "ones": 2,
-                "fives": 15,
-                "chance": 22
-            },
-            {
-                "twos": 4,
-                "threes": 9,
-                "full_house": 0
-            }
-        ]
+            {"ones": 3, "twos": 6, "full_house": 25, "chance": 23},
+            {"fours": 12, "three_of_a_kind": 21, "full_house": 25},
+            {"ones": 2, "fives": 15, "chance": 22},
+            {"twos": 4, "threes": 9, "full_house": 0},
+            {"ones": 3, "threes": 9, "fives": 15, "large_straight": 40},
+            {"small_straight": 30, "full_house": 25, "chance": 24},
+            {"ones": 0, "twos": 4, "fours": 12, "yahtzee": 0},
+            {"three_of_a_kind": 20, "four_of_a_kind": 0, "chance": 22},
+            {"sixes": 18, "full_house": 25, "large_straight": 40},
+            {"ones": 3, "twos": 6, "threes": 9, "chance": 21},
+        ],
     },
 
     {
@@ -8677,30 +8674,24 @@ SPICY_PRACTICE_SCENARIOS = [
             [1, 3, 4, 5, 6],
             [2, 3, 4, 5, 6],
             [1, 2, 4, 5, 6],
-            [2, 3, 3, 4, 5]
+            [2, 3, 3, 4, 5],
+            [1, 1, 3, 4, 6],
+            [1, 2, 3, 5, 5],
+            [2, 4, 5, 5, 6],
+            [1, 3, 3, 4, 5],
         ],
         "scorecards": [
-            {
-                "ones": 3,
-                "twos": 6,
-                "full_house": 25,
-                "chance": 22
-            },
-            {
-                "small_straight": 30,
-                "full_house": 25,
-                "chance": 24
-            },
-            {
-                "three_of_a_kind": 20,
-                "four_of_a_kind": 0
-            },
-            {
-                "ones": 0,
-                "fours": 12,
-                "full_house": 25
-            }
-        ]
+            {},
+            {"ones": 3, "twos": 6, "full_house": 25, "chance": 22},
+            {"small_straight": 30, "full_house": 25, "chance": 24},
+            {"three_of_a_kind": 20, "four_of_a_kind": 0},
+            {"ones": 0, "fours": 12, "full_house": 25},
+            {"twos": 6, "threes": 9, "small_straight": 30},
+            {"fives": 15, "sixes": 18, "full_house": 25, "chance": 23},
+            {"large_straight": 40, "chance": 21},
+            {"ones": 3, "twos": 4, "threes": 6, "yahtzee": 0},
+            {"four_of_a_kind": 0, "full_house": 25, "small_straight": 30},
+        ],
     },
 
     {
@@ -8713,36 +8704,29 @@ SPICY_PRACTICE_SCENARIOS = [
             [3, 3, 3, 5, 6],
             [4, 4, 4, 2, 6],
             [1, 1, 5, 5, 2],
-            [2, 2, 6, 6, 3]
+            [2, 2, 6, 6, 3],
+            [3, 3, 5, 5, 1],
+            [4, 4, 6, 6, 2],
+            [1, 1, 1, 5, 6],
+            [5, 5, 5, 2, 4],
         ],
         "scorecards": [
-            {
-                "ones": 3,
-                "twos": 6,
-                "small_straight": 30,
-                "large_straight": 40
-            },
-            {
-                "fours": 8,
-                "fives": 15,
-                "chance": 23
-            },
-            {
-                "three_of_a_kind": 21,
-                "small_straight": 30,
-                "large_straight": 40
-            },
-            {
-                "ones": 0,
-                "twos": 4,
-                "chance": 22
-            }
-        ]
+            {"ones": 3, "twos": 6, "small_straight": 30, "large_straight": 40},
+            {"fours": 8, "fives": 15, "chance": 23},
+            {"three_of_a_kind": 21, "small_straight": 30, "large_straight": 40},
+            {"ones": 0, "twos": 4, "chance": 22},
+            {"full_house": 25, "chance": 24},
+            {"three_of_a_kind": 0, "four_of_a_kind": 0, "small_straight": 30},
+            {"ones": 3, "twos": 6, "threes": 9, "fours": 12, "chance": 22},
+            {"fives": 10, "sixes": 18, "large_straight": 40},
+            {"yahtzee": 0, "small_straight": 30, "chance": 21},
+            {"ones": 0, "fours": 8, "full_house": 0, "chance": 20},
+        ],
     },
 
     {
         "scenario_name": "Yahtzee Fever",
-        "scenario_description": "You already have a strong matching set. Decide how hard to chase Yahtzee or Four of a Kind.",
+        "scenario_description": "You already have a strong matching set. Decide how hard to chase Yahtzee, Four of a Kind, or a high upper box.",
         "roll_numbers": [1, 1, 2, 2],
         "dice_options": [
             [6, 6, 6, 2, 5],
@@ -8750,68 +8734,144 @@ SPICY_PRACTICE_SCENARIOS = [
             [4, 4, 4, 2, 5],
             [5, 5, 5, 1, 3],
             [2, 2, 2, 2, 6],
-            [3, 3, 3, 4, 6]
+            [3, 3, 3, 4, 6],
+            [6, 6, 6, 6, 1],
+            [5, 5, 5, 5, 2],
+            [4, 4, 4, 4, 6],
+            [2, 2, 2, 5, 6],
         ],
         "scorecards": [
-            {
-                "small_straight": 30,
-                "large_straight": 40,
-                "full_house": 25
-            },
-            {
-                "three_of_a_kind": 22,
-                "full_house": 25,
-                "chance": 24
-            },
-            {
-                "ones": 3,
-                "twos": 6,
-                "threes": 9
-            },
-            {
-                "fours": 12,
-                "fives": 15,
-                "small_straight": 30
-            }
-        ]
+            {},
+            {"small_straight": 30, "large_straight": 40, "full_house": 25},
+            {"three_of_a_kind": 22, "full_house": 25, "chance": 24},
+            {"ones": 3, "twos": 6, "threes": 9},
+            {"fours": 12, "fives": 15, "small_straight": 30},
+            {"three_of_a_kind": 0, "four_of_a_kind": 0, "chance": 21},
+            {"ones": 3, "twos": 6, "fours": 12, "full_house": 25, "small_straight": 30},
+            {"fives": 10, "sixes": 12, "chance": 22},
+            {"yahtzee": 0, "full_house": 25, "large_straight": 40},
+            {"three_of_a_kind": 24, "four_of_a_kind": 0, "full_house": 25, "chance": 25},
+        ],
     },
 
     {
-        "scenario_name": "Low Box Chaos",
-        "scenario_description": "The low upper boxes are still open, which makes some ugly-looking dice surprisingly important.",
-        "roll_numbers": [1, 2],
+        "scenario_name": "Upper Bonus Pressure",
+        "scenario_description": "The upper bonus is still alive. Decide when a boring upper-section hold is actually the strongest long-term play.",
+        "roll_numbers": [1, 2, 2],
         "dice_options": [
-            [1, 1, 2, 4, 6],
-            [1, 2, 2, 3, 5],
-            [1, 1, 3, 5, 6],
-            [2, 2, 3, 4, 6],
-            [1, 3, 3, 4, 5],
-            [1, 2, 3, 4, 4]
+            [4, 4, 1, 5, 6],
+            [5, 5, 2, 3, 6],
+            [6, 6, 1, 4, 5],
+            [3, 3, 4, 5, 6],
+            [2, 4, 4, 5, 6],
+            [1, 5, 5, 5, 2],
+            [2, 6, 6, 3, 4],
+            [1, 4, 5, 5, 6],
+            [3, 4, 6, 6, 6],
+            [2, 5, 6, 6, 6],
         ],
         "scorecards": [
-            {
-                "fours": 12,
-                "fives": 15,
-                "sixes": 18,
-                "small_straight": 30,
-                "large_straight": 40
-            },
-            {
-                "fives": 10,
-                "sixes": 12,
-                "full_house": 25,
-                "chance": 22
-            },
-            {
-                "three_of_a_kind": 20,
-                "four_of_a_kind": 0,
-                "small_straight": 30
-            },
-            {
-                "fours": 8,
-                "chance": 23
-            }
-        ]
+            {"ones": 3, "twos": 6, "threes": 9},
+            {"ones": 0, "twos": 4, "threes": 6},
+            {"ones": 3, "twos": 6, "fours": 8},
+            {"ones": 3, "twos": 6, "threes": 9, "small_straight": 30, "large_straight": 40},
+            {"ones": 0, "twos": 2, "threes": 9, "full_house": 25, "chance": 23},
+            {"fours": 8, "fives": 10, "sixes": None, "chance": 22},
+            {"ones": 3, "twos": 6, "threes": 6, "four_of_a_kind": 0},
+            {"full_house": 25, "small_straight": 30, "large_straight": 40, "chance": 24},
+            {"three_of_a_kind": 20, "full_house": 25, "yahtzee": 0},
+            {"ones": 3, "twos": 6, "threes": 9, "fours": 12, "chance": 21},
+        ],
+    },
+
+    {
+        "scenario_name": "Chance Crossroads",
+        "scenario_description": "Chance is tempting, but using it too early can trap the rest of the scorecard.",
+        "roll_numbers": [1, 2, 2],
+        "dice_options": [
+            [1, 3, 4, 5, 6],
+            [2, 4, 5, 6, 6],
+            [1, 4, 4, 5, 6],
+            [2, 3, 5, 6, 6],
+            [1, 2, 5, 5, 6],
+            [3, 4, 5, 6, 6],
+            [1, 5, 5, 6, 6],
+            [2, 2, 4, 5, 6],
+            [3, 3, 4, 5, 6],
+            [1, 2, 3, 6, 6],
+        ],
+        "scorecards": [
+            {"chance": None},
+            {"chance": 22, "full_house": 25},
+            {"chance": 24, "three_of_a_kind": 20, "four_of_a_kind": 0},
+            {"ones": 3, "twos": 6, "threes": 9, "chance": None},
+            {"ones": 0, "twos": 4, "full_house": 25, "chance": None},
+            {"small_straight": 30, "large_straight": 40, "chance": None},
+            {"full_house": 25, "small_straight": 30, "chance": 21},
+            {"three_of_a_kind": 0, "four_of_a_kind": 0, "chance": None},
+            {"fours": 12, "fives": 15, "sixes": 18, "chance": None},
+            {"yahtzee": 0, "full_house": 0, "chance": 23},
+        ],
+    },
+
+    {
+        "scenario_name": "Four-of-a-Kind Forge",
+        "scenario_description": "You have strong matching dice, but the best hold may depend on whether 3K, 4K, Yahtzee, or the upper box is still valuable.",
+        "roll_numbers": [1, 2, 2],
+        "dice_options": [
+            [3, 3, 3, 4, 5],
+            [4, 4, 4, 2, 6],
+            [5, 5, 5, 1, 6],
+            [6, 6, 6, 2, 3],
+            [2, 2, 2, 4, 6],
+            [1, 1, 1, 5, 6],
+            [3, 3, 3, 3, 5],
+            [4, 4, 4, 4, 2],
+            [5, 5, 5, 5, 6],
+            [6, 6, 6, 6, 4],
+        ],
+        "scorecards": [
+            {},
+            {"three_of_a_kind": 21, "full_house": 25},
+            {"four_of_a_kind": 0, "chance": 23},
+            {"three_of_a_kind": 0, "four_of_a_kind": 0, "chance": 22},
+            {"small_straight": 30, "large_straight": 40, "full_house": 25},
+            {"ones": 3, "twos": 6, "threes": 9, "fours": 12},
+            {"fives": 15, "sixes": 18, "chance": 24},
+            {"yahtzee": 0, "full_house": 25, "chance": 23},
+            {"three_of_a_kind": 24, "four_of_a_kind": 26, "full_house": 25},
+            {"ones": 0, "twos": 4, "small_straight": 30, "chance": 20},
+        ],
+    },
+
+    {
+        "scenario_name": "Joker Doorway",
+        "scenario_description": "Yahtzee has already been scored. A matching set can still be worth chasing because extra Yahtzees and Joker paths change the value.",
+        "roll_numbers": [1, 2, 2],
+        "dice_options": [
+            [6, 6, 6, 6, 2],
+            [5, 5, 5, 5, 1],
+            [4, 4, 4, 4, 6],
+            [3, 3, 3, 3, 5],
+            [2, 2, 2, 2, 6],
+            [1, 1, 1, 1, 5],
+            [6, 6, 6, 1, 2],
+            [5, 5, 5, 2, 6],
+            [4, 4, 4, 1, 3],
+            [3, 3, 3, 2, 5],
+        ],
+        "scorecards": [
+            {"yahtzee": 50, "sixes": 18},
+            {"yahtzee": 50, "fives": 15},
+            {"yahtzee": 50, "fours": 12},
+            {"yahtzee": 50, "threes": 9},
+            {"yahtzee": 50, "twos": 6},
+            {"yahtzee": 50, "ones": 3},
+            {"yahtzee": 50, "sixes": 18, "full_house": None, "small_straight": None, "large_straight": None},
+            {"yahtzee": 50, "fives": 15, "three_of_a_kind": 24, "four_of_a_kind": None},
+            {"yahtzee": 50, "fours": 12, "full_house": 25, "chance": 22},
+            {"yahtzee": 50, "ones": 3, "twos": 6, "threes": 9, "chance": 24},
+        ],
     },
 
     {
@@ -8824,44 +8884,24 @@ SPICY_PRACTICE_SCENARIOS = [
             [2, 3, 3, 5, 6],
             [1, 4, 4, 5, 6],
             [2, 2, 3, 4, 5],
-            [1, 3, 4, 4, 6]
+            [1, 3, 4, 4, 6],
+            [1, 2, 5, 5, 6],
+            [2, 3, 4, 6, 6],
+            [1, 1, 2, 3, 6],
+            [3, 4, 5, 5, 6],
         ],
         "scorecards": [
-            {
-                "threes": 9,
-                "fours": 12,
-                "fives": 15,
-                "three_of_a_kind": 22,
-                "full_house": 25,
-                "small_straight": 30,
-                "large_straight": 40,
-                "chance": 23
-            },
-            {
-                "ones": 3,
-                "fours": 8,
-                "sixes": 18,
-                "three_of_a_kind": 20,
-                "four_of_a_kind": 0,
-                "full_house": 25,
-                "chance": 22
-            },
-            {
-                "twos": 6,
-                "threes": 6,
-                "fives": 15,
-                "small_straight": 30,
-                "large_straight": 40,
-                "yahtzee": 0
-            },
-            {
-                "ones": 0,
-                "twos": 4,
-                "fours": 12,
-                "full_house": 25,
-                "chance": 24
-            }
-        ]
+            {"threes": 9, "fours": 12, "fives": 15, "three_of_a_kind": 22, "full_house": 25, "small_straight": 30, "large_straight": 40, "chance": 23},
+            {"ones": 3, "fours": 8, "sixes": 18, "three_of_a_kind": 20, "four_of_a_kind": 0, "full_house": 25, "chance": 22},
+            {"twos": 6, "threes": 6, "fives": 15, "small_straight": 30, "large_straight": 40, "yahtzee": 0},
+            {"ones": 0, "twos": 4, "fours": 12, "full_house": 25, "chance": 24},
+            {"ones": 3, "twos": 6, "threes": 9, "fours": 12, "fives": 15, "sixes": None},
+            {"three_of_a_kind": 0, "four_of_a_kind": 0, "full_house": 0, "small_straight": 30, "large_straight": 40},
+            {"ones": 0, "twos": 0, "threes": 9, "fours": 8, "fives": 10, "sixes": 18},
+            {"full_house": 25, "small_straight": 30, "large_straight": 40, "yahtzee": 0, "chance": 20},
+            {"ones": 3, "twos": 6, "three_of_a_kind": 18, "four_of_a_kind": 0, "chance": 21},
+            {"fours": 12, "fives": 15, "sixes": 18, "full_house": 25, "large_straight": 40},
+        ],
     },
 
     {
@@ -8875,24 +8915,24 @@ SPICY_PRACTICE_SCENARIOS = [
             [2, 2, 3, 4, 5],
             [3, 3, 4, 5, 6],
             [4, 4, 5, 5, 6],
-            [1, 5, 5, 6, 6]
+            [1, 5, 5, 6, 6],
+            [1, 1, 6, 6, 6],
+            [2, 3, 5, 5, 5],
+            [1, 2, 4, 4, 4],
         ],
         "scorecards": [
             {},
-            {
-                "ones": 3
-            },
-            {
-                "chance": 22
-            },
-            {
-                "full_house": 25
-            },
-            {
-                "small_straight": 30
-            }
-        ]
-    }
+            {"ones": 3},
+            {"chance": 22},
+            {"full_house": 25},
+            {"small_straight": 30},
+            {"large_straight": 40},
+            {"ones": 3, "twos": 6, "threes": 9},
+            {"three_of_a_kind": 21},
+            {"four_of_a_kind": 0},
+            {"yahtzee": 0, "chance": 23},
+        ],
+    },
 ]
 
 
@@ -8914,7 +8954,7 @@ def make_spicy_practice_challenge():
         "roll_number": roll_number,
         "rolls_remaining": 3 - roll_number,
         "dice": dice,
-        "scorecard": scorecard
+        "scorecard": scorecard,
     }
 
 
@@ -8932,7 +8972,6 @@ def generate_practice_challenge():
 
 if "clear_speed_caches" in globals():
     clear_speed_caches()
-
 
 
 # ===== Source notebook cell 130 =====
