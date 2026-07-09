@@ -806,11 +806,10 @@ def render_scorecard(scorecard):
 def install_dice_scroll_guard():
     """Preserve scroll position when the user taps dice.
 
-    Streamlit reruns the page after pill/button clicks. On mobile, that can
-    cause the page to jump. This tiny JS guard saves the current scroll
-    position before a dice tap and restores it right after the rerun.
-    It only targets the dice picker controls; Submit and Next Round keep
-    their normal intentional scrolling behavior.
+    Dice taps must still rerun Streamlit so the held state and "Your hold" text
+    update live. This guard saves the current scroll position before a dice tap
+    and restores it immediately after the rerun. It does not affect Submit Hold
+    or Next Round, which use their own intentional scrolling.
     """
     components.html(
         """
@@ -818,63 +817,89 @@ def install_dice_scroll_guard():
         (function() {
             const STORAGE_KEY = "yc_dice_scroll_y";
             const PENDING_KEY = "yc_dice_scroll_pending";
+            const TIME_KEY = "yc_dice_scroll_time";
             const parentWindow = window.parent;
             const doc = parentWindow.document;
+            const root = doc.scrollingElement || doc.documentElement || doc.body;
+
+            try { parentWindow.history.scrollRestoration = "manual"; } catch (err) {}
 
             function currentScrollY() {
-                return parentWindow.scrollY || doc.documentElement.scrollTop || doc.body.scrollTop || 0;
+                return parentWindow.scrollY || root.scrollTop || doc.documentElement.scrollTop || doc.body.scrollTop || 0;
+            }
+
+            function setScrollY(y) {
+                parentWindow.scrollTo(0, y);
+                if (root) { root.scrollTop = y; }
+                if (doc.documentElement) { doc.documentElement.scrollTop = y; }
+                if (doc.body) { doc.body.scrollTop = y; }
+            }
+
+            function isDiceTap(target) {
+                if (!target || !target.closest) { return false; }
+                return !!target.closest(
+                    'div[data-testid="stPills"] button, div[data-testid="stButtonGroup"] button, button[role="checkbox"]'
+                );
+            }
+
+            function saveScroll(target) {
+                if (!isDiceTap(target)) { return; }
+                try {
+                    parentWindow.sessionStorage.setItem(STORAGE_KEY, String(currentScrollY()));
+                    parentWindow.sessionStorage.setItem(PENDING_KEY, "1");
+                    parentWindow.sessionStorage.setItem(TIME_KEY, String(Date.now()));
+                } catch (err) {}
+            }
+
+            function clearPending() {
+                try {
+                    parentWindow.sessionStorage.removeItem(PENDING_KEY);
+                    parentWindow.sessionStorage.removeItem(STORAGE_KEY);
+                    parentWindow.sessionStorage.removeItem(TIME_KEY);
+                } catch (err) {}
             }
 
             function restoreIfNeeded() {
                 try {
-                    if (parentWindow.localStorage.getItem(PENDING_KEY) !== "1") {
+                    if (parentWindow.sessionStorage.getItem(PENDING_KEY) !== "1") { return; }
+                    const savedAt = parseInt(parentWindow.sessionStorage.getItem(TIME_KEY) || "0", 10);
+                    if (savedAt && Date.now() - savedAt > 7000) {
+                        clearPending();
                         return;
                     }
-                    const y = parseInt(parentWindow.localStorage.getItem(STORAGE_KEY) || "0", 10);
+                    const y = parseInt(parentWindow.sessionStorage.getItem(STORAGE_KEY) || "0", 10);
+                    if (Number.isNaN(y)) {
+                        clearPending();
+                        return;
+                    }
 
-                    // Streamlit may finish layout a moment after this component loads,
-                    // so restore a few times over a short window.
-                    [20, 90, 180, 320].forEach(function(delay) {
-                        setTimeout(function() {
-                            parentWindow.scrollTo({ top: y, behavior: "auto" });
-                        }, delay);
+                    // Restore many times because Streamlit lays out the rerun in phases.
+                    // This keeps the visible screen anchored while the dice turn red.
+                    const delays = [0, 1, 10, 25, 50, 90, 140, 210, 320, 480, 700, 950, 1250, 1600];
+                    delays.forEach(function(delay) {
+                        setTimeout(function() { setScrollY(y); }, delay);
                     });
-
-                    setTimeout(function() {
-                        parentWindow.scrollTo({ top: y, behavior: "auto" });
-                        parentWindow.localStorage.removeItem(PENDING_KEY);
-                        parentWindow.localStorage.removeItem(STORAGE_KEY);
-                    }, 430);
+                    let frames = 0;
+                    function restoreFrame() {
+                        setScrollY(y);
+                        frames += 1;
+                        if (frames < 12) { parentWindow.requestAnimationFrame(restoreFrame); }
+                    }
+                    parentWindow.requestAnimationFrame(restoreFrame);
+                    setTimeout(clearPending, 1800);
                 } catch (err) {}
             }
 
             restoreIfNeeded();
 
-            if (doc.__yahtzeeDiceScrollGuardInstalled) {
-                return;
+            if (!doc.__yahtzeeDiceScrollGuardInstalledV15) {
+                doc.__yahtzeeDiceScrollGuardInstalledV15 = true;
+                ["pointerdown", "touchstart", "mousedown", "click"].forEach(function(evtName) {
+                    doc.addEventListener(evtName, function(event) {
+                        saveScroll(event.target);
+                    }, true);
+                });
             }
-            doc.__yahtzeeDiceScrollGuardInstalled = true;
-
-            doc.addEventListener("pointerdown", function(event) {
-                const target = event.target;
-                if (!target || !target.closest) {
-                    return;
-                }
-
-                // Dice picker is rendered by st.pills / button-group depending
-                // on Streamlit version. Do not target regular action buttons.
-                const diceButton = target.closest(
-                    'div[data-testid="stPills"] button, div[data-testid="stButtonGroup"] button, button[role="checkbox"]'
-                );
-                if (!diceButton) {
-                    return;
-                }
-
-                try {
-                    parentWindow.localStorage.setItem(STORAGE_KEY, String(currentScrollY()));
-                    parentWindow.localStorage.setItem(PENDING_KEY, "1");
-                } catch (err) {}
-            }, true);
         })();
         </script>
         """,
@@ -943,6 +968,8 @@ def render_result(report):
 
 
 initialize_state()
+# Install this near the top of the page so the first dice tap can be caught before rerun.
+install_dice_scroll_guard()
 challenge = st.session_state.challenge
 round_id = st.session_state.round_id
 history = st.session_state.history
@@ -1012,30 +1039,29 @@ held_key = f"held_indices_{round_id}"
 if held_key not in st.session_state:
     st.session_state[held_key] = []
 
+selected_indices = list(st.session_state[held_key])
+
+# V12 dice picker. This uses Streamlit's multi-select pills so all five dice
+# stay in one tight row on mobile. Labels include invisible zero-width characters
+# so duplicate dice (like three 2s) remain separately tappable by position.
 dice_positions = list(range(len(dice)))
+selected_indices = st.pills(
+    "Dice to hold",
+    options=dice_positions,
+    default=st.session_state.get(held_key, []),
+    format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
+    selection_mode="multi",
+    key=f"dice_pills_{round_id}",
+    label_visibility="collapsed",
+    disabled=answer_submitted,
+)
+selected_indices = list(selected_indices or [])
+st.session_state[held_key] = sorted(selected_indices)
+selected_hold = selected_hold_from_indices(dice, selected_indices)
+st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 
-# V14 dice picker behavior fix:
-# The dice live inside a Streamlit form so tapping dice changes the red held state
-# without immediately rerunning the whole page. That prevents the mobile page from
-# jumping to the top on the first dice tap. Submit Hold still runs the coach.
 if not answer_submitted:
-    with st.form(key=f"hold_form_{round_id}", clear_on_submit=False):
-        selected_indices = st.pills(
-            "Dice to hold",
-            options=dice_positions,
-            default=st.session_state.get(held_key, []),
-            format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
-            selection_mode="multi",
-            key=f"dice_pills_{round_id}",
-            label_visibility="collapsed",
-        )
-        selected_indices = list(selected_indices or [])
-        selected_hold = selected_hold_from_indices(dice, selected_indices)
-        st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
-        submitted = st.form_submit_button("Submit hold", type="primary", use_container_width=True)
-
-    if submitted:
-        st.session_state[held_key] = sorted(selected_indices)
+    if st.button("Submit hold", type="primary", use_container_width=True):
         report = yc.coach_report_for_user_hold_by_roll_number(
             dice,
             scorecard,
@@ -1054,20 +1080,6 @@ if not answer_submitted:
         st.session_state.scroll_to_result = True
         st.session_state.scroll_to_top = False
         st.rerun()
-else:
-    selected_indices = list(st.session_state.get(held_key, []))
-    selected_hold = selected_hold_from_indices(dice, selected_indices)
-    st.pills(
-        "Dice to hold",
-        options=dice_positions,
-        default=selected_indices,
-        format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
-        selection_mode="multi",
-        key=f"dice_pills_done_{round_id}",
-        label_visibility="collapsed",
-        disabled=True,
-    )
-    st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 
 if st.session_state.report:
     render_result(st.session_state.report)
