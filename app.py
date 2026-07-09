@@ -287,6 +287,86 @@ st.markdown(
         .dice-picker-wrap div[data-testid="stButton"] > button p { font-size:2.65rem !important; }
     }
 
+
+
+    /* V10 dice picker: one tight row of large tappable dice using Streamlit pills. */
+    div[data-testid="stPills"] {
+        width:100% !important;
+        margin:0.45rem auto 0.68rem auto !important;
+    }
+    div[data-testid="stPills"] div[role="group"] {
+        display:flex !important;
+        justify-content:center !important;
+        align-items:center !important;
+        gap:0.52rem !important;
+        flex-wrap:nowrap !important;
+        width:100% !important;
+    }
+    div[data-testid="stPills"] button {
+        width:clamp(56px, 16.5vw, 68px) !important;
+        min-width:clamp(56px, 16.5vw, 68px) !important;
+        max-width:clamp(56px, 16.5vw, 68px) !important;
+        height:clamp(56px, 16.5vw, 68px) !important;
+        min-height:clamp(56px, 16.5vw, 68px) !important;
+        max-height:clamp(56px, 16.5vw, 68px) !important;
+        border-radius:15px !important;
+        padding:0 !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        background:#f8fafc !important;
+        border:2px solid #d1d5db !important;
+        box-shadow:0 4px 0 #c7c9cc, 0 7px 14px rgba(0,0,0,0.16) !important;
+        -webkit-tap-highlight-color:transparent !important;
+        color:#111827 !important;
+    }
+    div[data-testid="stPills"] button:hover {
+        border-color:#9ca3af !important;
+        background:#ffffff !important;
+    }
+    div[data-testid="stPills"] button:active {
+        transform:translateY(3px) !important;
+        box-shadow:0 1px 0 #c7c9cc, 0 3px 8px rgba(0,0,0,0.18) !important;
+    }
+    div[data-testid="stPills"] button *,
+    div[data-testid="stPills"] button p,
+    div[data-testid="stPills"] button span {
+        font-size:clamp(2.85rem, 11.5vw, 3.55rem) !important;
+        line-height:1 !important;
+        margin:0 !important;
+        padding:0 !important;
+        color:#111827 !important;
+        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
+    }
+    div[data-testid="stPills"] button[aria-selected="true"],
+    div[data-testid="stPills"] button[aria-pressed="true"],
+    div[data-testid="stPills"] button[data-selected="true"] {
+        background:#ff4b4b !important;
+        border-color:#ff4b4b !important;
+        box-shadow:0 4px 0 #b91c1c, 0 7px 14px rgba(255,75,75,0.25) !important;
+    }
+    div[data-testid="stPills"] button[aria-selected="true"] *,
+    div[data-testid="stPills"] button[aria-pressed="true"] *,
+    div[data-testid="stPills"] button[data-selected="true"] * {
+        color:#ffffff !important;
+    }
+
+    @media (max-width:380px) {
+        div[data-testid="stPills"] div[role="group"] { gap:0.36rem !important; }
+        div[data-testid="stPills"] button {
+            width:clamp(52px, 15.7vw, 60px) !important;
+            min-width:clamp(52px, 15.7vw, 60px) !important;
+            max-width:clamp(52px, 15.7vw, 60px) !important;
+            height:clamp(52px, 15.7vw, 60px) !important;
+            min-height:clamp(52px, 15.7vw, 60px) !important;
+            max-height:clamp(52px, 15.7vw, 60px) !important;
+            border-radius:14px !important;
+        }
+        div[data-testid="stPills"] button *,
+        div[data-testid="stPills"] button p,
+        div[data-testid="stPills"] button span { font-size:clamp(2.55rem, 10.5vw, 3.05rem) !important; }
+    }
+
     /* Old HTML dice styles kept harmless in case a cached browser sees them. */
     .die-button { display:none; }
 
@@ -723,32 +803,22 @@ if held_key not in st.session_state:
 
 selected_indices = list(st.session_state[held_key])
 
-# Streamlit-native dice picker. Each die uses a unique key, so duplicate dice
-# are selectable by position and the app updates state without query-param reloads.
-st.markdown("<div class='dice-picker-wrap'>", unsafe_allow_html=True)
-dice_columns = st.columns(5, gap="small")
-for die_index, die_value in enumerate(dice):
-    is_held = die_index in st.session_state[held_key]
-    with dice_columns[die_index]:
-        if st.button(
-            DICE_FACE.get(int(die_value), str(die_value)),
-            key=f"die_button_{round_id}_{die_index}",
-            type="primary" if is_held else "secondary",
-            disabled=answer_submitted,
-            help=f"Die {die_index + 1}: {die_value}",
-            use_container_width=False,
-        ):
-            held = list(st.session_state.get(held_key, []))
-            if die_index in held:
-                held.remove(die_index)
-            else:
-                held.append(die_index)
-                held.sort()
-            st.session_state[held_key] = held
-            st.rerun()
-st.markdown("</div>", unsafe_allow_html=True)
-
-selected_indices = list(st.session_state[held_key])
+# V10 dice picker. This uses Streamlit's multi-select pills so all five dice
+# stay in one tight row on mobile, duplicate dice are tracked by position, and
+# tapping a die updates the hold without URL navigation.
+dice_positions = list(range(len(dice)))
+selected_indices = st.pills(
+    "Dice to hold",
+    options=dice_positions,
+    default=st.session_state.get(held_key, []),
+    format_func=lambda die_index: DICE_FACE.get(int(dice[die_index]), str(dice[die_index])),
+    selection_mode="multi",
+    key=f"dice_pills_{round_id}",
+    label_visibility="collapsed",
+    disabled=answer_submitted,
+)
+selected_indices = list(selected_indices or [])
+st.session_state[held_key] = sorted(selected_indices)
 selected_hold = selected_hold_from_indices(dice, selected_indices)
 st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 

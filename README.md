@@ -19,3 +19,7 @@ Upload these four files to GitHub:
 - README.md
 
 Streamlit should redeploy automatically.
+
+
+## v10
+- Dice picker only: large tight one-row dice using Streamlit pills.
