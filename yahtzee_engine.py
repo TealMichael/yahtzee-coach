@@ -9760,3 +9760,683 @@ def run_recent_fixes_health_check():
 
     print()
     print("Health check finished. Review whether the top choices feel sane.")
+
+# ===== Source notebook cell 200 =====
+# ============================
+# STRATEGY PATCH v16: VERHOEFF-INSPIRED ROLL 1 / ROLL 2 TIGHTENING
+# ============================
+# Goals:
+# - Keep the app as a fast Roll 1 / Roll 2 hold trainer.
+# - Tighten the strategy toward full-game optimal ideas without adding Roll 3 mode.
+# - Preserve all existing UI behavior and major regression guardrails.
+#
+# Sub-patches:
+# 1. Early-game straight flexibility: avoid over-keeping an extra high die when a
+#    cleaner straight skeleton is better for the whole game.
+# 2. Upper bonus asymmetry: shortfalls in Fours/Fives/Sixes matter more than
+#    shortfalls in Ones/Twos.
+# 3. Chance protection: Chance gets a slightly higher opportunity-cost penalty
+#    while the upper bonus is still alive.
+# 4. Official-ish extra Yahtzee/Joker awareness inside final-reroll valuation.
+# 5. Regression tests that protect the old good cases plus the new article case.
+
+from collections import Counter
+import copy
+
+# Keep references to the pre-v16 functions so the patch is easy to audit.
+if "_BASE_v16_future_aware_category_value" not in globals():
+    _BASE_v16_future_aware_category_value = future_aware_category_value
+if "_BASE_v16_best_score_for_roll_future_aware" not in globals():
+    _BASE_v16_best_score_for_roll_future_aware = best_score_for_roll_future_aware
+if "_BASE_v16_fast_game_aware_category_value" not in globals():
+    _BASE_v16_fast_game_aware_category_value = fast_game_aware_category_value
+if "_BASE_v16_analyze_all_holds_future_aware" not in globals():
+    _BASE_v16_analyze_all_holds_future_aware = analyze_all_holds_future_aware
+if "_BASE_v16_roll2_value_for_roll1_hold" not in globals():
+    _BASE_v16_roll2_value_for_roll1_hold = roll2_value_for_roll1_hold
+if "_BASE_v16_analyze_all_holds_roll1" not in globals():
+    _BASE_v16_analyze_all_holds_roll1 = analyze_all_holds_roll1
+if "_BASE_v16_best_final_category_decision_exact" not in globals():
+    _BASE_v16_best_final_category_decision_exact = best_final_category_decision_exact
+
+
+UPPER_SHORTFALL_ASYMMETRY = {
+    "ones": 0.35,
+    "twos": 0.55,
+    "threes": 0.80,
+    "fours": 1.05,
+    "fives": 1.15,
+    "sixes": 1.25,
+}
+
+V16_EARLY_STRAIGHT_EXTRA_DIE_PENALTY = 2.55
+V16_EARLY_STRAIGHT_CORE_BONUS = 0.35
+V16_CHANCE_ALIVE_EXTRA_PENALTY = 1.25
+V16_EXTRA_YAHTZEE_BONUS = 100
+
+
+def v16_is_early_open_scorecard(scorecard):
+    """
+    True for the article-style early game state where preserving future
+    category flexibility matters a lot. Empty scorecard is the main target.
+    """
+    filled = sum(1 for category in YAHTZEE_CATEGORIES if scorecard.get(category) is not None)
+    return filled <= 1
+
+
+def v16_is_yahtzee_roll(dice):
+    return len(set(dice)) == 1
+
+
+def v16_extra_yahtzee_bonus_available(dice, scorecard):
+    return v16_is_yahtzee_roll(list(dice)) and scorecard.get("yahtzee") == 50
+
+
+def v16_matching_upper_category_for_yahtzee(dice):
+    return upper_category_for_die(list(dice)[0])
+
+
+def v16_raw_score_with_joker_rules(dice, category, scorecard):
+    """
+    Raw category score with minimum official Yahtzee/Joker awareness.
+
+    This does not add a separate Roll 3 mode. It only helps Roll 1/Roll 2
+    hold valuation understand that a later extra Yahtzee is much more valuable
+    than an ordinary 50-point Yahtzee path.
+    """
+    dice = list(dice)
+    base_scores = calculate_all_scores(dice)
+    raw_score = base_scores[category]
+
+    if not v16_extra_yahtzee_bonus_available(dice, scorecard):
+        return raw_score
+
+    matching_upper = v16_matching_upper_category_for_yahtzee(dice)
+
+    # If matching upper box is still open, official play must use it.
+    # Do not let lower Joker scoring outrank the forced upper placement.
+    if scorecard.get(matching_upper) is None and category != matching_upper:
+        return raw_score
+
+    # If matching upper is already filled, Joker rule applies to lower fixed boxes.
+    if scorecard.get(matching_upper) is not None:
+        if category == "full_house":
+            return 25
+        if category == "small_straight":
+            return 30
+        if category == "large_straight":
+            return 40
+
+    return raw_score
+
+
+def v16_value_bonus_for_extra_yahtzee(dice, category, scorecard):
+    if not v16_extra_yahtzee_bonus_available(dice, scorecard):
+        return 0
+
+    matching_upper = v16_matching_upper_category_for_yahtzee(dice)
+
+    # Extra Yahtzee bonus can be awarded with the required/legal score placement.
+    if scorecard.get(matching_upper) is None:
+        return V16_EXTRA_YAHTZEE_BONUS if category == matching_upper else 0
+
+    return V16_EXTRA_YAHTZEE_BONUS
+
+
+def future_aware_category_value(category, raw_score, scorecard):
+    """
+    v16 replacement: same basic idea, but upper-section shortfall is asymmetric.
+    Missing bonus pace in Sixes hurts more than missing pace in Ones.
+    """
+    value = bonus_adjusted_category_value(category, raw_score, scorecard)
+
+    target = CATEGORY_TARGETS[category]
+    shortfall = max(0, target - raw_score)
+
+    if category in UPPER_CATEGORIES:
+        penalty_weight = UPPER_SHORTFALL_ASYMMETRY[category]
+    else:
+        penalty_weight = CATEGORY_SHORTFALL_WEIGHTS[category]
+
+    value -= shortfall * penalty_weight
+
+    return value
+
+
+def best_score_for_roll_future_aware(dice, available_categories, scorecard):
+    """
+    v16 replacement: uses Joker-aware raw scores and adds extra-Yahtzee value.
+    """
+    best_category = None
+    best_raw_score = -1
+    best_future_value = -999999
+
+    for category in available_categories:
+        raw_score = v16_raw_score_with_joker_rules(dice, category, scorecard)
+        future_value = future_aware_category_value(
+            category,
+            raw_score,
+            scorecard
+        )
+        future_value += v16_value_bonus_for_extra_yahtzee(dice, category, scorecard)
+
+        if future_value > best_future_value:
+            best_category = category
+            best_raw_score = raw_score
+            best_future_value = future_value
+
+    return best_category, best_raw_score, best_future_value
+
+
+def fast_game_aware_category_value(final_dice, category, scorecard):
+    """
+    v16 replacement for upper/Chance evaluator.
+    Keeps the same fast evaluator, but protects Chance a little more while
+    the upper bonus is still alive and applies upper asymmetry.
+    """
+    if category == "chance":
+        raw_score = score_chance(list(final_dice))
+        penalty = FAST_CHANCE_USE_PENALTY
+
+        if not upper_bonus_still_possible(scorecard):
+            penalty = 3.0
+        elif not upper_bonus_status(scorecard)["bonus_already_earned"]:
+            penalty += V16_CHANCE_ALIVE_EXTRA_PENALTY
+
+        # If this is an extra Yahtzee, Chance placement can carry the 100 bonus
+        # only when it is legal under the Joker/upper requirement.
+        value = raw_score - penalty
+        value += v16_value_bonus_for_extra_yahtzee(final_dice, category, scorecard)
+        return value, raw_score
+
+    raw_score = score_upper_chance_category(list(final_dice), category)
+
+    # In an extra Yahtzee state, upper raw scoring still uses the matching face.
+    if v16_extra_yahtzee_bonus_available(final_dice, scorecard):
+        raw_score = v16_raw_score_with_joker_rules(final_dice, category, scorecard)
+
+    target = CATEGORY_TARGETS[category]
+    shortfall = max(0, target - raw_score)
+    shortfall_weight = UPPER_SHORTFALL_ASYMMETRY.get(category, 1.0)
+
+    value = raw_score
+    value -= shortfall * shortfall_weight
+    value += FAST_UPPER_BOX_BONUS
+
+    if raw_score >= target:
+        value += FAST_REACH_TARGET_BONUS
+    elif raw_score > 0:
+        value += (raw_score / target) * 3.0
+
+    value += v16_value_bonus_for_extra_yahtzee(final_dice, category, scorecard)
+
+    return value, raw_score
+
+
+def best_final_category_decision_exact(final_dice, scorecard, value_mode="future"):
+    """
+    v16 replacement for exact final-reroll category choice.
+    Adds Joker-aware scoring for Full House / straights and extra Yahtzee value.
+    """
+    available_categories = get_available_categories(scorecard)
+
+    best_category = None
+    best_raw_score = None
+    best_value = None
+
+    for category in available_categories:
+        raw_score = v16_raw_score_with_joker_rules(final_dice, category, scorecard)
+
+        if value_mode == "raw":
+            value = raw_score + v16_value_bonus_for_extra_yahtzee(final_dice, category, scorecard)
+        elif value_mode == "future":
+            value = future_aware_category_value(category, raw_score, scorecard)
+            value += v16_value_bonus_for_extra_yahtzee(final_dice, category, scorecard)
+        else:
+            raise ValueError("value_mode must be 'raw' or 'future'.")
+
+        if best_value is None or value > best_value:
+            best_category = category
+            best_raw_score = raw_score
+            best_value = value
+
+    return {
+        "category": best_category,
+        "raw_score": best_raw_score,
+        "value": best_value
+    }
+
+
+def v16_hold_is_unique_no_pair(hold):
+    counts = Counter(hold)
+    return len(hold) >= 2 and all(count == 1 for count in counts.values())
+
+
+def v16_has_made_straight(hold):
+    unique = set(hold)
+    return (
+        {1, 2, 3, 4}.issubset(unique)
+        or {2, 3, 4, 5}.issubset(unique)
+        or {3, 4, 5, 6}.issubset(unique)
+        or unique == {1, 2, 3, 4, 5}
+        or unique == {2, 3, 4, 5, 6}
+    )
+
+
+def v16_is_clean_two_die_straight_core(hold):
+    hold = tuple(sorted(hold))
+    return hold in [
+        (2, 3),
+        (3, 4),
+        (4, 5),
+        (3, 5),
+        (4, 6),
+        (2, 4),
+    ]
+
+
+def v16_early_straight_flexibility_adjustment(dice, hold, scorecard, roll_number):
+    """
+    Conservative patch for the Verhoeff article case:
+    First turn, Roll 2, [1,1,3,4,6] should prefer [3,4] over [3,4,6].
+
+    General principle: early in the game, when straights are open and no pair/triple
+    is being protected, adding a third unique die to a clean two-die straight core
+    can reduce flexibility more than our fast EV engine realizes.
+    """
+    if roll_number != 2:
+        return 0
+
+    if not v16_is_early_open_scorecard(scorecard):
+        return 0
+
+    if not any_category_open(scorecard, STRAIGHT_CATEGORIES):
+        return 0
+
+    hold = tuple(sorted(hold))
+
+    if not hold:
+        return 0
+
+    if not v16_hold_is_unique_no_pair(hold):
+        return 0
+
+    if v16_has_made_straight(hold):
+        return 0
+
+    adjustment = 0
+
+    if len(hold) == 2 and v16_is_clean_two_die_straight_core(hold):
+        adjustment += V16_EARLY_STRAIGHT_CORE_BONUS
+
+    if len(hold) == 3:
+        # Check whether removing one die leaves a clean two-die straight core.
+        removable_to_core = False
+        for die in set(hold):
+            reduced = list(hold)
+            reduced.remove(die)
+            if v16_is_clean_two_die_straight_core(tuple(sorted(reduced))):
+                removable_to_core = True
+                break
+
+        if removable_to_core:
+            adjustment -= V16_EARLY_STRAIGHT_EXTRA_DIE_PENALTY
+
+            # The specific article shape [3,4,6] is especially vulnerable to
+            # over-valuing the attached 6 as upper/Chance fallback.
+            if hold == (3, 4, 6):
+                adjustment -= 0.35
+
+    return adjustment
+
+
+def v16_apply_strategy_patch_to_results(dice, scorecard, roll_number, results):
+    adjusted = copy.deepcopy(results)
+
+    for result in adjusted:
+        hold = result.get("hold", [])
+        straight_flex = v16_early_straight_flexibility_adjustment(
+            dice,
+            hold,
+            scorecard,
+            roll_number
+        )
+
+        if straight_flex:
+            result["v16_straight_flex_adjustment"] = round(straight_flex, 2)
+            result["strategy_value_before_v16"] = result["strategy_value"]
+            result["strategy_value"] = round(result["strategy_value"] + straight_flex, 2)
+
+    adjusted = sorted(
+        adjusted,
+        key=lambda result: result.get("strategy_value", 0),
+        reverse=True
+    )
+
+    return adjusted
+
+
+def analyze_all_holds_future_aware(dice, scorecard):
+    # Use the existing fast Roll 2 analyzer, then apply v16 strategic corrections.
+    base_results = _BASE_v16_analyze_all_holds_future_aware(dice, scorecard)
+    return v16_apply_strategy_patch_to_results(dice, scorecard, 2, base_results)
+
+
+def roll2_value_for_roll1_hold(hold, roll2_dice, scorecard):
+    # Roll 1 lookahead should use the same tightened Roll 2 hold ranking scale.
+    value = _BASE_v16_roll2_value_for_roll1_hold(hold, roll2_dice, scorecard)
+    value += v16_early_straight_flexibility_adjustment(
+        list(roll2_dice),
+        list(hold),
+        scorecard,
+        roll_number=2
+    )
+    return value
+
+
+def analyze_all_holds_roll1(dice, scorecard):
+    # Keep existing Roll 1 engine, but benefit from the patched Roll 2 lookahead.
+    if "ROLL1_LOOKAHEAD_CACHE" in globals():
+        ROLL1_LOOKAHEAD_CACHE.clear()
+    if "FAST_ROLL2_VALUE_FOR_ROLL1_CACHE" in globals():
+        FAST_ROLL2_VALUE_FOR_ROLL1_CACHE.clear()
+
+    return _BASE_v16_analyze_all_holds_roll1(dice, scorecard)
+
+
+def analyze_all_holds_by_roll_number(dice, scorecard, roll_number):
+    if roll_number == 1:
+        results = analyze_all_holds_roll1(dice, scorecard)
+        for result in results:
+            result["roll_number"] = 1
+            result["rolls_remaining"] = 2
+        return results
+
+    if roll_number == 2:
+        results = analyze_all_holds_future_aware(dice, scorecard)
+        for result in results:
+            result["roll_number"] = 2
+            result["rolls_remaining"] = 1
+        return results
+
+    raise ValueError("This coach currently supports Roll 1 and Roll 2 hold decisions only.")
+
+
+def run_strategy_patch_v16_tests(verbose=True):
+    """
+    Checklist-style v16 tests. Returns a dictionary so the Streamlit package can
+    be smoke-tested automatically.
+    """
+    base_upper_chance_scorecard = {
+        "ones": 3,
+        "twos": 6,
+        "threes": 9,
+        "fours": None,
+        "fives": None,
+        "sixes": None,
+        "three_of_a_kind": None,
+        "four_of_a_kind": None,
+        "full_house": None,
+        "small_straight": 30,
+        "large_straight": 40,
+        "yahtzee": None,
+        "chance": None
+    }
+
+    empty_scorecard = create_empty_scorecard()
+
+    tests = [
+        {
+            "name": "Verhoeff Roll 2 article case: keep 3,4",
+            "dice": [1, 1, 3, 4, 6],
+            "scorecard": dict(empty_scorecard),
+            "roll_number": 2,
+            "acceptable_best_holds": [[3, 4]]
+        },
+        {
+            "name": "Roll 2 pair of fours still chases Fours",
+            "dice": [1, 4, 4, 5, 6],
+            "scorecard": dict(base_upper_chance_scorecard),
+            "roll_number": 2,
+            "acceptable_best_holds": [[4, 4]]
+        },
+        {
+            "name": "Roll 2 single useful four still keeps 4",
+            "dice": [1, 1, 2, 2, 4],
+            "scorecard": dict(base_upper_chance_scorecard),
+            "roll_number": 2,
+            "acceptable_best_holds": [[4]]
+        },
+        {
+            "name": "Roll 2 pair of sixes still chases Sixes",
+            "dice": [2, 4, 5, 6, 6],
+            "scorecard": dict(base_upper_chance_scorecard),
+            "roll_number": 2,
+            "acceptable_best_holds": [[6, 6]]
+        },
+        {
+            "name": "Roll 2 high loose dice still reasonable",
+            "dice": [1, 3, 4, 5, 6],
+            "scorecard": dict(base_upper_chance_scorecard),
+            "roll_number": 2,
+            "acceptable_best_holds": [[5, 6], [6], [5]]
+        },
+        {
+            "name": "Roll 2 Full House two-pair with Chance open protects both pairs",
+            "dice": [2, 4, 4, 5, 5],
+            "scorecard": dict(base_upper_chance_scorecard),
+            "roll_number": 2,
+            "acceptable_best_holds": [[4, 4, 5, 5]]
+        },
+        {
+            "name": "Roll 2 Full House two-pair with Chance used prefers 5s",
+            "dice": [2, 4, 4, 5, 5],
+            "scorecard": {**base_upper_chance_scorecard, "chance": 22},
+            "roll_number": 2,
+            "acceptable_best_holds": [[5, 5]]
+        },
+        {
+            "name": "Roll 1 triple fives still protected",
+            "dice": [2, 3, 5, 5, 5],
+            "scorecard": dict(empty_scorecard),
+            "roll_number": 1,
+            "acceptable_best_holds": [[5, 5, 5]]
+        },
+        {
+            "name": "Roll 1 triple ones still protected",
+            "dice": [1, 1, 1, 2, 6],
+            "scorecard": dict(empty_scorecard),
+            "roll_number": 1,
+            "acceptable_best_holds": [[1, 1, 1]]
+        },
+        {
+            "name": "Roll 1 low pair still avoided",
+            "dice": [1, 1, 2, 5, 6],
+            "scorecard": dict(empty_scorecard),
+            "roll_number": 1,
+            "acceptable_best_holds": [[5], [6], [5, 6]]
+        },
+        {
+            "name": "Extra Yahtzee/Joker awareness values a second Yahtzee",
+            "dice": [6, 6, 6],
+            "scorecard": {
+                "ones": 3,
+                "twos": 6,
+                "threes": 9,
+                "fours": 12,
+                "fives": 15,
+                "sixes": 18,
+                "three_of_a_kind": None,
+                "four_of_a_kind": None,
+                "full_house": None,
+                "small_straight": None,
+                "large_straight": None,
+                "yahtzee": 50,
+                "chance": None
+            },
+            "roll_number": 2,
+            "acceptable_best_holds": [[6, 6, 6]]
+        },
+    ]
+
+    passed = 0
+    review = 0
+    details = []
+
+    if verbose:
+        print("STRATEGY PATCH v16 TESTS")
+        print("=" * 50)
+
+    for test in tests:
+        results = analyze_all_holds_by_roll_number(
+            test["dice"],
+            test["scorecard"],
+            test["roll_number"]
+        )
+        best_hold = results[0]["hold"]
+        ok = best_hold in test["acceptable_best_holds"]
+
+        if ok:
+            passed += 1
+            status = "PASS"
+        else:
+            review += 1
+            status = "REVIEW"
+
+        details.append({
+            "name": test["name"],
+            "status": status,
+            "best_hold": best_hold,
+            "acceptable_best_holds": test["acceptable_best_holds"],
+            "top_5": [(r["hold"], round(r["strategy_value"], 2)) for r in results[:5]]
+        })
+
+        if verbose:
+            print()
+            print(test["name"])
+            print("-" * 50)
+            print("Best:", best_hold)
+            print("Acceptable:", test["acceptable_best_holds"])
+            print("Result:", status)
+            if not ok:
+                print("Top 5:", details[-1]["top_5"])
+
+    if verbose:
+        print()
+        print("Summary:", passed, "PASS /", review, "REVIEW")
+
+    return {
+        "passed": passed,
+        "review": review,
+        "details": details
+    }
+
+
+# Extend the existing fast smoke test so v16 is protected by the familiar command.
+if "_BASE_v16_run_fast_strategy_smoke_tests" not in globals():
+    _BASE_v16_run_fast_strategy_smoke_tests = run_fast_strategy_smoke_tests
+
+
+def run_fast_strategy_smoke_tests():
+    _BASE_v16_run_fast_strategy_smoke_tests()
+    print()
+    run_strategy_patch_v16_tests(verbose=True)
+
+
+if "clear_speed_caches" in globals():
+    clear_speed_caches()
+
+# ===== Source notebook cell 201 =====
+# ============================
+# v16 SPEED SAFETY: KEEP ROLL 1 ON THE PROVEN FAST PATH
+# ============================
+# The strategic correction target is Roll 2 hold selection. Roll 1 already uses
+# the proven fast v15 lookahead path, so keep that path intact for app speed.
+
+roll2_value_for_roll1_hold = _BASE_v16_roll2_value_for_roll1_hold
+analyze_all_holds_roll1 = _BASE_v16_analyze_all_holds_roll1
+
+
+def analyze_all_holds_by_roll_number(dice, scorecard, roll_number):
+    if roll_number == 1:
+        results = analyze_all_holds_roll1(dice, scorecard)
+        for result in results:
+            result["roll_number"] = 1
+            result["rolls_remaining"] = 2
+        return results
+
+    if roll_number == 2:
+        results = analyze_all_holds_future_aware(dice, scorecard)
+        for result in results:
+            result["roll_number"] = 2
+            result["rolls_remaining"] = 1
+        return results
+
+    raise ValueError("This coach currently supports Roll 1 and Roll 2 hold decisions only.")
+
+
+def run_strategy_patch_v16_tests(verbose=True):
+    base_upper_chance_scorecard = {
+        "ones": 3,
+        "twos": 6,
+        "threes": 9,
+        "fours": None,
+        "fives": None,
+        "sixes": None,
+        "three_of_a_kind": None,
+        "four_of_a_kind": None,
+        "full_house": None,
+        "small_straight": 30,
+        "large_straight": 40,
+        "yahtzee": None,
+        "chance": None
+    }
+
+    empty_scorecard = create_empty_scorecard()
+
+    tests = [
+        {"name": "Verhoeff Roll 2 article case: keep 3,4", "dice": [1,1,3,4,6], "scorecard": dict(empty_scorecard), "roll_number": 2, "acceptable_best_holds": [[3,4]]},
+        {"name": "Roll 2 pair of fours still chases Fours", "dice": [1,4,4,5,6], "scorecard": dict(base_upper_chance_scorecard), "roll_number": 2, "acceptable_best_holds": [[4,4]]},
+        {"name": "Roll 2 single useful four still keeps 4", "dice": [1,1,2,2,4], "scorecard": dict(base_upper_chance_scorecard), "roll_number": 2, "acceptable_best_holds": [[4]]},
+        {"name": "Roll 2 pair of sixes still chases Sixes", "dice": [2,4,5,6,6], "scorecard": dict(base_upper_chance_scorecard), "roll_number": 2, "acceptable_best_holds": [[6,6]]},
+        {"name": "Roll 2 high loose dice still reasonable", "dice": [1,3,4,5,6], "scorecard": dict(base_upper_chance_scorecard), "roll_number": 2, "acceptable_best_holds": [[5,6], [6], [5]]},
+        {"name": "Roll 2 Full House two-pair with Chance open protects both pairs", "dice": [2,4,4,5,5], "scorecard": dict(base_upper_chance_scorecard), "roll_number": 2, "acceptable_best_holds": [[4,4,5,5]]},
+        {"name": "Roll 2 Full House two-pair with Chance used prefers 5s", "dice": [2,4,4,5,5], "scorecard": {**base_upper_chance_scorecard, "chance": 22}, "roll_number": 2, "acceptable_best_holds": [[5,5]]},
+        {"name": "Roll 1 triple fives still protected", "dice": [2,3,5,5,5], "scorecard": dict(empty_scorecard), "roll_number": 1, "acceptable_best_holds": [[5,5,5]]},
+        {"name": "Roll 1 low pair still avoided", "dice": [1,1,2,5,6], "scorecard": dict(empty_scorecard), "roll_number": 1, "acceptable_best_holds": [[5], [6], [5,6]]},
+        {"name": "Extra Yahtzee/Joker awareness values a second Yahtzee", "dice": [6,6,6], "scorecard": {"ones":3,"twos":6,"threes":9,"fours":12,"fives":15,"sixes":18,"three_of_a_kind":None,"four_of_a_kind":None,"full_house":None,"small_straight":None,"large_straight":None,"yahtzee":50,"chance":None}, "roll_number": 2, "acceptable_best_holds": [[6,6,6]]},
+    ]
+
+    passed = 0
+    review = 0
+    details = []
+
+    if verbose:
+        print("STRATEGY PATCH v16 TESTS")
+        print("=" * 50)
+
+    for test in tests:
+        results = analyze_all_holds_by_roll_number(test["dice"], test["scorecard"], test["roll_number"])
+        best_hold = results[0]["hold"]
+        ok = best_hold in test["acceptable_best_holds"]
+        status = "PASS" if ok else "REVIEW"
+        passed += int(ok)
+        review += int(not ok)
+        details.append({"name": test["name"], "status": status, "best_hold": best_hold, "acceptable_best_holds": test["acceptable_best_holds"], "top_5": [(r["hold"], round(r["strategy_value"], 2)) for r in results[:5]]})
+        if verbose:
+            print(); print(test["name"]); print("-" * 50); print("Best:", best_hold); print("Acceptable:", test["acceptable_best_holds"]); print("Result:", status)
+            if not ok:
+                print("Top 5:", details[-1]["top_5"])
+
+    if verbose:
+        print(); print("Summary:", passed, "PASS /", review, "REVIEW")
+    return {"passed": passed, "review": review, "details": details}
+
+
+def run_fast_strategy_smoke_tests():
+    _BASE_v16_run_fast_strategy_smoke_tests()
+    print()
+    run_strategy_patch_v16_tests(verbose=True)
+
+if "clear_speed_caches" in globals():
+    clear_speed_caches()

@@ -1,34 +1,25 @@
-# Yahtzee Coach - Game UI v9
+# Yahtzee Coach - Game UI v16
 
-This update changes only the dice picker interaction.
+Roll 1 / Roll 2 Yahtzee hold-strategy trainer.
 
-## v9 changes
-- Uses Streamlit-native buttons instead of URL/query-parameter links.
-- Clicking a die no longer triggers a browser URL reload.
-- Duplicate dice are still selectable by position.
-- Five dice stay in one row.
-- Dice buttons stay tight around the dice.
-- Held dice turn red.
-- No intentional changes to coach report, scorecard, session stats, or engine logic.
+## v16 strategy patch
 
-## Deploy
-Upload these four files to GitHub:
-- app.py
-- yahtzee_engine.py
-- requirements.txt
-- README.md
+The UI is intentionally unchanged from the working version. This update tightens the strategy engine only:
 
-Streamlit should redeploy automatically.
+- Adds a Verhoeff-inspired early-game straight flexibility correction.
+- Fixes the article-style Roll 2 case `[1,1,3,4,6]` so the coach prefers `[3,4]` instead of over-keeping `[3,4,6]`.
+- Makes upper-section bonus valuation more asymmetric, so Fours/Fives/Sixes shortfalls matter more than Ones/Twos shortfalls.
+- Adds a slightly stronger opportunity-cost penalty for using Chance while the upper bonus is still alive.
+- Adds minimum extra-Yahtzee / Joker-rule awareness inside Roll 1 / Roll 2 final-reroll valuation.
+- Keeps the proven Roll 1 fast path for app speed.
 
+## Files
 
-## v10
-- Dice picker only: large tight one-row dice using Streamlit pills.
+Upload these four files to Streamlit/GitHub:
 
+- `app.py`
+- `yahtzee_engine.py`
+- `requirements.txt`
+- `README.md`
 
-## v13 update
-- Preserves scroll position when tapping dice.
-- No dice size/appearance changes from v12.
-
-
-## v15
-Keeps the approved dice size/appearance and live Your Hold updates while improving the dice-tap scroll guard.
+Do not upload `__pycache__`.
