@@ -617,6 +617,24 @@ st.markdown(
         color:#111827 !important;
     }
     .coach-says * { color:#111827 !important; }
+    .lesson-card {
+        border:1px solid rgba(25,103,210,0.22);
+        background:#f8fbff;
+        border-radius:15px;
+        padding:0.68rem 0.78rem;
+        margin:0.52rem 0 0.58rem 0;
+        color:#111827 !important;
+    }
+    .lesson-card * { color:#111827 !important; }
+    .lesson-kicker {
+        font-size:0.76rem;
+        text-transform:uppercase;
+        letter-spacing:0.055em;
+        font-weight:900;
+        color:#1967d2 !important;
+        margin-bottom:0.18rem;
+    }
+    .lesson-text { font-weight:750; line-height:1.38; }
     ul.tight-list { margin-top:0.33rem; padding-left:1.15rem; color:inherit; }
     ul.tight-list li { margin-bottom:0.18rem; }
 
@@ -665,6 +683,7 @@ def extract_section(report, header):
         "Roll 1 lookahead note:", "Game-aware note:", "Yahtzee-path note:",
         "What was good about your move?", "Bonus-chase check:",
         "Narrow upper-box note:", "Why was the optimal move better?",
+        "How close was it?", "Teaching takeaway:", "Top exact holds:",
         "Top Roll 1 options:", "Coach recommendation:",
     }
     capture = False
@@ -1036,10 +1055,12 @@ def render_result(report):
     efficiency = extract_line(report, "Efficiency:")
     decision_metric_label = "Hold rank" if hold_rank else "Efficiency"
     decision_metric_value = hold_rank or efficiency or "—"
-    lost = extract_line(report, "Strategy value lost:")
+    lost = extract_line(report, "Expected game points lost:") or extract_line(report, "Strategy value lost:")
     recommendation = clean_coach_sentence(extract_recommendation(report))
     good_items = extract_section(report, "What was good about your move?")
     why_items = extract_section(report, "Why was the optimal move better?")
+    closeness_items = extract_section(report, "How close was it?")
+    takeaway_items = extract_section(report, "Teaching takeaway:")
     note_items = extract_section(report, "Narrow upper-box note:")
     grade_class = GRADE_BADGE_CLASS.get(grade, "grade-b")
 
@@ -1058,7 +1079,21 @@ def render_result(report):
         unsafe_allow_html=True,
     )
 
+    if takeaway_items:
+        takeaway = takeaway_items[0]
+        if ": " in takeaway:
+            lesson_title, lesson_text = takeaway.split(": ", 1)
+        else:
+            lesson_title, lesson_text = "Key lesson", takeaway
+        st.markdown(
+            f"<div class='lesson-card'><div class='lesson-kicker'>🧠 {lesson_title}</div>"
+            f"<div class='lesson-text'>{lesson_text}</div></div>",
+            unsafe_allow_html=True,
+        )
+
     short_lines = []
+    if closeness_items:
+        short_lines.append(closeness_items[0])
     if note_items:
         short_lines.extend(note_items[:2])
     if good_items:
@@ -1080,7 +1115,7 @@ def render_result(report):
         )
 
     if lost:
-        st.caption(f"Strategy value lost: {lost}")
+        st.caption(f"Long-run difference: {lost} expected game points")
 
     with st.expander("Full coach report"):
         st.code(report, language="text")
