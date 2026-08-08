@@ -1,9 +1,13 @@
 import re
+from datetime import datetime, timezone
+from pathlib import Path
+
 import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
 
 import yahtzee_engine as yc
+from exact_mode import ExactPolicyTable, build_live_report_from_loader
 
 st.set_page_config(
     page_title="Yahtzee Coach",
@@ -74,6 +78,75 @@ GRADE_BADGE_CLASS = {
     "D+": "grade-d", "D": "grade-d", "D-": "grade-d",
     "F": "grade-f",
 }
+
+
+EXACT_POLICY_PATH = Path(__file__).with_name("exact_policy.npz")
+
+
+@st.cache_resource(show_spinner=False)
+def load_exact_policy():
+    """Load the precomputed exact policy once per Streamlit process."""
+    return ExactPolicyTable(EXACT_POLICY_PATH)
+
+
+def solver_debug_enabled():
+    """Developer diagnostics: add ?shadow=1 or ?solver=1 to the app URL."""
+    try:
+        value = st.query_params.get("solver", st.query_params.get("shadow", "0"))
+    except Exception:
+        return False
+    if isinstance(value, list):
+        value = value[0] if value else "0"
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def build_live_report(dice, scorecard, selected_hold, roll_number):
+    """Use exact strategy when available; safely fall back to the legacy coach."""
+    return build_live_report_from_loader(
+        load_exact_policy,
+        dice=dice,
+        scorecard=scorecard,
+        user_hold=selected_hold,
+        roll_number=roll_number,
+        legacy_report_factory=lambda d, s, h, r: yc.coach_report_for_user_hold_by_roll_number(
+            d, s, h, roll_number=r
+        ),
+    )
+
+
+def render_solver_panel(records):
+    """Hidden developer panel for confirming exact-mode use and fallbacks."""
+    if not solver_debug_enabled():
+        return
+
+    with st.expander("Exact solver diagnostics", expanded=False):
+        st.caption(
+            "Exact mode is the primary strategy engine. The legacy coach is used only if an exact lookup fails."
+        )
+        if not records:
+            st.info("No submitted puzzles in this session yet.")
+            return
+
+        exact_count = sum(item.get("source") == "exact" for item in records)
+        fallback_count = sum(item.get("source") == "legacy_fallback" for item in records)
+        exact_records = [item for item in records if item.get("source") == "exact"]
+        avg_lookup = (
+            sum(float(item.get("lookup_ms", 0.0)) for item in exact_records) / len(exact_records)
+            if exact_records else 0.0
+        )
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Exact", exact_count)
+        col2.metric("Fallbacks", fallback_count)
+        col3.metric("Avg exact lookup", f"{avg_lookup:.3f} ms")
+
+        frame = pd.DataFrame(records)
+        preferred_columns = [
+            "source", "scenario", "roll_number", "dice", "user_hold",
+            "optimal_hold", "hold_rank", "points_lost", "lookup_ms", "error",
+        ]
+        visible_columns = [column for column in preferred_columns if column in frame.columns]
+        st.dataframe(frame[visible_columns], hide_index=True, use_container_width=True)
 
 st.markdown(
     """
@@ -818,6 +891,8 @@ def new_round(scroll_to_top=False):
 def initialize_state():
     if "history" not in st.session_state:
         st.session_state.history = []
+    if "solver_history" not in st.session_state:
+        st.session_state.solver_history = []
     if "recent_scenario_names" not in st.session_state:
         st.session_state.recent_scenario_names = []
     if "recent_challenge_signatures" not in st.session_state:
@@ -957,7 +1032,10 @@ def render_result(report):
     rating = extract_line(report, "Coach rating:")
     your_choice = extract_line(report, "Your choice:")
     optimal_choice = extract_line(report, "Optimal choice:")
+    hold_rank = extract_line(report, "Hold rank:")
     efficiency = extract_line(report, "Efficiency:")
+    decision_metric_label = "Hold rank" if hold_rank else "Efficiency"
+    decision_metric_value = hold_rank or efficiency or "—"
     lost = extract_line(report, "Strategy value lost:")
     recommendation = clean_coach_sentence(extract_recommendation(report))
     good_items = extract_section(report, "What was good about your move?")
@@ -973,7 +1051,7 @@ def render_result(report):
         f"<span class='muted'>Best hold: {optimal_choice or '—'}</span></div></div>"
         f"<div class='result-mini'>"
         f"<div class='result-mini-box'><div class='result-mini-label'>You kept</div><div class='result-mini-value'>{your_choice or '—'}</div></div>"
-        f"<div class='result-mini-box'><div class='result-mini-label'>Efficiency</div><div class='result-mini-value'>{efficiency or '—'}</div></div>"
+        f"<div class='result-mini-box'><div class='result-mini-label'>{decision_metric_label}</div><div class='result-mini-value'>{decision_metric_value}</div></div>"
         f"</div>"
         + (f"<div class='coach-says'><b>Coach says:</b><br>{recommendation}</div>" if recommendation else "")
         + "</div>",
@@ -1103,11 +1181,11 @@ st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold
 
 if not answer_submitted:
     if st.button("Submit hold", type="primary", use_container_width=True):
-        report = yc.coach_report_for_user_hold_by_roll_number(
+        report, solver_record = build_live_report(
             dice,
             scorecard,
             selected_hold,
-            roll_number=roll_number,
+            roll_number,
         )
         st.session_state.report = report
         st.session_state.history.append({
@@ -1118,6 +1196,10 @@ if not answer_submitted:
             "optimal": extract_line(report, "Optimal choice:"),
             "grade": extract_line(report, "Grade:"),
         })
+
+        solver_record["scenario"] = challenge.get("scenario_name", "")
+        solver_record["timestamp_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        st.session_state.solver_history.append(solver_record)
         st.session_state.scroll_to_result = True
         st.session_state.scroll_to_top = False
         st.rerun()
@@ -1131,3 +1213,5 @@ if st.session_state.report:
 if history:
     with st.expander("Session history", expanded=False):
         st.dataframe(pd.DataFrame(history), hide_index=True, use_container_width=True)
+
+render_solver_panel(st.session_state.solver_history)

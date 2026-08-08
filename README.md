@@ -1,85 +1,64 @@
-# Yahtzee Coach - Game UI v21
+# Yahtzee Coach v37 — Exact Mode
 
-Roll 1 / Roll 2 Yahtzee hold-strategy trainer.
+v37 promotes the precomputed dynamic-programming policy from shadow mode to the
+primary live strategy engine for the current practice deck.
 
-## v21 playtest strategy + deck-variety patch
+## What changed
 
-This update keeps the app UI, dice size, dice layout, scorecard layout, and report layout unchanged. It only patches collected v21 playtest strategy issues and adds session-level variety control for the titled practice deck.
+- Exact Roll 1 and Roll 2 recommendations are now player-facing.
+- The current practice deck's 100 scorecard templates collapse to 81 unique
+  solver states; every one is included in `exact_policy.npz`.
+- Every canonical five-dice roll (252) is covered for both Roll 1 and Roll 2.
+- Tied exact-optimal holds are treated as equally correct.
+- The letter grade is a coaching rubric based on exact expected points lost.
+  The optimal-hold recommendation and expected values come directly from the
+  exact solver.
+- The legacy heuristic coach remains as a safe fallback if a future app state
+  is not present in the compact policy table.
+- The dice UI, scorecard layout, session flow, and practice generator are not
+  changed.
 
-What changed:
+## Exhaustive integration audit
 
-- Fixed Roll 2 four-of-a-kind cases so keeping all four matching dice does not lose to keeping only three
-- Generalized the Upper Bonus Pressure pair-of-5s correction beyond the exact v20 scorecard
-- Fixed the Chance Crossroads high-pair issue so a clean pair of 6s can beat attaching an extra 5 just for Chance fallback
-- Preserved the older Full House two-pair rule so `[4, 4, 5, 5]` still wins when Full House is open
-- Verified the low-triple case `[2, 2, 2, 5, 6]`; the engine can still prefer `[5, 6]` on that specific cramped card, so this was added as a verification case rather than blindly patched
-- Added practice anti-repetition hooks so the app avoids repeating the same titled section or exact setup too soon
-- Kept the v19 Roll 1 speed patch
-- Kept the v18 expanded titled practice deck
-- Kept the v16/v20 strategy corrections
+`python exact_integration_tests.py`
 
-## Titled sections
+Measured on the v37 package:
 
-The expanded titled deck is still active:
+- 40,824 / 40,824 state-roll policy records validated
+- 707,616 legal-hold exact-value lookups validated
+- 130 tied-best records handled correctly
+- 40,824 / 40,824 exact-first report routes used exact mode; zero fallbacks
+- 100 / 100 deck templates covered (81 unique solver states)
+- 20,000 / 20,000 generated practice rounds mapped to an exact state
+- deliberate unsupported-state test successfully routed to legacy fallback
+- missing/corrupt policy-load test successfully routed to legacy fallback
+- 10,000 ranked exact lookups: about 0.339 s total, about 0.034 ms each
+- policy load: about 0.013 s locally
 
-1. Small Straight Spark
-2. Large Straight Temptation
-3. Full House Puzzle
-4. Yahtzee Fever
-5. Upper Bonus Pressure
-6. Chance Crossroads
-7. Four-of-a-Kind Forge
-8. Joker Doorway
-9. Endgame Weirdness
-10. Open Board Fun
+Legacy regression protection also remains green:
 
-Each titled section has:
+- strategy regression suite: 26 PASS / 0 FAIL
+- published strategy audit: 15 PASS / 0 FAIL
+- Python compilation: PASS
 
-- 10 unique dice rolls
-- 10 scorecard templates
-- Roll 1 / Roll 2 weighting depending on the scenario
+## Developer diagnostics
 
-The app now tracks recent practice rounds during a session and tries to avoid showing the same title or exact setup too soon.
+The former shadow query parameter still works for convenience:
 
-## How to run the tests
+`?shadow=1`
 
-From the repo folder, run:
+`?solver=1` also works. The hidden panel now reports how many submitted rounds
+used exact mode versus the legacy fallback.
 
-```bash
-python strategy_tests.py
-```
+## Deployment files
 
-Expected result for this version:
-
-```text
-Total: 26 PASS / 0 FAIL
-```
-
-The tests check:
-
-- Verhoeff-inspired Roll 2 straight correction
-- Upper-section chase decisions
-- v21 four-of-a-kind dominance cases
-- v21 generalized Upper Bonus Pressure pair-of-5s cases
-- v21 Chance Crossroads clean pair-of-6s case
-- Low-triple verification case
-- Full House/two-pair behavior
-- Triple protection
-- Low-pair avoidance
-- Extra-Yahtzee / Joker awareness guardrail
-- Coach report generation smoke tests
-- Scope guard that keeps the app Roll 1 / Roll 2 only
-- Expanded practice deck shape: 10 sections, 10 dice rolls each, 10 scorecards each
-- Roll 1 speed guard for the formerly slow report path
-
-## Files
-
-Upload these five files to Streamlit/GitHub:
+The live app needs these files at the GitHub repository root:
 
 - `app.py`
 - `yahtzee_engine.py`
-- `strategy_tests.py`
+- `exact_mode.py`
+- `exact_policy.npz`
 - `requirements.txt`
-- `README.md`
 
-Do not upload `__pycache__`.
+`README.md` and the test files are optional for Streamlit but useful to keep in
+the repository.

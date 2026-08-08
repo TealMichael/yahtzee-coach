@@ -442,3 +442,9 @@ def run_all_tests(verbose: bool = True) -> Dict[str, Any]:
 if __name__ == "__main__":
     summary = run_all_tests(verbose=True)
     sys.exit(1 if summary["failed"] else 0)
+
+
+def run_published_strategy_audit_bridge(verbose=True):
+    from published_strategy_tests import run
+    return run(verbose=verbose)
+

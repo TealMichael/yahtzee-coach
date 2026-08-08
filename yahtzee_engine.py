@@ -11521,3 +11521,261 @@ def run_v21_playtest_regression_tests(verbose=True):
         print("Summary:", len(details) - failed, "PASS /", failed, "FAIL")
 
     return {"passed": len(details) - failed, "failed": failed, "details": details}
+
+# ============================
+# v22 PUBLISHED STRATEGY MODEL
+# ============================
+# Sources used as benchmarks:
+# - Thomas Verhoeff, Optimal Solitaire Yahtzee Strategies
+# - Patrick Liscio, "Yahtzee" (Ballpark Figures, 2026)
+#
+# Scope:
+# - This app remains a Roll 1 / Roll 2 hold trainer.
+# - v22 adds a source-backed opening-theory layer for an empty scorecard.
+# - It does NOT claim to be the complete 536,320-state dynamic-programming
+#   solver described by Liscio. Midgame/endgame decisions continue to use the
+#   future-aware model plus the existing scorecard-context corrections.
+#
+# Why an opening layer is legitimate:
+# On an empty scorecard, the published optimal strategy collapses to a compact
+# hierarchy. Encoding that hierarchy is more principled than adding isolated
+# one-hand patches, and it gives us a stable published benchmark.
+
+if "_BASE_v22_analyze_all_holds_by_roll_number" not in globals():
+    _BASE_v22_analyze_all_holds_by_roll_number = analyze_all_holds_by_roll_number
+
+
+def v22_is_empty_scorecard(scorecard):
+    return all(scorecard.get(category) is None for category in YAHTZEE_CATEGORIES)
+
+
+def v22_hold_exists(dice, hold):
+    dice_counts = Counter(dice)
+    hold_counts = Counter(hold)
+    return all(hold_counts[face] <= dice_counts[face] for face in hold_counts)
+
+
+def v22_longest_straight_holds(dice, length):
+    unique = set(dice)
+    patterns = []
+    for start in range(1, 8 - length):
+        pattern = tuple(range(start, start + length))
+        if set(pattern).issubset(unique):
+            patterns.append(list(pattern))
+    return patterns
+
+
+def v22_highest_pair(dice, allowed_faces):
+    counts = Counter(dice)
+    faces = [face for face in allowed_faces if counts[face] >= 2]
+    return [max(faces)] * 2 if faces else None
+
+
+def v22_highest_triple(dice, allowed_faces=range(1, 7)):
+    counts = Counter(dice)
+    faces = [face for face in allowed_faces if counts[face] >= 3]
+    return [max(faces)] * 3 if faces else None
+
+
+def v22_highest_quad(dice):
+    counts = Counter(dice)
+    faces = [face for face in range(1, 7) if counts[face] >= 4]
+    return [max(faces)] * 4 if faces else None
+
+
+def v22_opening_roll1_preferred_hold(dice):
+    """Published first-reroll hierarchy for turn 1 (empty scorecard)."""
+    dice = sorted(dice)
+    counts = Counter(dice)
+
+    # Made Yahtzee or Large Straight.
+    if max(counts.values()) == 5 or set(dice) in ({1,2,3,4,5}, {2,3,4,5,6}):
+        return dice
+
+    quad = v22_highest_quad(dice)
+    if quad:
+        return quad
+
+    triple = v22_highest_triple(dice)
+    if triple:
+        return triple
+
+    # Open-ended small straight is the strongest four-distinct structure.
+    if {2,3,4,5}.issubset(set(dice)):
+        return [2,3,4,5]
+
+    pair = v22_highest_pair(dice, [3,4,5,6])
+    if pair:
+        return pair
+
+    # Other made small straights.
+    for pattern in ([1,2,3,4], [3,4,5,6]):
+        if set(pattern).issubset(set(dice)):
+            return list(pattern)
+
+    if counts[2] >= 2:
+        return [2,2]
+
+    # Published exceptional anti-pair-of-ones roll.
+    if dice == [1,1,3,4,5]:
+        return [3,4,5]
+
+    # For otherwise unstructured openings, the published ordering prefers a
+    # lone 5, then 4, then 6. This small straight option value is why a 6 is not
+    # automatically the best singleton.
+    for face in [5,4,6]:
+        if face in dice:
+            return [face]
+
+    return []
+
+
+def v22_opening_roll2_preferred_hold(dice):
+    """Published second-reroll hierarchy for turn 1 (empty scorecard)."""
+    dice = sorted(dice)
+    counts = Counter(dice)
+    unique = set(dice)
+
+    if max(counts.values()) == 5 or unique in ({1,2,3,4,5}, {2,3,4,5,6}):
+        return dice
+
+    quad = v22_highest_quad(dice)
+    if quad:
+        return quad
+
+    # A made small straight is kept. Prefer 2345 because it has two Large
+    # Straight outs, then the other two patterns.
+    for pattern in ([2,3,4,5], [1,2,3,4], [3,4,5,6]):
+        if set(pattern).issubset(unique):
+            return list(pattern)
+
+    high_triple = v22_highest_triple(dice, [4,5,6])
+    if high_triple:
+        return high_triple
+
+    # Published opening rule: keep a lower-value made Full House, but break a
+    # high triple (4/5/6) out of the Full House to pursue the upper/Yahtzee path.
+    sorted_counts = sorted(counts.values())
+    if sorted_counts == [2,3]:
+        triple_face = next(face for face, count in counts.items() if count == 3)
+        if triple_face <= 3:
+            return dice
+
+    triple = v22_highest_triple(dice)
+    if triple:
+        return triple
+
+    pair = v22_highest_pair(dice, [4,5,6])
+    if pair:
+        return pair
+
+    # Open-ended three-die straight draws.
+    if {2,3,4}.issubset(unique):
+        return [2,3,4]
+    if {3,4,5}.issubset(unique):
+        return [3,4,5]
+
+    # Pair of 2s/3s. When accompanied by a pair of 1s, the published opening
+    # table keeps both pairs, except 22334 where 234 ranks above the pairs.
+    if counts[2] >= 2 or counts[3] >= 2:
+        face = 3 if counts[3] >= 2 else 2
+        if counts[1] >= 2:
+            return [1,1,face,face]
+        return [face,face]
+
+    if dice == [1,1,3,4,6]:
+        return [3,4]
+
+    if counts[1] >= 2:
+        return [1,1]
+
+    # Two published exceptional no-pair structures.
+    if dice == [1,2,3,5,6]:
+        return [2,3,5]
+    if dice == [1,2,4,5,6]:
+        return [4,5,6]
+
+    # Defensive fallback for empty-card second rerolls.
+    for face in [5,4,6,3,2,1]:
+        if face in dice:
+            return [face]
+    return []
+
+
+def v22_apply_published_opening_theory(dice, scorecard, roll_number, results):
+    if not v22_is_empty_scorecard(scorecard) or roll_number not in (1, 2):
+        return results
+
+    preferred = (
+        v22_opening_roll1_preferred_hold(dice)
+        if roll_number == 1
+        else v22_opening_roll2_preferred_hold(dice)
+    )
+    preferred = sorted(preferred)
+    if not v22_hold_exists(dice, preferred):
+        return results
+
+    # Preserve all underlying EV values for transparency. We use a small
+    # source-backed ordering adjustment only when the current heuristic model
+    # disagrees with the published optimal opening hierarchy.
+    adjusted = []
+    current_best = max((float(r.get("strategy_value", 0)) for r in results), default=0.0)
+    preferred_result = None
+    for result in results:
+        item = dict(result)
+        if sorted(item.get("hold", [])) == preferred:
+            preferred_result = item
+        adjusted.append(item)
+
+    if preferred_result is None:
+        return results
+
+    preferred_value = float(preferred_result.get("strategy_value", 0))
+    if preferred_value <= current_best:
+        source_adjustment = (current_best - preferred_value) + 0.001
+        preferred_result["strategy_value_before_v22"] = preferred_value
+        preferred_result["strategy_value"] = preferred_value + source_adjustment
+        preferred_result["v22_published_adjustment"] = source_adjustment
+        preferred_result["v22_published_source"] = "Ballpark Figures opening hierarchy"
+        if "future_aware_value" in preferred_result:
+            preferred_result["future_aware_value"] = preferred_result["strategy_value"]
+
+    adjusted.sort(key=lambda item: item.get("strategy_value", 0), reverse=True)
+    return adjusted
+
+
+def analyze_all_holds_by_roll_number(dice, scorecard, roll_number):
+    results = _BASE_v22_analyze_all_holds_by_roll_number(dice, scorecard, roll_number)
+    results = v22_apply_published_opening_theory(dice, scorecard, roll_number, results)
+    for result in results:
+        result["roll_number"] = roll_number
+        result["rolls_remaining"] = 3 - roll_number
+    return results
+
+
+def v22_strategy_model_info():
+    """Human-readable scope statement for audits and documentation."""
+    return {
+        "model_version": "v22",
+        "published_benchmarks": [
+            "Thomas Verhoeff - Optimal Solitaire Yahtzee Strategies",
+            "Patrick Liscio - Yahtzee (Ballpark Figures, 2026)",
+        ],
+        "exact_layers": [
+            "All final-reroll dice outcomes",
+            "Official category scoring used by the app",
+            "Published empty-scorecard opening hierarchy",
+        ],
+        "heuristic_layers": [
+            "Midgame/endgame future category value",
+            "Upper-bonus opportunity value",
+            "Chance/option value",
+            "Extra-Yahtzee/Joker opportunity value",
+        ],
+        "scope": "Roll 1 and Roll 2 hold decisions only",
+        "not_claimed": "A complete full-game dynamic-programming solver",
+    }
+
+
+if "clear_speed_caches" in globals():
+    clear_speed_caches()

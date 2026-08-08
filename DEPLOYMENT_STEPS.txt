@@ -1,0 +1,31 @@
+YAHTZEE COACH v37 — UPDATE CHECKLIST
+
+1. Download and unzip yahtzee_coach_streamlit_game_v37.zip.
+2. Open GitHub and go to: TealMichael/yahtzee-coach
+3. Open the repository root — the same place where the current app.py lives.
+4. Click Add file -> Upload files.
+5. From inside the unzipped yahtzee_coach_game_v37 folder, upload:
+      app.py
+      yahtzee_engine.py
+      exact_mode.py
+      exact_policy.npz
+      requirements.txt
+      README.md                  (recommended, not required by Streamlit)
+      exact_integration_tests.py (recommended, not required by Streamlit)
+      strategy_tests.py          (optional)
+      published_strategy_tests.py(optional)
+
+   IMPORTANT: upload the FILES themselves to the repository root.
+   Do not upload the zip file and do not create a nested v37 folder.
+
+6. Use commit message:
+      Promote exact solver to live strategy - v37
+7. Commit directly to the main branch.
+8. Wait for Streamlit Community Cloud to redeploy automatically.
+9. Open the public app and refresh it.
+10. Play a few rounds. For a developer check, add ?solver=1 to the app URL.
+    The diagnostic panel should show Exact increasing and Fallbacks staying at 0.
+
+Old shadow_mode.py, shadow_mode_tests.py, and exact_shadow_policy.npz can remain
+in the repository; v37 no longer imports them. They can be deleted later for
+cleanup, but deleting them is not required for this update.
