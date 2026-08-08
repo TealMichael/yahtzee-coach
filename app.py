@@ -8,6 +8,7 @@ import streamlit.components.v1 as components
 
 import yahtzee_engine as yc
 from exact_mode import ExactPolicyTable, build_live_report_from_loader
+from session_learning import build_session_learning_summary
 
 st.set_page_config(
     page_title="Yahtzee Coach",
@@ -673,6 +674,42 @@ st.markdown(
         color:#111827 !important;
     }
     .lesson-card * { color:#111827 !important; }
+
+    .session-coach {
+        border:1px solid #bfdbfe;
+        border-radius:18px;
+        padding:0.82rem 0.88rem;
+        background:#eff6ff;
+        margin:0.65rem 0;
+        color:#111827 !important;
+    }
+    .session-coach * { color:inherit; }
+    .session-coach-title { font-size:1.02rem; font-weight:900; margin-bottom:0.35rem; }
+    .session-coach-metrics {
+        display:grid;
+        grid-template-columns:repeat(3, minmax(0,1fr));
+        gap:0.38rem;
+        margin:0.45rem 0 0.55rem 0;
+    }
+    .session-coach-metric {
+        background:rgba(255,255,255,0.78);
+        border:1px solid #dbeafe;
+        border-radius:12px;
+        padding:0.42rem 0.35rem;
+        text-align:center;
+    }
+    .session-coach-metric-label { font-size:0.68rem; color:#64748b; }
+    .session-coach-metric-value { font-size:1rem; font-weight:900; }
+    .session-coach-line { margin:0.38rem 0; line-height:1.35; }
+    .session-coach-tag {
+        display:inline-block;
+        font-size:0.70rem;
+        font-weight:900;
+        text-transform:uppercase;
+        letter-spacing:0.04em;
+        color:#1d4ed8;
+        margin-right:0.25rem;
+    }
     .lesson-kicker {
         font-size:0.76rem;
         text-transform:uppercase;
@@ -699,6 +736,9 @@ st.markdown(
         .grade-badge { font-size:1.8rem; min-width:4rem; }
         .result-mini { grid-template-columns:1fr; }
         .idea-grid { grid-template-columns:1fr; }
+        .session-coach-metrics { grid-template-columns:repeat(3, minmax(0,1fr)); gap:0.25rem; }
+        .session-coach-metric { padding:0.38rem 0.18rem; }
+        .session-coach-metric-value { font-size:0.92rem; }
     }
     </style>
     """,
@@ -801,6 +841,75 @@ def session_average_grade(history):
         return "—", None
     avg = sum(scores) / len(scores)
     return points_to_letter(avg), avg
+
+
+def render_session_coach(records):
+    """Show a cautious session-level learning summary from exact solver metadata."""
+    summary = build_session_learning_summary(records)
+    if summary["rounds"] == 0:
+        return
+
+    if not summary["ready"]:
+        needed = summary["rounds_needed"]
+        st.caption(
+            f"🎯 Session Coach is learning your patterns — {summary['rounds']}/5 exact rounds complete"
+            + (f" ({needed} more to unlock the first summary)." if needed else ".")
+        )
+        return
+
+    optimal_pct = round(summary["optimal_rate"] * 100)
+    avg_loss = summary["avg_points_lost"]
+    strength = summary["strengths"][0] if summary["strengths"] else None
+    focus = summary["focus_areas"][0] if summary["focus_areas"] else None
+
+    lines = []
+    if strength:
+        lines.append(
+            f"<div class='session-coach-line'><span class='session-coach-tag'>Strength</span>"
+            f"<b>{strength['skill']}</b> — {strength['strong_count']} of {strength['attempts']} decisions "
+            f"were exact or within 0.75 expected points of exact.</div>"
+        )
+    else:
+        lines.append(
+            "<div class='session-coach-line'><span class='session-coach-tag'>Strength</span>"
+            "No repeated skill has enough evidence yet for a strong label. Keep playing and the pattern tracker will stay conservative.</div>"
+        )
+
+    if focus:
+        lines.append(
+            f"<div class='session-coach-line'><span class='session-coach-tag'>Work on</span>"
+            f"<b>{focus['skill']}</b> — {focus['description']}.</div>"
+        )
+    else:
+        lines.append(
+            "<div class='session-coach-line'><span class='session-coach-tag'>Work on</span>"
+            "No clear recurring weakness yet. That is a good sign; keep building a larger sample.</div>"
+        )
+
+    lines.append(
+        f"<div class='session-coach-line'><span class='session-coach-tag'>Big lesson</span>"
+        f"{summary['biggest_lesson']}</div>"
+    )
+    if summary.get("trend"):
+        lines.append(
+            f"<div class='session-coach-line'><span class='session-coach-tag'>Trend</span>"
+            f"{summary['trend']}</div>"
+        )
+
+    st.markdown(
+        "<div class='session-coach'>"
+        "<div class='session-coach-title'>🎯 Session Coach</div>"
+        "<div class='muted'>A session-only pattern summary based on exact expected-value decisions. "
+        "It waits for repeated evidence before calling something a strength or weakness.</div>"
+        "<div class='session-coach-metrics'>"
+        f"<div class='session-coach-metric'><div class='session-coach-metric-label'>Exact rounds</div><div class='session-coach-metric-value'>{summary['rounds']}</div></div>"
+        f"<div class='session-coach-metric'><div class='session-coach-metric-label'>Best-hold rate</div><div class='session-coach-metric-value'>{optimal_pct}%</div></div>"
+        f"<div class='session-coach-metric'><div class='session-coach-metric-label'>Avg pts lost</div><div class='session-coach-metric-value'>{avg_loss:.2f}</div></div>"
+        "</div>"
+        + "".join(lines)
+        + "</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def score_box_html(category, scorecard):
@@ -1306,6 +1415,7 @@ if not answer_submitted:
 
 if st.session_state.report:
     render_result(st.session_state.report)
+    render_session_coach(st.session_state.solver_history)
     if st.button("Next round", type="primary", use_container_width=True):
         new_round(scroll_to_top=True)
         st.rerun()

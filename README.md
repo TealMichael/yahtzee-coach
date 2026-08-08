@@ -1,6 +1,6 @@
-# Yahtzee Coach v39 — Personalized Teaching Pass
+# Yahtzee Coach v40 — Personalized Teaching Pass
 
-v39 keeps the exact dynamic-programming solver as the strategy source of truth and
+v40 keeps the exact dynamic-programming solver as the strategy source of truth and
 makes the coaching respond directly to the player's chosen hold. The solver values,
 compact exact policy, dice UI, scorecard, and practice generator are unchanged from
 v38.
@@ -39,7 +39,7 @@ Run:
 
 `python personalized_teaching_tests.py`
 
-The v39 focused suite checks that:
+The v40 focused suite checks that:
 
 - a close two-pair choice preserves the player's good pair idea and suggests adding
   the second pair as a tiny refinement
@@ -60,13 +60,13 @@ Run:
 
 `python exact_integration_tests.py`
 
-Measured on v39:
+Measured on v40:
 
 - 40,824 / 40,824 state-roll policy records validated
 - 707,616 legal-hold exact-value lookups validated
 - 130 tied-best records handled correctly
 - 40,824 / 40,824 exact-first report routes used exact mode; zero fallbacks
-- every exact report includes the v39 personalized comparison plus the v38 teaching
+- every exact report includes the v40 personalized comparison plus the v38 teaching
   sections
 - 100 / 100 deck templates covered (81 unique solver states)
 - 20,000 / 20,000 generated practice rounds mapped to an exact state
@@ -96,3 +96,10 @@ only needs these updated files at the GitHub repository root:
 - `README.md` (recommended)
 
 The package includes all unchanged files as well so it remains self-contained.
+
+
+## v40 — Session Learning Summary
+
+v40 leaves the exact solver and per-round teaching unchanged and adds a session-only learning layer. After five exact rounds, Session Coach summarizes best-hold rate, average expected points lost, repeated strengths, exact-value focus areas, the biggest lesson from the session, and a conservative recent trend once at least six exact rounds are available. Strength labels require repeated evidence; one large miss may be surfaced as a focus area, but small one-off misses are not labeled as weaknesses.
+
+The session summary uses only in-memory Streamlit session data and does not store player identity or send play data anywhere.
