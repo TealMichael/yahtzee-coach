@@ -151,7 +151,7 @@ def test_generator_coverage(policy, rounds=20_000):
         challenge = generate_practice_challenge()
         key = scorecard_state_key(challenge["scorecard"])
         assert key in keys
-        assert challenge.get("bank_version") == "42.5"
+        assert challenge.get("bank_version") == "42.6"
         stages[challenge["stage"]] += 1
         rolls[challenge["roll_number"]] += 1
         skills[challenge["skill_tag"]] += 1

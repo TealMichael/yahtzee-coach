@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-"""Expanded puzzle-bank runtime for Yahtzee Coach v42.5.
+"""Realistic puzzle-bank runtime for Yahtzee Coach v42.6.
 
 The exact solver remains the source of truth.  This module supplies a much
 broader, tagged universe of scorecard contexts and dice outcomes for Unlimited
-Practice, and it includes the deterministic Daily-10 selector that v43 can use
+Practice. In v42.6, 85% of scorecard contexts come from turn-by-turn simulated
+games and 15% remain deliberately curated edge cases. It also includes the
+deterministic Daily-10 selector that v43 can use
 when shared leaderboards are added.
 """
 
@@ -82,6 +84,9 @@ def _data() -> dict:
         "bonus_status": bank["bonus_status"],
         "yahtzee_status": bank["yahtzee_status"],
         "open_count": bank["open_count"],
+        "origin": bank["origin"],
+        "player_profile": bank["player_profile"],
+        "turns_played": bank["turns_played"],
         "rows": catalog["rows"],
         "rolls": catalog["rolls"],
         "skill_names": tuple(str(x) for x in catalog["skill_names"]),
@@ -123,7 +128,7 @@ def _challenge_from_row(row) -> dict:
         "rolls_remaining": 3 - roll_number,
         "dice": [int(x) for x in data["rolls"][roll_id]],
         "scorecard": scorecard,
-        "bank_version": "42.5",
+        "bank_version": "42.6",
         "bank_state_index": state_index,
         "bank_state_key": int(data["state_keys"][state_index]),
         "skill_tag": skill,
@@ -133,6 +138,8 @@ def _challenge_from_row(row) -> dict:
         "stage": str(data["stage"][state_index]),
         "bonus_status": str(data["bonus_status"][state_index]),
         "yahtzee_status": str(data["yahtzee_status"][state_index]),
+        "scorecard_origin": str(data["origin"][state_index]),
+        "simulated_player_profile": str(data["player_profile"][state_index]),
     }
 
 
@@ -153,7 +160,7 @@ def challenge_signature(challenge: dict) -> tuple:
 
 @lru_cache(maxsize=None)
 def _eligible_indices(*, roll_number: int | None = None, stage: str | None = None,
-                      skill_code: int | None = None, daily: bool = False) -> np.ndarray:
+                      skill_code: int | None = None, origin: str | None = None, daily: bool = False) -> np.ndarray:
     data = _data()
     rows = data["rows"]
     mask = rows["daily_eligible"].astype(bool) if daily else rows["practice_eligible"].astype(bool)
@@ -164,6 +171,9 @@ def _eligible_indices(*, roll_number: int | None = None, stage: str | None = Non
     if stage is not None:
         state_stages = data["stage"][rows["state_index"]]
         mask &= state_stages == stage
+    if origin is not None:
+        state_origins = data["origin"][rows["state_index"]]
+        mask &= state_origins == origin
     return np.flatnonzero(mask)
 
 
@@ -183,24 +193,68 @@ def generate_practice_challenge(
     avoid_signatures = set(avoid_recent_signatures or [])
     stages = ["Opening", "Midgame", "Late Game", "True Endgame"]
     stage_weights = [0.20, 0.30, 0.30, 0.20]
+    origin_weights = [("Simulated Game", 0.85), ("Curated Edge Case", 0.15)]
+    # Rare strategic families stay available, but ordinary practice should feel
+    # like a real game more often than a parade of Joker/bonus edge cases.
+    skill_weights = {
+        "Matching Dice": 1.35,
+        "Straight Structure": 1.25,
+        "Full House": 0.95,
+        "Upper Bonus": 1.20,
+        "Bonus Secured": 0.55,
+        "Bonus Is Gone": 0.80,
+        "Chance Timing": 0.85,
+        "Joker / Extra Yahtzee": 0.45,
+        "Flexible Board": 1.20,
+    }
 
     fallback = None
     for _ in range(max_attempts):
         roll_number = random.choice((1, 2))
         stage = random.choices(stages, weights=stage_weights, k=1)[0]
+        origin = random.choices([x[0] for x in origin_weights], weights=[x[1] for x in origin_weights], k=1)[0]
 
-        # Choose among strategy families that actually exist for this stage/roll,
+        # Choose among strategy families that actually exist for this stage/roll/origin,
         # then sample a candidate from that family.  This deliberately broadens
         # practice rather than matching natural dice-frequency distribution.
         available_skills = []
         for skill_code in range(len(data["skill_names"])):
-            idx = _eligible_indices(roll_number=roll_number, stage=stage, skill_code=skill_code)
+            idx = _eligible_indices(roll_number=roll_number, stage=stage, skill_code=skill_code, origin=origin)
             if len(idx):
-                available_skills.append((skill_code, idx))
+                available_skills.append((skill_code, idx, skill_weights.get(data["skill_names"][skill_code], 1.0)))
+        if not available_skills:
+            # A rare stage/skill combination may not exist in the 15% curated
+            # slice. Relax only the origin preference, not the exact-policy or
+            # stage/roll requirements.
+            other_origin = "Curated Edge Case" if origin == "Simulated Game" else "Simulated Game"
+            for skill_code in range(len(data["skill_names"])):
+                idx = _eligible_indices(roll_number=roll_number, stage=stage, skill_code=skill_code, origin=other_origin)
+                if len(idx):
+                    available_skills.append((skill_code, idx, skill_weights.get(data["skill_names"][skill_code], 1.0)))
         if not available_skills:
             continue
-        skill_code, indices = random.choice(available_skills)
-        row = data["rows"][int(random.choice(indices.tolist()))]
+        chosen_skill = random.choices(available_skills, weights=[item[2] for item in available_skills], k=1)[0]
+        skill_code, indices, _ = chosen_skill
+        index_list = indices.tolist()
+        # Within a strategy family, use cheap rejection sampling to make rare
+        # scorecard conditions genuinely occasional. This avoids scanning every
+        # candidate on each Streamlit round.
+        skill_name = data["skill_names"][skill_code]
+        chosen_index = None
+        for _candidate_try in range(16):
+            idx = int(random.choice(index_list))
+            state_index = int(data["rows"][idx]["state_index"])
+            accept = 1.0
+            if str(data["yahtzee_status"][state_index]) == "Live 50" and skill_name != "Joker / Extra Yahtzee":
+                accept *= 0.30
+            if str(data["bonus_status"][state_index]) == "Earned" and skill_name != "Bonus Secured":
+                accept *= 0.45
+            if random.random() <= accept:
+                chosen_index = idx
+                break
+        if chosen_index is None:
+            chosen_index = int(random.choice(index_list))
+        row = data["rows"][chosen_index]
         challenge = _challenge_from_row(row)
         sig = challenge_signature(challenge)
         if fallback is None:
@@ -215,7 +269,7 @@ def generate_practice_challenge(
 
 
 def _daily_seed(date_key: str) -> int:
-    digest = sha256(f"yahtzee-coach-daily-v42.5|{date_key}".encode("utf-8")).digest()
+    digest = sha256(f"yahtzee-coach-daily-v42.6|{date_key}".encode("utf-8")).digest()
     return int.from_bytes(digest[:8], "big")
 
 
@@ -238,18 +292,25 @@ def generate_daily_challenge_set(date_key: str, count: int = 10) -> list[dict]:
     roll_plan = [1] * 5 + [2] * 5
     difficulty_plan = ["Hard", "Medium", "Clear", "Medium", "Punishing",
                        "Hard", "Clear", "Medium", "Punishing", "Knife-edge"]
+    # Nine realistic game-history cards plus one intentionally curated edge case
+    # keeps the Daily 10 believable while still teaching rare situations.
+    origin_plan = ["Simulated Game"] * 9 + ["Curated Edge Case"]
     rng.shuffle(stage_plan)
     rng.shuffle(roll_plan)
     rng.shuffle(difficulty_plan)
+    rng.shuffle(origin_plan)
 
     used_states: set[int] = set()
     used_rows: set[int] = set()
     skill_counts: dict[int, int] = {}
     chosen: list[dict] = []
 
-    for stage, roll_number, target_difficulty in zip(stage_plan, roll_plan, difficulty_plan):
-        candidate_idx = _eligible_indices(roll_number=roll_number, stage=stage, daily=True)
+    for stage, roll_number, target_difficulty, origin in zip(stage_plan, roll_plan, difficulty_plan, origin_plan):
+        candidate_idx = _eligible_indices(roll_number=roll_number, stage=stage, origin=origin, daily=True)
         candidate_list = candidate_idx.tolist()
+        if not candidate_list:
+            candidate_idx = _eligible_indices(roll_number=roll_number, stage=stage, daily=True)
+            candidate_list = candidate_idx.tolist()
         rng.shuffle(candidate_list)
 
         # Prefer the requested difficulty and a skill not yet seen.  Relax those
@@ -268,6 +329,14 @@ def generate_daily_challenge_set(date_key: str, count: int = 10) -> list[dict]:
             if diff == target_difficulty:
                 score += 12
             score += 8 if skill_counts.get(skill_code, 0) == 0 else -4 * skill_counts.get(skill_code, 0)
+            chosen_live_yahtzees = sum(1 for item in chosen if item.get("yahtzee_status") == "Live 50")
+            chosen_earned_bonus = sum(1 for item in chosen if item.get("bonus_status") == "Earned")
+            state_ytz = str(data["yahtzee_status"][state_index])
+            state_bonus = str(data["bonus_status"][state_index])
+            if state_ytz == "Live 50":
+                score += 2 if chosen_live_yahtzees == 0 else -12 * chosen_live_yahtzees
+            if state_bonus == "Earned":
+                score += 1 if chosen_earned_bonus == 0 else -6 * chosen_earned_bonus
             # Avoid filling a competitive set with exact ties unless the planned
             # slot is the knife-edge puzzle.
             tie_count = int(row["tie_count"])
@@ -294,7 +363,7 @@ def generate_daily_challenge_set(date_key: str, count: int = 10) -> list[dict]:
         challenge["mode"] = "Daily Challenge"
         challenge["daily_date"] = str(date_key)
         challenge["daily_number"] = len(chosen) + 1
-        raw_id = f"42.5|{date_key}|{challenge['bank_state_key']}|{challenge['dice']}|{challenge['roll_number']}"
+        raw_id = f"42.6|{date_key}|{challenge['bank_state_key']}|{challenge['dice']}|{challenge['roll_number']}"
         challenge["challenge_id"] = sha256(raw_id.encode("utf-8")).hexdigest()[:16]
         chosen.append(challenge)
 
@@ -305,7 +374,7 @@ def bank_summary() -> dict:
     data = _data()
     rows = data["rows"]
     return {
-        "bank_version": "42.5",
+        "bank_version": "42.6",
         "scorecard_contexts": int(len(data["state_keys"])),
         "canonical_dice_rolls": int(len(data["rolls"])),
         "roll_stages": [1, 2],
@@ -313,4 +382,6 @@ def bank_summary() -> dict:
         "daily_eligible_situations": int(np.sum(rows["daily_eligible"])),
         "skills": list(data["skill_names"]),
         "difficulties": list(data["difficulty_names"]),
+        "simulated_scorecard_contexts": int(np.sum(data["origin"] == "Simulated Game")),
+        "curated_scorecard_contexts": int(np.sum(data["origin"] == "Curated Edge Case")),
     }

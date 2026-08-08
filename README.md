@@ -1,191 +1,169 @@
-# Yahtzee Coach v42.5 — Expanded Puzzle Universe / Daily Challenge Readiness
+# Yahtzee Coach v42.6 — Realistic Game-State Pass
 
-v42.5 keeps the complete v42 practice-momentum, mastery, mobile UI, exact solver,
-grading, personalized teaching, and Session Coach experience. The change is
-underneath the practice generator: Unlimited Practice now draws from a much
-broader exact-policy universe instead of the older 81-state / 79-dice curated
-practice footprint.
+v42.6 keeps the complete v42.5 exact solver, expanded 252-roll puzzle universe,
+mobile UI, grading, personalized teaching, Session Coach, mastery, and Daily-10
+readiness. The change is the **scorecard source**: practice no longer feels like
+it was assembled from strategically convenient boxes.
 
-This is the bridge between v42 and the planned shared Daily Challenge.
+The goal of this pass is simple: **hard decisions on believable scorecards**.
 
 ## What changed
 
-### 1. Exact scorecard contexts expanded from 81 to 420
+### 1. 85% of scorecard contexts now come from actual simulated game histories
 
-All 81 previously supported exact states are preserved. The new bank deliberately
-adds the strategy areas that were underrepresented:
+The bank still contains **420 exact scorecard contexts**, but the representative
+scorecards are now:
+
+- **357 (85%) Simulated Game** snapshots
+- **63 (15%) Curated Edge Case** snapshots
+
+The simulated cards were produced by playing **4,000 complete turn-by-turn games**
+from an empty scorecard. Each turn rolls dice, makes two hold decisions, rolls
+again, and legally scores one category before the next snapshot is captured.
+
+This means a normal practice scorecard is no longer created by saying things
+like “make the bonus dead and leave Chance open.” It is a state an actual game
+simulation reached.
+
+The simulator deliberately uses multiple human-style player profiles:
+
+- **Strong** — usually makes the strongest-looking move, with occasional close alternatives
+- **Regular** — mostly sensible play with more second-best / human choices
+- **Messy** — still plausible, but more willing to make a questionable sacrifice
+
+The bank intentionally does **not** make every prior turn computer-perfect.
+
+### 2. Human-looking imperfections are preserved
+
+Real scorecards sometimes contain choices such as zeroing an upper box while
+Chance remains open. v42.6 allows those situations when they arise from the
+simulated history instead of treating every imperfection as invalid.
+
+The final 420-context bank contains, among other examples:
+
+- **27** contexts with at least one zeroed upper box while Chance is still open
+- **68** contexts where Chance has already been used with 7+ boxes still open
+- **303** contexts containing at least one non-cookie-cutter upper-section result
+
+Those are not random corruptions. The 357 simulated contexts are snapshots after
+real simulated turns, with legal category scores and one category closed per turn.
+
+### 3. The strategic coverage from v42.5 is retained
+
+The game-stage balance remains:
 
 - **60 Opening** contexts (10–13 boxes open)
-- **120 Midgame** contexts (6–9 boxes open)
-- **120 Late Game** contexts (3–5 boxes open)
-- **120 True Endgame** contexts (1–2 boxes open)
+- **120 Midgame** contexts (6–9 open)
+- **120 Late Game** contexts (3–5 open)
+- **120 True Endgame** contexts (1–2 open)
 
-True endgame was the biggest prior blind spot. v42.5 includes **58 one-box-left**
-contexts and **62 two-box-left** contexts.
+All upper-bonus states remain represented:
 
-### 2. Every upper-bonus condition is represented
+- On Pace
+- Under Pressure
+- Ahead
+- Bonus Earned
+- Bonus Dead / mathematically unreachable
 
-The 420 scorecard contexts include:
+All Yahtzee states remain represented:
 
-- **125 On Pace**
-- **79 Under Pressure**
-- **62 Ahead**
-- **72 Bonus Earned**
-- **82 Bonus Dead / mathematically unreachable**
+- Yahtzee open
+- Yahtzee zeroed
+- Yahtzee scored for 50 / bonus live
 
-The visible teaching layer now explicitly understands the last two cases. It no
-longer talks as though the 35-point bonus is still a reason to protect upper dice
-when the bonus is already secured or cannot be reached.
+All **81** exact states from the original v42 practice deck remain supported.
 
-### 3. All Yahtzee states are represented
+### 4. The complete dice universe remains available
 
-- **201 Yahtzee open** contexts
-- **128 Yahtzee zeroed** contexts
-- **91 Yahtzee scored for 50** contexts
-
-The teaching layer now calls out the extra-Yahtzee / Joker window when a 50-point
-Yahtzee is already on the card.
-
-### 4. All 252 canonical five-dice rolls are available
-
-The old titled deck explicitly listed 79 unique dice structures. v42.5 can use
-**all 252 canonical five-dice outcomes** for every selected scorecard context and
-for both Roll 1 and Roll 2.
-
-That creates:
+v42.6 still supports:
 
 - **420 scorecard contexts**
-- **252 canonical dice rolls**
-- **2 roll stages**
+- **252 canonical five-dice rolls**
+- **Roll 1 and Roll 2**
 - **211,680 exact state/roll situations**
-- **3,669,120 legal hold values** stored and audited
+- **3,669,120 legal hold values**
 
-The exact recommendation still comes from the completed full-game dynamic solver.
-No heuristic recommendation has replaced it.
+The exact full-game solver remains the source of truth for recommendations.
+The realism simulator only creates believable *scorecard histories*; it does not
+replace or weaken the exact strategy engine.
 
-### 5. Expanded strategy tags and difficulty metadata
+### 5. Unlimited Practice now targets the realistic mix
 
-Every exact situation is tagged for future challenge construction using strategy
-families such as:
+Practice draws scorecards at approximately:
 
-- Matching Dice
-- Straight Structure
-- Full House
-- Upper Bonus
-- Bonus Secured
-- Bonus Is Gone
-- Chance Timing
-- Joker / Extra Yahtzee
-- Flexible Board
+- **85% Simulated Game**
+- **15% Curated Edge Case**
 
-Situations also receive a difficulty label based on the exact gap between the
-best hold and the next genuinely worse hold:
+It still balances game stage, Roll 1 / Roll 2, and strategy family so the harder
+v42.5 decision variety remains intact. Rare conditions such as a live extra-Yahtzee
+bonus or already-secured upper bonus are deliberately downweighted unless that
+condition is the lesson being practiced.
 
-- Knife-edge
-- Hard
-- Medium
-- Clear
-- Punishing
+The curated 15% is intentional. Rare or awkward states can be excellent teaching
+problems even if they do not occur often in ordinary play.
 
-These tags are not used to alter the solver. They are selection metadata so a
-Daily 10 can be intentionally balanced rather than randomly easy or brutal.
+### 6. Daily Challenge readiness is more realistic too
 
-### 6. Unlimited Practice now uses the expanded bank
+The deterministic Daily-10 selector remains hidden until the shared v43 social
+layer is built. It now selects:
 
-The UI is still the approved v42 / v41.1 interface. The difference is that new
-practice rounds are selected from the expanded exact universe.
-
-Practice selection intentionally balances game stage, Roll 1 vs Roll 2, and
-strategy family instead of allowing the largest dice family to dominate.
-
-The original v42 titled deck remains in `yahtzee_engine.py` as a safety fallback.
-
-### 7. Daily Challenge selector is ready, but not exposed yet
-
-`puzzle_bank.py` now contains a deterministic `generate_daily_challenge_set()`
-function. Given the same date, it creates the same ten puzzles for every player.
-
-The current Daily-10 design guarantees:
-
-- exactly **10 unique situations**
+- **9 realistic simulated-game scorecards**
+- **1 curated edge case**
 - **5 Roll 1 + 5 Roll 2**
 - **2 Opening + 3 Midgame + 3 Late Game + 2 True Endgame**
-- broad strategy-family coverage (normally 6+ distinct skills)
 - a deliberate difficulty mix
-- stable challenge IDs derived from date + bank version + puzzle state
+- broad strategy-family coverage
 
-A 31-day simulation produced **310 unique challenge IDs across 310 slots**.
+The same date still recreates the same ten challenge IDs for every player.
 
-v42.5 does **not** add the shared leaderboard/database yet. v43 can use this
-selector as the common puzzle source and store only player/group/submission data.
+## Final bank audit
 
-## Runtime files added
+- 420 scorecard contexts
+- 357 simulated / 63 curated
+- 85.0% realistic-game share
+- 81 / 81 original v42 exact states preserved
+- 252 / 252 canonical dice rolls
+- 211,680 Roll-1/Roll-2 puzzle situations
+- 3,669,120 exact legal-hold values
+- 200,148 Daily-Challenge-eligible situations
 
-- `puzzle_bank.py` — expanded practice generator + deterministic Daily-10 selector
-- `puzzle_bank.npz` — 420 human-readable scorecard contexts and metadata
+See `puzzle_bank_audit.json` and `puzzle_bank_contexts.csv` for the full audit.
+
+## Runtime files
+
+- `puzzle_bank.py` — realistic practice generator + deterministic Daily-10 selector
+- `puzzle_bank.npz` — 420 scorecards plus origin/profile/history metadata
 - `challenge_catalog.npz` — 211,680 tagged exact puzzle situations
-- `exact_policy.npz` — expanded exact live policy for all 420 contexts
+- `exact_policy.npz` — exact live policy for all 420 selected scorecard states
 
-Audit/support files:
+Support/audit files:
 
 - `puzzle_bank_audit.json`
 - `puzzle_bank_contexts.csv`
 - `puzzle_bank_tests.py`
 - `advanced_context_teaching_tests.py`
+- `exact_integration_tests.py`
 
-## Validation
+## Deployment from v42.5
 
-Key v42.5 checks:
+Only the puzzle-bank branch changed. Upload these files to the **root** of the
+GitHub repo:
 
-- 420 / 420 expanded scorecard contexts map to exact policy states
-- 81 / 81 previous exact states preserved
-- all 252 canonical dice rolls represented
-- both Roll 1 and Roll 2 represented
-- **211,680** exact state/roll policy situations
-- **3,669,120** legal hold values structurally audited
-- **20,000 / 20,000** generated practice rounds used exact mode
-- 20,000 sampled public exact analyses/value lookups passed
-- 840 representative exact-first teaching reports used zero fallbacks
-- exact ranked lookup remains about **0.04 ms** locally after load
-- Daily-10 deterministic/balance tests passed
-- 31-day Daily-10 simulation passed
-- advanced teaching checks passed for bonus-secured, bonus-dead, Joker,
-  true-endgame, and Chance-timing contexts
-- strategy regression suite: **26 PASS / 0 FAIL**
-- published strategy audit: **15 PASS / 0 FAIL**
-- teaching, personalized teaching, Session Coach, practice-momentum, mobile/UI
-  protection tests all pass
-
-Run the new readiness tests with:
-
-```bash
-python puzzle_bank_tests.py
-python advanced_context_teaching_tests.py
-python exact_integration_tests.py
-```
-
-The established suites remain available as well.
-
-## Deployment from v42 / v41.1
-
-Because the exact policy and practice source expanded, this update requires more
-than an `app.py` swap. Upload these files to the **root** of the GitHub repo:
-
-- `app.py`
-- `exact_mode.py`
 - `exact_policy.npz`
 - `puzzle_bank.py`
 - `puzzle_bank.npz`
 - `challenge_catalog.npz`
-- `session_learning.py`
 - `README.md` (recommended)
 
-The three `.npz` files must sit beside `app.py`; do not place them in a subfolder.
+`app.py`, `exact_mode.py`, `session_learning.py`, the dice UI, grading, teaching
+cards, and mastery system are unchanged from v42.5.
 
 Suggested commit message:
 
-`Expand exact puzzle universe for Daily Challenge - v42.5`
+`Make expanded scorecards realistic - v42.6`
 
-After Streamlit redeploys, confirm that normal practice loads, exact fallbacks
-remain at 0 in `?solver=1`, and a handful of rounds include noticeably broader
-scorecard contexts (including true endgames / bonus-secured / bonus-dead cases).
+After Streamlit redeploys, play 10–15 normal practice rounds. The strategic
+difficulty should feel like v42.5, while the scorecards should look much more
+like snapshots from real games.
+
+The shared Daily Challenge leaderboard/database is still the planned v43 step.

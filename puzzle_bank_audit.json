@@ -1,15 +1,12 @@
 {
-  "version": "42.5",
+  "version": "42.6",
   "scorecard_contexts": 420,
-  "previous_exact_states_preserved": 81,
-  "previous_exact_states_total": 81,
-  "canonical_dice_rolls": 252,
-  "roll_stages": [
-    1,
-    2
-  ],
-  "state_roll_policy_records": 211680,
-  "legal_hold_values_checked_by_shape": 3669120,
+  "realistic_simulated_contexts": 357,
+  "curated_edge_contexts": 63,
+  "realistic_share": 0.85,
+  "simulated_games_used": 4000,
+  "previous_v42_states_preserved": 81,
+  "previous_v42_states_total": 81,
   "stage_counts": {
     "Midgame": 120,
     "Opening": 60,
@@ -17,61 +14,73 @@
     "Late Game": 120
   },
   "open_count_counts": {
-    "1": 58,
-    "2": 62,
-    "3": 40,
-    "4": 40,
-    "5": 40,
-    "6": 30,
-    "7": 30,
-    "8": 30,
-    "9": 30,
-    "10": 33,
-    "11": 19,
+    "1": 32,
+    "2": 88,
+    "3": 41,
+    "4": 38,
+    "5": 41,
+    "6": 42,
+    "7": 23,
+    "8": 26,
+    "9": 29,
+    "10": 39,
+    "11": 13,
     "12": 7,
     "13": 1
   },
   "bonus_status_counts": {
-    "On Pace": 125,
-    "Dead": 82,
+    "On Pace": 164,
     "Under Pressure": 79,
-    "Ahead": 62,
-    "Earned": 72
+    "Dead": 119,
+    "Ahead": 24,
+    "Earned": 34
   },
   "yahtzee_status_counts": {
-    "Zeroed": 128,
-    "Open": 201,
-    "Live 50": 91
+    "Zeroed": 77,
+    "Open": 191,
+    "Live 50": 152
   },
-  "candidate_situations": 211680,
-  "daily_eligible_situations": 201564,
-  "tied_optimal_situations": 6500,
-  "obvious_made_hand_situations": 11231,
+  "player_profile_counts": {
+    "curated": 63,
+    "regular": 154,
+    "strong": 116,
+    "messy": 87
+  },
+  "human_messiness_examples": {
+    "upper_zero_while_chance_open_contexts": 27,
+    "chance_already_used_with_7plus_boxes_open_contexts": 68,
+    "scorecards_with_nonstandard_upper_results": 303,
+    "chance_open_with_3_or_fewer_boxes_remaining": 1
+  },
+  "canonical_dice_rolls": 252,
+  "roll_stages": [
+    1,
+    2
+  ],
+  "state_roll_policy_records": 211680,
+  "legal_hold_values_checked_by_shape": 3669120,
+  "daily_eligible_situations": 200140,
+  "tied_optimal_situations": 3135,
+  "obvious_made_hand_situations": 11540,
   "skill_counts": {
-    "Matching Dice": 63645,
-    "Upper Bonus": 50628,
-    "Flexible Board": 15122,
-    "Full House": 11058,
-    "Straight Structure": 16966,
-    "Bonus Is Gone": 17100,
-    "Chance Timing": 1344,
-    "Bonus Secured": 15758,
-    "Joker / Extra Yahtzee": 20059
+    "Matching Dice": 63671,
+    "Flexible Board": 5562,
+    "Upper Bonus": 9407,
+    "Full House": 25020,
+    "Straight Structure": 57284,
+    "Bonus Is Gone": 8895,
+    "Chance Timing": 1008,
+    "Bonus Secured": 2529,
+    "Joker / Extra Yahtzee": 38304
   },
   "difficulty_counts": {
-    "Clear": 56949,
-    "Hard": 39838,
-    "Medium": 67956,
-    "Knife-edge": 11090,
-    "Punishing": 35847
+    "Clear": 60930,
+    "Hard": 34112,
+    "Medium": 57526,
+    "Knife-edge": 12308,
+    "Punishing": 46804
   },
-  "stage_candidate_counts": {
-    "Midgame": 60480,
-    "Opening": 30240,
-    "True Endgame": 60480,
-    "Late Game": 60480
-  },
-  "policy_file_bytes": 3014933,
-  "puzzle_bank_file_bytes": 8513,
-  "catalog_file_bytes": 993572
+  "policy_file_bytes": 3006738,
+  "puzzle_bank_file_bytes": 8099,
+  "catalog_file_bytes": 985209
 }
