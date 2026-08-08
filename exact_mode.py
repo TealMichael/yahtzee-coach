@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Fast exact-policy lookup and personalized coach-report generation for Yahtzee Coach v39.
+"""Fast exact-policy lookup and personalized coach-report generation for Yahtzee Coach v42.5.
 
 The heavy dynamic-programming solve is performed offline.  The live app only
 loads a compact policy table and performs indexed lookups.  If a scorecard is
@@ -265,6 +265,41 @@ def _upper_bonus_context(scorecard: Mapping[str, int | None]) -> dict:
     }
 
 
+def _scorecard_context_notes(scorecard: Mapping[str, int | None]) -> list[str]:
+    """Explain advanced scorecard conditions without changing the exact ranking."""
+    bonus = _upper_bonus_context(scorecard)
+    open_categories = [CATEGORY_LABELS[c] for c in CATEGORIES if scorecard.get(c) is None]
+    notes: list[str] = []
+
+    if len(open_categories) <= 2:
+        labels = " and ".join(open_categories) if open_categories else "no categories"
+        notes.append(
+            f"True endgame: only {labels} remain open. Generic opening rules matter much less now; the exact hold is optimizing those specific destinations."
+        )
+
+    if scorecard.get("yahtzee") == 50:
+        notes.append(
+            "Yahtzee is already scored for 50, so another Yahtzee can carry the 100-point bonus and the forced-upper/Joker rules can materially change the value of matching dice."
+        )
+
+    if bonus["earned"]:
+        notes.append(
+            "The 35-point upper bonus is already secured. Upper-section dice no longer need extra protection just to defend the 63-point threshold."
+        )
+    elif not bonus["alive"]:
+        notes.append(
+            "The 35-point upper bonus is mathematically out of reach. The exact solver is no longer paying for bonus pressure that cannot be recovered."
+        )
+
+    if scorecard.get("chance") is None and len(open_categories) <= 3:
+        notes.append(
+            "Chance is one of very few remaining escape valves, so raw die total can matter more than it would on an open scorecard."
+        )
+
+    # Two notes are enough to teach the context without turning the report into a wall of text.
+    return notes[:2]
+
+
 def _straight_core(hold: Sequence[int], scorecard: Mapping[str, int | None]) -> tuple[str | None, int]:
     unique = set(canonical(hold))
     candidates: list[tuple[str, int]] = []
@@ -357,6 +392,14 @@ def _visible_strategy_reason(
             "When a scoring hand is already made, compare the value of improving it with the risk of breaking guaranteed value.",
         )
 
+    if scorecard.get("yahtzee") == 50 and max_count >= 3:
+        face = max(counts, key=counts.get)
+        return (
+            "Exploit the extra-Yahtzee window",
+            f"The exact hold protects the {face}s because Yahtzee is already scored for 50. Another Yahtzee can add the 100-point bonus, and Joker/forced-upper rules make this matching core more valuable than it looks in an ordinary turn.",
+            "After a 50-point Yahtzee, matching dice deserve a fresh evaluation: the extra-Yahtzee bonus and Joker rules can dramatically raise their future value.",
+        )
+
     if max_count >= 4:
         face = max(counts, key=counts.get)
         paths: list[str] = []
@@ -423,10 +466,15 @@ def _visible_strategy_reason(
         face = max(counts, key=counts.get)
         upper = UPPER_BY_FACE[face]
         if _is_open(scorecard, upper):
-            bonus_text = " and the 35-point upper bonus is still reachable" if bonus["alive"] else ""
+            if bonus["earned"]:
+                context = "; the upper bonus is already secured, so the pair is being judged on the value of the open box and future scoring paths"
+            elif bonus["alive"]:
+                context = " and the 35-point upper bonus is still reachable"
+            else:
+                context = "; the upper bonus is no longer reachable, so the pair has to justify itself without that 35-point incentive"
             return (
                 f"Build the {CATEGORY_LABELS[upper]} box",
-                f"The exact hold protects a pair of {face}s while the {CATEGORY_LABELS[upper]} box is open{bonus_text}.",
+                f"The exact hold protects a pair of {face}s while the {CATEGORY_LABELS[upper]} box is open{context}.",
                 "Pairs are worth more when they line up with an open upper box and the rest of the scorecard still rewards that number.",
             )
         return (
@@ -438,10 +486,16 @@ def _visible_strategy_reason(
     if len(hold) == 1:
         face = hold[0]
         upper = UPPER_BY_FACE[face]
-        if _is_open(scorecard, upper) and bonus["alive"]:
+        if _is_open(scorecard, upper):
+            if bonus["earned"]:
+                upper_context = "the upper bonus is already banked, so this is about the value of the remaining box rather than protecting 63"
+            elif bonus["alive"]:
+                upper_context = "the upper bonus is still reachable"
+            else:
+                upper_context = "the upper bonus is out of reach, so this die must earn its keep from the remaining scorecard alone"
             return (
                 "Let the scorecard choose the die",
-                f"The exact solver keeps the {face} because {CATEGORY_LABELS[upper]} is still open and the upper bonus is still reachable; the other dice are worth more as fresh rerolls in this scorecard state.",
+                f"The exact solver keeps the {face} because {CATEGORY_LABELS[upper]} is still open and {upper_context}; the other dice are worth more as fresh rerolls in this scorecard state.",
                 "Late or constrained scorecards can make one useful upper die better than a visually nicer pattern. Read the open boxes, not just the dice.",
             )
         return (
@@ -561,9 +615,11 @@ def _hold_intent(
         face = max(counts, key=counts.get)
         upper = UPPER_BY_FACE[face]
         if _is_open(scorecard, upper):
+            if bonus["earned"]:
+                return f"Your hold targets the pair of {face}s and the open {CATEGORY_LABELS[upper]} box; the upper bonus is already secured."
             if bonus["alive"]:
                 return f"Your hold targets the pair of {face}s, supporting the open {CATEGORY_LABELS[upper]} box while the upper bonus is still reachable."
-            return f"Your hold targets the pair of {face}s and the open {CATEGORY_LABELS[upper]} box."
+            return f"Your hold targets the pair of {face}s and the open {CATEGORY_LABELS[upper]} box even though the upper bonus is no longer reachable."
         return f"Your hold uses the pair of {face}s as a matching-number base and rerolls the loose dice."
 
     if len(hold) == 1:
@@ -700,6 +756,7 @@ def build_exact_report(
     lesson_title, visible_reason, takeaway = _visible_strategy_reason(
         scorecard, display_optimal, roll_number
     )
+    context_notes = _scorecard_context_notes(scorecard)
     difference = _hold_difference(user_hold, display_optimal)
     closeness = _closeness_line(points_lost, is_optimal)
     user_idea, best_idea, adjustment = _personalized_comparison(
@@ -772,6 +829,9 @@ def build_exact_report(
             f"- That exact choice finishes about {points_lost:.2f} expected game point(s) higher from this scorecard state."
         )
 
+    for note in context_notes:
+        report.append(f"- Scorecard context: {note}")
+
     report.extend(["", "Teaching takeaway:"])
     report.append(f"- {lesson_title}: {takeaway}")
 
@@ -795,6 +855,7 @@ def build_exact_report(
         "legal_hold_count": len(results),
         "points_lost": float(points_lost),
         "lesson_title": lesson_title,
+        "context_notes": " | ".join(context_notes),
         "user_idea": user_idea,
         "best_idea": best_idea,
         "adjustment": adjustment,

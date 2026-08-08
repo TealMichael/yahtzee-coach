@@ -9,6 +9,8 @@ import streamlit.components.v1 as components
 import yahtzee_engine as yc
 from exact_mode import ExactPolicyTable, build_live_report_from_loader
 from session_learning import build_session_learning_summary
+from practice_progress import build_practice_progress, newly_unlocked_badges
+from puzzle_bank import generate_practice_challenge as generate_expanded_practice_challenge
 
 st.set_page_config(
     page_title="Yahtzee Coach",
@@ -744,7 +746,7 @@ st.markdown(
     /* v41 — result hierarchy and mobile-first coaching polish. */
     .progress-rail {
         display:grid;
-        grid-template-columns:repeat(3, minmax(0,1fr));
+        grid-template-columns:repeat(4, minmax(0,1fr));
         gap:0.42rem;
         margin:0.45rem 0 0.72rem 0;
     }
@@ -844,9 +846,49 @@ st.markdown(
     .top-hold-line { padding:0.38rem 0; border-bottom:1px solid rgba(127,127,127,0.14); line-height:1.34; }
     .top-hold-line:last-child { border-bottom:none; }
 
+    /* v42 — lightweight session momentum, achievements, and mastery. */
+    .unlock-card {
+        border:1px solid #f6c453;
+        background:linear-gradient(135deg,#fffbea 0%,#fff7d6 100%);
+        border-radius:16px;
+        padding:0.68rem 0.76rem;
+        margin:0.56rem 0;
+        color:#111827 !important;
+        box-shadow:0 2px 10px rgba(180,120,0,0.08);
+    }
+    .unlock-card * { color:inherit; }
+    .unlock-kicker { font-size:0.70rem; text-transform:uppercase; letter-spacing:0.055em; font-weight:950; color:#9a6700 !important; margin-bottom:0.34rem; }
+    .unlock-badge { display:flex; align-items:center; gap:0.55rem; padding:0.25rem 0; }
+    .unlock-icon { font-size:1.42rem; line-height:1; }
+    .unlock-name { font-weight:950; line-height:1.15; }
+    .unlock-copy { color:#6b7280 !important; font-size:0.82rem; margin-top:0.08rem; line-height:1.3; }
+
+    .mastery-card {
+        border:1px solid rgba(127,127,127,0.20);
+        background:#ffffff;
+        border-radius:17px;
+        padding:0.72rem 0.78rem;
+        margin:0.58rem 0 0.7rem 0;
+        color:#111827 !important;
+    }
+    .mastery-card * { color:inherit; }
+    .mastery-title { font-weight:950; font-size:1rem; }
+    .mastery-title span { color:#6b7280 !important; font-size:0.76rem; font-weight:750; margin-left:0.2rem; }
+    .mastery-note { color:#6b7280 !important; font-size:0.80rem; line-height:1.32; margin:0.18rem 0 0.44rem 0; }
+    .mastery-row { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; border-top:1px solid rgba(127,127,127,0.13); padding:0.48rem 0; }
+    .mastery-copy { min-width:0; line-height:1.2; }
+    .mastery-copy b { display:block; font-size:0.88rem; }
+    .mastery-copy span { display:block; color:#6b7280 !important; font-size:0.73rem; margin-top:0.12rem; }
+    .mastery-level { flex:0 0 auto; border-radius:999px; padding:0.20rem 0.46rem; font-size:0.69rem; font-weight:950; border:1px solid #d1d5db; background:#f8fafc; color:#475569 !important; }
+    .mastery-level.strong { border-color:#bfdbfe; background:#eff6ff; color:#1d4ed8 !important; }
+    .mastery-level.session-mastery { border-color:#c4b5fd; background:#f5f3ff; color:#6d28d9 !important; }
+    .achievement-label { color:#6b7280 !important; font-size:0.69rem; font-weight:900; text-transform:uppercase; letter-spacing:0.045em; border-top:1px solid rgba(127,127,127,0.13); padding-top:0.48rem; margin-top:0.04rem; }
+    .earned-row { display:flex; flex-wrap:wrap; gap:0.3rem; margin-top:0.3rem; }
+    .earned-chip { display:inline-flex; align-items:center; border:1px solid #fde68a; background:#fffbeb; color:#92400e !important; border-radius:999px; padding:0.22rem 0.48rem; font-size:0.72rem; font-weight:900; }
+
     @media (max-width:640px) {
         .block-container { padding-left:0.62rem; padding-right:0.62rem; padding-top:0.48rem; }
-        .progress-rail { gap:0.3rem; margin-bottom:0.58rem; }
+        .progress-rail { grid-template-columns:repeat(2, minmax(0,1fr)); gap:0.3rem; margin-bottom:0.58rem; }
         .progress-chip { padding:0.42rem 0.24rem; border-radius:12px; }
         .progress-kicker { font-size:0.62rem; letter-spacing:0.025em; }
         .progress-value { font-size:0.91rem; }
@@ -865,6 +907,11 @@ st.markdown(
         .detail-grid { grid-template-columns:1fr 1fr; gap:0.32rem; }
         .detail-box { padding:0.44rem 0.48rem; }
         .session-coach { padding:0.72rem 0.7rem; border-radius:16px; }
+        .mastery-card { padding:0.64rem 0.66rem; border-radius:15px; }
+        .mastery-row { align-items:flex-start; }
+        .mastery-copy span { font-size:0.70rem; }
+        .mastery-level { font-size:0.65rem; }
+        .unlock-card { padding:0.62rem 0.66rem; }
     }
     @media (max-width:390px) {
         .progress-value { font-size:0.84rem; }
@@ -1173,13 +1220,20 @@ def new_round(scroll_to_top=False):
     recent_signatures = list(st.session_state.get("recent_challenge_signatures", []))
 
     try:
-        challenge = yc.generate_practice_challenge(
+        challenge = generate_expanded_practice_challenge(
             avoid_recent_scenarios=recent_scenarios[-4:],
             avoid_recent_signatures=recent_signatures[-8:],
         )
-    except TypeError:
-        # Backward-compatible fallback for older engine files.
-        challenge = yc.generate_practice_challenge()
+    except Exception:
+        # Safety fallback: v42's original practice deck remains available if the
+        # expanded bank cannot load for any reason.
+        try:
+            challenge = yc.generate_practice_challenge(
+                avoid_recent_scenarios=recent_scenarios[-4:],
+                avoid_recent_signatures=recent_signatures[-8:],
+            )
+        except TypeError:
+            challenge = yc.generate_practice_challenge()
 
     st.session_state.challenge = challenge
 
@@ -1194,6 +1248,7 @@ def new_round(scroll_to_top=False):
     st.session_state.round_id = st.session_state.get("round_id", 0) + 1
     st.session_state.scroll_to_result = False
     st.session_state.scroll_to_top = scroll_to_top
+    st.session_state.new_badges = []
     # Reset held dice for the new round.
     st.session_state[f"held_indices_{st.session_state.round_id}"] = []
 
@@ -1211,6 +1266,8 @@ def initialize_state():
         st.session_state.scroll_to_result = False
     if "scroll_to_top" not in st.session_state:
         st.session_state.scroll_to_top = False
+    if "new_badges" not in st.session_state:
+        st.session_state.new_badges = []
     if "round_id" not in st.session_state:
         st.session_state.round_id = 0
     if "challenge" not in st.session_state:
@@ -1353,25 +1410,80 @@ def result_distance_text(lost_text, grade):
 
 
 def render_session_progress(history, solver_records):
-    exact_records = [record for record in solver_records if record.get("source") == "exact"]
-    exact_best = sum(float(record.get("points_lost", 0.0) or 0.0) <= 1e-5 for record in exact_records)
-    avg_loss = (
-        sum(float(record.get("points_lost", 0.0) or 0.0) for record in exact_records) / len(exact_records)
-        if exact_records else None
-    )
+    progress = build_practice_progress(solver_records)
     avg_letter, _ = session_average_grade(history)
-    best_text = f"{exact_best}/{len(exact_records)}" if exact_records else "—"
-    loss_text = f"{avg_loss:.2f} pts" if avg_loss is not None else "—"
+    best_text = f"{progress['optimal_count']}/{progress['rounds']}" if progress['rounds'] else "—"
+    loss_text = f"{progress['avg_points_lost']:.2f} pts" if progress['avg_points_lost'] is not None else "—"
+    streak = progress['current_exact_streak']
+    streak_text = f"🔥 {streak}" if streak else "—"
     st.markdown(
         "<div class='progress-rail'>"
         f"<div class='progress-chip'><div class='progress-kicker'>Rounds</div><div class='progress-value'>{len(history)}</div></div>"
         f"<div class='progress-chip'><div class='progress-kicker'>Best holds</div><div class='progress-value'>{best_text}</div></div>"
+        f"<div class='progress-chip'><div class='progress-kicker'>Streak</div><div class='progress-value'>{streak_text}</div></div>"
         f"<div class='progress-chip'><div class='progress-kicker'>Avg loss</div><div class='progress-value'>{loss_text}</div></div>"
         "</div>",
         unsafe_allow_html=True,
     )
     if history:
-        st.caption(f"Session grade: {avg_letter} · Exact best-hold rate updates after every submitted round.")
+        best_streak = progress['best_exact_streak']
+        streak_note = f" · Best streak: {best_streak}" if best_streak else ""
+        st.caption(f"Session grade: {avg_letter}{streak_note} · Progress resets with this browser session.")
+
+
+def render_new_badges():
+    badges = st.session_state.get("new_badges", [])
+    if not badges:
+        return
+    badge_html = "".join(
+        f"<div class='unlock-badge'><span class='unlock-icon'>{badge['icon']}</span>"
+        f"<div><div class='unlock-name'>{badge['name']}</div><div class='unlock-copy'>{badge['description']}</div></div></div>"
+        for badge in badges
+    )
+    st.markdown(
+        "<div class='unlock-card'><div class='unlock-kicker'>Achievement unlocked</div>"
+        + badge_html + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_practice_momentum(records):
+    progress = build_practice_progress(records)
+    if progress["rounds"] < 3:
+        return
+
+    mastery_rows = [row for row in progress["mastery"] if row["attempts"] >= 2][:4]
+    mastery_html = ""
+    for row in mastery_rows:
+        level_class = row["level"].lower().replace(" ", "-")
+        mastery_html += (
+            "<div class='mastery-row'>"
+            f"<div class='mastery-copy'><b>{row['skill']}</b>"
+            f"<span>{row['strong_count']}/{row['attempts']} strong decisions · {row['avg_loss']:.2f} avg pts lost</span></div>"
+            f"<div class='mastery-level {level_class}'>{row['level']}</div>"
+            "</div>"
+        )
+
+    if not mastery_html:
+        mastery_html = (
+            "<div class='muted'>Keep playing. A strategy appears here after you have seen it at least twice.</div>"
+        )
+
+    badge_html = "".join(
+        f"<span class='earned-chip'>{badge['icon']} {badge['name']}</span>"
+        for badge in progress["badges"]
+    ) or "<span class='muted'>No achievements yet — the first exact best hold unlocks Bullseye.</span>"
+
+    st.markdown(
+        "<div class='mastery-card'>"
+        "<div class='mastery-title'>🧩 Strategy mastery <span>this session</span></div>"
+        "<div class='mastery-note'>Mastery is intentionally conservative: repeated strong decisions are required before a skill levels up.</div>"
+        + mastery_html
+        + "<div class='achievement-label'>Session achievements</div>"
+        + f"<div class='earned-row'>{badge_html}</div>"
+        + "</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def render_result(report):
@@ -1576,15 +1688,28 @@ if not answer_submitted:
         })
 
         solver_record["scenario"] = challenge.get("scenario_name", "")
+        solver_record["bank_version"] = challenge.get("bank_version", "")
+        solver_record["skill_tag"] = challenge.get("skill_tag", "")
+        solver_record["difficulty"] = challenge.get("difficulty", "")
+        solver_record["stage"] = challenge.get("stage", "")
+        solver_record["bonus_status"] = challenge.get("bonus_status", "")
+        solver_record["challenge_id"] = challenge.get("challenge_id", "")
         solver_record["timestamp_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        before_solver_history = list(st.session_state.solver_history)
         st.session_state.solver_history.append(solver_record)
+        st.session_state.new_badges = newly_unlocked_badges(
+            before_solver_history,
+            st.session_state.solver_history,
+        )
         st.session_state.scroll_to_result = True
         st.session_state.scroll_to_top = False
         st.rerun()
 
 if st.session_state.report:
     render_result(st.session_state.report)
+    render_new_badges()
     render_session_coach(st.session_state.solver_history)
+    render_practice_momentum(st.session_state.solver_history)
     if st.button("Next round", type="primary", use_container_width=True):
         new_round(scroll_to_top=True)
         st.rerun()

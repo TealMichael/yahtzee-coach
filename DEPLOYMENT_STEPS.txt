@@ -1,38 +1,32 @@
-YAHTZEE COACH v39 — PERSONALIZED TEACHING UPDATE
+YAHTZEE COACH v42.5 — DEPLOYMENT FROM v42 / v41.1
 
-FROM A WORKING v38 DEPLOYMENT:
-
-1. Download and unzip yahtzee_coach_streamlit_game_v39.zip.
-2. Open GitHub: TealMichael/yahtzee-coach
-3. Make sure you are on the main branch at the repository root.
+1. Unzip yahtzee_coach_streamlit_game_v42_5.zip.
+2. Open the yahtzee_coach_game_v42_5 folder.
+3. In GitHub, open the ROOT of TealMichael/yahtzee-coach.
 4. Click Add file -> Upload files.
-5. From inside yahtzee_coach_game_v39, upload these UPDATED files:
-      app.py
-      exact_mode.py
-      README.md   (recommended)
+5. Upload these files:
+   - app.py
+   - exact_mode.py
+   - exact_policy.npz
+   - puzzle_bank.py
+   - puzzle_bank.npz
+   - challenge_catalog.npz
+   - session_learning.py
+   - README.md (recommended)
+6. IMPORTANT: exact_policy.npz, puzzle_bank.npz, and challenge_catalog.npz must sit beside app.py.
+7. Commit with:
+   Expand exact puzzle universe for Daily Challenge - v42.5
+8. Wait for Streamlit Community Cloud to redeploy.
+9. Open the normal app and play several rounds.
+10. Add ?solver=1 to the URL and confirm:
+    - Exact count rises
+    - Fallbacks stay at 0
+11. You should begin seeing a much broader mix of scorecards, including:
+    - true endgame (1–2 boxes open)
+    - upper bonus already secured
+    - upper bonus mathematically gone
+    - Joker / extra-Yahtzee contexts
+    - both Roll 1 and Roll 2
 
-   The exact_policy.npz file is unchanged from v38, so you do NOT need to
-   upload it again. yahtzee_engine.py is also unchanged.
-
-6. Commit message:
-      Personalize exact coach feedback - v39
-7. Commit directly to main.
-8. Wait for Streamlit Community Cloud to redeploy automatically.
-9. Refresh the public app and play several rounds.
-10. Optional developer check: add ?solver=1 to the app URL and confirm
-    Exact increases while Fallbacks stays at 0.
-
-WHAT SHOULD LOOK DIFFERENT:
-- A new Your idea vs. best idea card appears in the result.
-- Your Idea describes the strategic structure your selected dice preserve.
-- Exact Best Idea explains the solver's plan in scorecard context.
-- Adjustment tells you exactly what to add, release, or change.
-- Exact-optimal choices are explicitly affirmed.
-- Near-ties are framed as refinements rather than major mistakes.
-
-WHAT SHOULD NOT LOOK DIFFERENT:
-- dice size / dice tapping
-- scorecard layout
-- practice flow
-- exact solver recommendations
-- exact policy file
+v42 progress/mastery/mobile features are preserved.
+The shared Daily Challenge leaderboard/database is NOT live yet; v42.5 prepares the puzzle universe for v43.

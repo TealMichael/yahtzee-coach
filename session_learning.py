@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Session-level teaching summary for Yahtzee Coach v40.
+"""Session-level teaching summary for Yahtzee Coach v42.5.
 
 This module does not change Yahtzee strategy. It summarizes the exact solver's
 per-round teaching metadata into cautious, session-only coaching patterns.
@@ -21,6 +21,7 @@ SKILL_DESCRIPTIONS = {
     "Scorecard-aware flexibility": "letting the remaining scorecard decide which single die or small structure matters",
     "Flexible rerolls": "knowing when fewer held dice create more useful future paths",
     "Scorecard fit": "matching the hold to the open boxes instead of judging the dice in isolation",
+    "Joker / extra-Yahtzee play": "recognizing when a scored 50-point Yahtzee makes matching dice unusually valuable",
 }
 
 
@@ -30,6 +31,8 @@ def lesson_to_skill(lesson_title: str | None) -> str:
         return "Scorecard fit"
     if title == "Protect a made hand":
         return "Protecting made hands"
+    if title == "Exploit the extra-Yahtzee window":
+        return "Joker / extra-Yahtzee play"
     if title in {"Protect four matching dice", "Build from the triple", "Keep both pairs alive", "Keep the best matching base"}:
         return "Matching-dice structures"
     if title.startswith("Build the ") and title.endswith(" box"):

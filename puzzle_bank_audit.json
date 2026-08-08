@@ -1,0 +1,77 @@
+{
+  "version": "42.5",
+  "scorecard_contexts": 420,
+  "previous_exact_states_preserved": 81,
+  "previous_exact_states_total": 81,
+  "canonical_dice_rolls": 252,
+  "roll_stages": [
+    1,
+    2
+  ],
+  "state_roll_policy_records": 211680,
+  "legal_hold_values_checked_by_shape": 3669120,
+  "stage_counts": {
+    "Midgame": 120,
+    "Opening": 60,
+    "True Endgame": 120,
+    "Late Game": 120
+  },
+  "open_count_counts": {
+    "1": 58,
+    "2": 62,
+    "3": 40,
+    "4": 40,
+    "5": 40,
+    "6": 30,
+    "7": 30,
+    "8": 30,
+    "9": 30,
+    "10": 33,
+    "11": 19,
+    "12": 7,
+    "13": 1
+  },
+  "bonus_status_counts": {
+    "On Pace": 125,
+    "Dead": 82,
+    "Under Pressure": 79,
+    "Ahead": 62,
+    "Earned": 72
+  },
+  "yahtzee_status_counts": {
+    "Zeroed": 128,
+    "Open": 201,
+    "Live 50": 91
+  },
+  "candidate_situations": 211680,
+  "daily_eligible_situations": 201564,
+  "tied_optimal_situations": 6500,
+  "obvious_made_hand_situations": 11231,
+  "skill_counts": {
+    "Matching Dice": 63645,
+    "Upper Bonus": 50628,
+    "Flexible Board": 15122,
+    "Full House": 11058,
+    "Straight Structure": 16966,
+    "Bonus Is Gone": 17100,
+    "Chance Timing": 1344,
+    "Bonus Secured": 15758,
+    "Joker / Extra Yahtzee": 20059
+  },
+  "difficulty_counts": {
+    "Clear": 56949,
+    "Hard": 39838,
+    "Medium": 67956,
+    "Knife-edge": 11090,
+    "Punishing": 35847
+  },
+  "stage_candidate_counts": {
+    "Midgame": 60480,
+    "Opening": 30240,
+    "True Endgame": 60480,
+    "Late Game": 60480
+  },
+  "policy_file_bytes": 3014933,
+  "puzzle_bank_file_bytes": 8513,
+  "catalog_file_bytes": 993572
+}
