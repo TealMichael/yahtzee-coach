@@ -740,6 +740,136 @@ st.markdown(
         .session-coach-metric { padding:0.38rem 0.18rem; }
         .session-coach-metric-value { font-size:0.92rem; }
     }
+
+    /* v41 — result hierarchy and mobile-first coaching polish. */
+    .progress-rail {
+        display:grid;
+        grid-template-columns:repeat(3, minmax(0,1fr));
+        gap:0.42rem;
+        margin:0.45rem 0 0.72rem 0;
+    }
+    .progress-chip {
+        border:1px solid rgba(127,127,127,0.20);
+        border-radius:14px;
+        background:#f8fafc;
+        padding:0.48rem 0.45rem;
+        text-align:center;
+        color:#111827 !important;
+    }
+    .progress-chip * { color:inherit; }
+    .progress-kicker { color:#6b7280 !important; font-size:0.69rem; font-weight:800; text-transform:uppercase; letter-spacing:0.045em; }
+    .progress-value { margin-top:0.08rem; font-size:1.02rem; line-height:1.12; font-weight:950; }
+
+    .result-hero {
+        border:1px solid rgba(127,127,127,0.20);
+        border-radius:20px;
+        padding:0.82rem 0.9rem;
+        background:linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        box-shadow:0 3px 14px rgba(0,0,0,0.055);
+        margin:0.5rem 0 0.62rem 0;
+        color:#111827 !important;
+    }
+    .result-hero * { color:inherit; }
+    .result-hero-top { display:flex; align-items:center; gap:0.78rem; }
+    .result-hero-copy { min-width:0; flex:1; }
+    .result-verdict { font-size:1.18rem; font-weight:950; line-height:1.15; letter-spacing:-0.02em; }
+    .result-distance { margin-top:0.18rem; color:#6b7280 !important; font-size:0.88rem; line-height:1.3; }
+    .result-callout {
+        margin-top:0.64rem;
+        border-radius:13px;
+        background:#f3f7ff;
+        border:1px solid #dbe7ff;
+        padding:0.58rem 0.66rem;
+        line-height:1.38;
+    }
+
+    .hold-compare {
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:0.5rem;
+        margin:0.55rem 0;
+    }
+    .hold-card {
+        border:1px solid rgba(127,127,127,0.20);
+        border-radius:15px;
+        padding:0.62rem 0.68rem;
+        background:#ffffff;
+        min-width:0;
+        color:#111827 !important;
+    }
+    .hold-card.best { background:#eff6ff; border-color:#bfdbfe; }
+    .hold-card-label { font-size:0.70rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:900; color:#6b7280 !important; }
+    .hold-card.best .hold-card-label { color:#1d4ed8 !important; }
+    .hold-card-value { margin-top:0.2rem; font-size:1.04rem; font-weight:950; line-height:1.28; overflow-wrap:anywhere; }
+
+    .coach-three {
+        display:grid;
+        grid-template-columns:repeat(3, minmax(0,1fr));
+        gap:0.5rem;
+        margin:0.56rem 0;
+    }
+    .coach-step {
+        border:1px solid rgba(127,127,127,0.18);
+        border-radius:14px;
+        padding:0.62rem 0.66rem;
+        background:#ffffff;
+        color:#111827 !important;
+        line-height:1.38;
+        min-width:0;
+    }
+    .coach-step * { color:inherit; }
+    .coach-step.change { background:#fff7ed; border-color:#fed7aa; }
+    .coach-step.why { background:#f3f7ff; border-color:#dbeafe; }
+    .coach-step-title { font-size:0.71rem; font-weight:950; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.2rem; color:#6b7280 !important; }
+    .coach-step.change .coach-step-title { color:#c2410c !important; }
+    .coach-step.why .coach-step-title { color:#1d4ed8 !important; }
+
+    .lesson-card-v41 {
+        border:1px solid #c7d2fe;
+        background:linear-gradient(135deg,#f5f3ff 0%,#eff6ff 100%);
+        border-radius:16px;
+        padding:0.74rem 0.82rem;
+        margin:0.58rem 0;
+        color:#111827 !important;
+    }
+    .lesson-card-v41 * { color:inherit; }
+    .lesson-card-v41 .lesson-kicker { color:#4338ca !important; }
+
+    .detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0.42rem; margin:0.35rem 0 0.5rem 0; }
+    .detail-box { border:1px solid rgba(127,127,127,0.18); border-radius:12px; padding:0.5rem 0.56rem; background:#f8fafc; }
+    .detail-label { color:#6b7280; font-size:0.71rem; }
+    .detail-value { font-weight:900; margin-top:0.08rem; overflow-wrap:anywhere; }
+    .top-hold-line { padding:0.38rem 0; border-bottom:1px solid rgba(127,127,127,0.14); line-height:1.34; }
+    .top-hold-line:last-child { border-bottom:none; }
+
+    @media (max-width:640px) {
+        .block-container { padding-left:0.62rem; padding-right:0.62rem; padding-top:0.48rem; }
+        .progress-rail { gap:0.3rem; margin-bottom:0.58rem; }
+        .progress-chip { padding:0.42rem 0.24rem; border-radius:12px; }
+        .progress-kicker { font-size:0.62rem; letter-spacing:0.025em; }
+        .progress-value { font-size:0.91rem; }
+        .result-hero { padding:0.72rem 0.72rem; border-radius:17px; }
+        .result-hero-top { gap:0.58rem; align-items:flex-start; }
+        .result-verdict { font-size:1.06rem; }
+        .result-distance { font-size:0.82rem; }
+        .grade-badge { font-size:1.7rem; min-width:3.75rem; padding:0.28rem 0.58rem; border-radius:15px; }
+        .hold-compare { grid-template-columns:1fr; gap:0.38rem; }
+        .hold-card { padding:0.56rem 0.62rem; }
+        .coach-three { grid-template-columns:1fr; gap:0.38rem; }
+        .coach-step { padding:0.56rem 0.62rem; }
+        .lesson-card-v41 { padding:0.64rem 0.68rem; }
+        .detail-grid { grid-template-columns:1fr 1fr; gap:0.32rem; }
+        .detail-box { padding:0.44rem 0.48rem; }
+        .session-coach { padding:0.72rem 0.7rem; border-radius:16px; }
+    }
+    @media (max-width:390px) {
+        .progress-value { font-size:0.84rem; }
+        .progress-kicker { font-size:0.58rem; }
+        .result-hero-top { align-items:center; }
+        .result-verdict { font-size:1rem; }
+        .hold-card-value { font-size:0.98rem; }
+        .detail-grid { grid-template-columns:1fr; }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1198,10 +1328,59 @@ def install_dice_scroll_guard():
         height=0,
     )
 
+def parse_float_text(text):
+    match = re.search(r"-?\d+(?:\.\d+)?", str(text or ""))
+    return float(match.group(0)) if match else None
+
+
+def result_distance_text(lost_text, grade):
+    lost_value = parse_float_text(lost_text)
+    if lost_value is None:
+        return "Exact strategy comparison available below."
+    if lost_value <= 1e-5:
+        return "Exact best play — no expected game points given up."
+    if lost_value <= 0.25:
+        return f"Only {lost_value:.2f} expected game points from exact — essentially a near tie."
+    if lost_value <= 0.75:
+        return f"{lost_value:.2f} expected game points from exact — a small strategic edge."
+    if lost_value <= 2.50:
+        return f"{lost_value:.2f} expected game points from exact — worth learning from, but the idea had merit."
+    return f"{lost_value:.2f} expected game points from exact — this adjustment matters a lot over time."
+
+
+def render_session_progress(history, solver_records):
+    exact_records = [record for record in solver_records if record.get("source") == "exact"]
+    exact_best = sum(float(record.get("points_lost", 0.0) or 0.0) <= 1e-5 for record in exact_records)
+    avg_loss = (
+        sum(float(record.get("points_lost", 0.0) or 0.0) for record in exact_records) / len(exact_records)
+        if exact_records else None
+    )
+    avg_letter, _ = session_average_grade(history)
+    best_text = f"{exact_best}/{len(exact_records)}" if exact_records else "—"
+    loss_text = f"{avg_loss:.2f} pts" if avg_loss is not None else "—"
+    st.markdown(
+        "<div class='progress-rail'>"
+        f"<div class='progress-chip'><div class='progress-kicker'>Rounds</div><div class='progress-value'>{len(history)}</div></div>"
+        f"<div class='progress-chip'><div class='progress-kicker'>Best holds</div><div class='progress-value'>{best_text}</div></div>"
+        f"<div class='progress-chip'><div class='progress-kicker'>Avg loss</div><div class='progress-value'>{loss_text}</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    if history:
+        st.caption(f"Session grade: {avg_letter} · Exact best-hold rate updates after every submitted round.")
+
+
 def render_result(report):
     st.markdown("<div id='coach-result-anchor'></div>", unsafe_allow_html=True)
     if st.session_state.get("scroll_to_result", False):
-        components.html("\n            <script>\n            setTimeout(function() {\n                const el = window.parent.document.getElementById('coach-result-anchor');\n                if (el) { el.scrollIntoView({behavior:'smooth', block:'start'}); }\n            }, 250);\n            </script>\n            ", height=0)
+        components.html("""
+            <script>
+            setTimeout(function() {
+                const el = window.parent.document.getElementById('coach-result-anchor');
+                if (el) { el.scrollIntoView({behavior:'smooth', block:'start'}); }
+            }, 250);
+            </script>
+            """, height=0)
         st.session_state.scroll_to_result = False
 
     grade = extract_line(report, "Grade:")
@@ -1220,38 +1399,49 @@ def render_result(report):
     idea_items = extract_section(report, "Your idea vs. best idea:")
     takeaway_items = extract_section(report, "Teaching takeaway:")
     note_items = extract_section(report, "Narrow upper-box note:")
+    top_holds = extract_section(report, "Top exact holds:")
     grade_class = GRADE_BADGE_CLASS.get(grade, "grade-b")
+
+    user_idea = next((item[len("Your idea: "):] for item in idea_items if item.startswith("Your idea: ")), "")
+    best_idea = next((item[len("Best idea: "):] for item in idea_items if item.startswith("Best idea: ")), "")
+    adjustment = next((item[len("Adjustment: "):] for item in idea_items if item.startswith("Adjustment: ")), "")
 
     st.markdown("<div class='section-label'>Coach result</div>", unsafe_allow_html=True)
     st.markdown(
-        f"<div class='soft-card'>"
-        f"<div class='grade-row'><div class='grade-badge {grade_class}'>{grade or '—'}</div>"
-        f"<div><b>{rating or 'Coach feedback'}</b><br>"
-        f"<span class='muted'>Best hold: {optimal_choice or '—'}</span></div></div>"
-        f"<div class='result-mini'>"
-        f"<div class='result-mini-box'><div class='result-mini-label'>You kept</div><div class='result-mini-value'>{your_choice or '—'}</div></div>"
-        f"<div class='result-mini-box'><div class='result-mini-label'>{decision_metric_label}</div><div class='result-mini-value'>{decision_metric_value}</div></div>"
-        f"</div>"
-        + (f"<div class='coach-says'><b>Coach says:</b><br>{recommendation}</div>" if recommendation else "")
+        "<div class='result-hero'>"
+        "<div class='result-hero-top'>"
+        f"<div class='grade-badge {grade_class}'>{grade or '—'}</div>"
+        "<div class='result-hero-copy'>"
+        f"<div class='result-verdict'>{rating or 'Coach feedback'}</div>"
+        f"<div class='result-distance'>{result_distance_text(lost, grade)}</div>"
+        "</div></div>"
+        + (f"<div class='result-callout'><b>Coach says:</b> {recommendation}</div>" if recommendation else "")
         + "</div>",
         unsafe_allow_html=True,
     )
 
-    if idea_items:
-        user_idea = next((item[len("Your idea: "):] for item in idea_items if item.startswith("Your idea: ")), "")
-        best_idea = next((item[len("Best idea: "):] for item in idea_items if item.startswith("Best idea: ")), "")
-        adjustment = next((item[len("Adjustment: "):] for item in idea_items if item.startswith("Adjustment: ")), "")
-        if user_idea or best_idea:
-            st.markdown(
-                "<div class='idea-compare'><div class='idea-title'>Your idea vs. best idea</div>"
-                "<div class='idea-grid'>"
-                f"<div class='idea-box'><div class='idea-kicker'>Your idea</div><div>{user_idea or '—'}</div></div>"
-                f"<div class='idea-box best'><div class='idea-kicker'>Exact best idea</div><div>{best_idea or '—'}</div></div>"
-                "</div>"
-                + (f"<div class='idea-adjust'><b>Adjustment:</b> {adjustment}</div>" if adjustment else "")
-                + "</div>",
-                unsafe_allow_html=True,
-            )
+    st.markdown(
+        "<div class='hold-compare'>"
+        f"<div class='hold-card'><div class='hold-card-label'>You kept</div><div class='hold-card-value'>{your_choice or '—'}</div></div>"
+        f"<div class='hold-card best'><div class='hold-card-label'>Exact best hold</div><div class='hold-card-value'>{optimal_choice or '—'}</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    what_went_well = good_items[0] if good_items else (user_idea or "Your hold had a clear strategic target.")
+    what_changes = adjustment or (why_items[0] if why_items else "Compare your hold with the exact best hold above.")
+    why_it_matters = why_items[0] if why_items else (best_idea or recommendation or "The exact solver compares every legal hold through the rest of the game.")
+    if what_changes == why_it_matters and len(why_items) > 1:
+        why_it_matters = why_items[1]
+
+    st.markdown(
+        "<div class='coach-three'>"
+        f"<div class='coach-step'><div class='coach-step-title'>✓ What you did well</div><div>{what_went_well}</div></div>"
+        f"<div class='coach-step change'><div class='coach-step-title'>→ What changes</div><div>{what_changes}</div></div>"
+        f"<div class='coach-step why'><div class='coach-step-title'>Why it matters</div><div>{why_it_matters}</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
     if takeaway_items:
         takeaway = takeaway_items[0]
@@ -1260,38 +1450,29 @@ def render_result(report):
         else:
             lesson_title, lesson_text = "Key lesson", takeaway
         st.markdown(
-            f"<div class='lesson-card'><div class='lesson-kicker'>🧠 {lesson_title}</div>"
+            f"<div class='lesson-card-v41'><div class='lesson-kicker'>🧠 {lesson_title}</div>"
             f"<div class='lesson-text'>{lesson_text}</div></div>",
             unsafe_allow_html=True,
         )
 
-    short_lines = []
-    if closeness_items:
-        short_lines.append(closeness_items[0])
-    if note_items:
-        short_lines.extend(note_items[:2])
-    if good_items:
-        short_lines.append(good_items[0])
-    if why_items:
-        short_lines.extend(why_items[:2])
-
-    if short_lines:
-        seen = set()
-        unique_lines = []
-        for line in short_lines:
-            if line not in seen:
-                seen.add(line)
-                unique_lines.append(line)
-        st.markdown("**Quick breakdown**")
+    with st.expander("Strategy details", expanded=False):
+        st.caption("The exact math is here when you want it; the main coach view stays focused on the lesson.")
         st.markdown(
-            "<ul class='tight-list'>" + "".join(f"<li>{line}</li>" for line in unique_lines[:4]) + "</ul>",
+            "<div class='detail-grid'>"
+            f"<div class='detail-box'><div class='detail-label'>{decision_metric_label}</div><div class='detail-value'>{decision_metric_value}</div></div>"
+            f"<div class='detail-box'><div class='detail-label'>Expected points lost</div><div class='detail-value'>{lost or '0.00'}</div></div>"
+            "</div>",
             unsafe_allow_html=True,
         )
-
-    if lost:
-        st.caption(f"Long-run difference: {lost} expected game points")
-
-    with st.expander("Full coach report"):
+        if closeness_items:
+            st.markdown(f"**How close was it?** {closeness_items[0]}")
+        if note_items:
+            st.markdown("**Scorecard note**")
+            st.markdown("<ul class='tight-list'>" + "".join(f"<li>{line}</li>" for line in note_items[:2]) + "</ul>", unsafe_allow_html=True)
+        if top_holds:
+            st.markdown("**Top exact holds**")
+            st.markdown("".join(f"<div class='top-hold-line'>{line}</div>" for line in top_holds[:3]), unsafe_allow_html=True)
+        st.markdown("**Full text report**")
         st.code(report, language="text")
 
 
@@ -1321,24 +1502,7 @@ if st.session_state.get("scroll_to_top", False):
 st.markdown("<h1 class='top-title'>🎲 Yahtzee Coach</h1>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>Hold Strategy Trainer</div>", unsafe_allow_html=True)
 
-avg_letter, avg_points = session_average_grade(history)
-best_holds = sum(1 for item in history if item.get("grade") == "A+")
-
-last_grade = history[-1].get("grade", "—") if history else "—"
-best_hold_text = f"{best_holds}/{len(history)}" if history else "—"
-avg_points_text = f"{avg_points:.2f}" if avg_points is not None else "—"
-
-st.markdown(
-    f"""
-    <div class='session-strip'>
-        <div class='session-box'><div class='session-label'>Rounds</div><div class='session-value'>{len(history)}</div></div>
-        <div class='session-box'><div class='session-label'>Session Grade</div><div class='session-value'>{avg_letter}</div></div>
-        <div class='session-box'><div class='session-label'>Best Holds</div><div class='session-value'>{best_hold_text}</div></div>
-        <div class='session-box'><div class='session-label'>Last Grade</div><div class='session-value'>{last_grade}</div></div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+render_session_progress(history, st.session_state.solver_history)
 
 
 roll_number = challenge["roll_number"]
