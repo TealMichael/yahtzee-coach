@@ -774,6 +774,8 @@ st.markdown(
     .result-hero-copy { min-width:0; flex:1; }
     .result-verdict { font-size:1.18rem; font-weight:950; line-height:1.15; letter-spacing:-0.02em; }
     .result-distance { margin-top:0.18rem; color:#6b7280 !important; font-size:0.88rem; line-height:1.3; }
+    .result-meta-row { display:flex; flex-wrap:wrap; gap:0.34rem; margin-top:0.42rem; }
+    .rank-chip { display:inline-flex; align-items:center; gap:0.24rem; border:1px solid #c7d2fe; background:#eef2ff; color:#3730a3 !important; border-radius:999px; padding:0.24rem 0.52rem; font-size:0.78rem; font-weight:900; line-height:1.2; }
     .result-callout {
         margin-top:0.64rem;
         border-radius:13px;
@@ -852,6 +854,8 @@ st.markdown(
         .result-hero-top { gap:0.58rem; align-items:flex-start; }
         .result-verdict { font-size:1.06rem; }
         .result-distance { font-size:0.82rem; }
+        .result-meta-row { margin-top:0.36rem; gap:0.28rem; }
+        .rank-chip { font-size:0.74rem; padding:0.22rem 0.46rem; }
         .grade-badge { font-size:1.7rem; min-width:3.75rem; padding:0.28rem 0.58rem; border-radius:15px; }
         .hold-compare { grid-template-columns:1fr; gap:0.38rem; }
         .hold-card { padding:0.56rem 0.62rem; }
@@ -1414,7 +1418,8 @@ def render_result(report):
         "<div class='result-hero-copy'>"
         f"<div class='result-verdict'>{rating or 'Coach feedback'}</div>"
         f"<div class='result-distance'>{result_distance_text(lost, grade)}</div>"
-        "</div></div>"
+        + (f"<div class='result-meta-row'><div class='rank-chip'>🏆 Hold rank: {hold_rank}</div></div>" if hold_rank else "")
+        + "</div></div>"
         + (f"<div class='result-callout'><b>Coach says:</b> {recommendation}</div>" if recommendation else "")
         + "</div>",
         unsafe_allow_html=True,
