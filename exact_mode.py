@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Fast exact-policy lookup and coach-report generation for Yahtzee Coach v38.
+"""Fast exact-policy lookup and personalized coach-report generation for Yahtzee Coach v39.
 
 The heavy dynamic-programming solve is performed offline.  The live app only
 loads a compact policy table and performs indexed lookups.  If a scorecard is
@@ -513,6 +513,128 @@ def _pattern_lines(
     return lines[:2]
 
 
+
+def _hold_intent(
+    hold: Sequence[int],
+    scorecard: Mapping[str, int | None],
+) -> str:
+    """Translate a hold into a cautious, player-facing description of its likely plan.
+
+    We describe what the hold *does* rather than claiming to know what the player
+    was thinking.  That keeps the teaching language personalized without
+    pretending the app can read intent.
+    """
+    hold = canonical(hold)
+    bonus = _upper_bonus_context(scorecard)
+
+    if not hold:
+        return "Your hold resets the roll and maximizes the number of fresh dice."
+
+    made = _made_hand_name(hold, scorecard)
+    if made:
+        return f"Your hold locks in a made {made} instead of risking that completed structure."
+
+    counts = {face: hold.count(face) for face in range(1, 7)}
+    max_count = max(counts.values(), default=0)
+
+    if max_count >= 4:
+        face = max(counts, key=counts.get)
+        return f"Your hold builds around four {face}s, a one-die-away matching core with major upside."
+
+    if max_count == 3:
+        face = max(counts, key=counts.get)
+        return f"Your hold builds around three {face}s and uses the remaining reroll(s) to improve that matching core."
+
+    pair_faces = [face for face, count in counts.items() if count == 2]
+    if len(pair_faces) >= 2:
+        if _is_open(scorecard, "full_house"):
+            return f"Your hold protects two pairs ({pair_faces[0]}s and {pair_faces[1]}s), keeping a direct Full House path alive."
+        return f"Your hold protects two pairs ({pair_faces[0]}s and {pair_faces[1]}s), preserving two matching-number directions."
+
+    straight_name, straight_core = _straight_core(hold, scorecard)
+    if straight_name and straight_core >= 4 and len(set(hold)) >= 4:
+        return f"Your hold protects a four-number {straight_name} core and rerolls around the missing connection."
+    if straight_name and straight_core == 3 and len(set(hold)) >= 3:
+        return f"Your hold is a {straight_name} chase: it keeps three useful distinct numbers from a live straight pattern."
+
+    if max_count == 2:
+        face = max(counts, key=counts.get)
+        upper = UPPER_BY_FACE[face]
+        if _is_open(scorecard, upper):
+            if bonus["alive"]:
+                return f"Your hold targets the pair of {face}s, supporting the open {CATEGORY_LABELS[upper]} box while the upper bonus is still reachable."
+            return f"Your hold targets the pair of {face}s and the open {CATEGORY_LABELS[upper]} box."
+        return f"Your hold uses the pair of {face}s as a matching-number base and rerolls the loose dice."
+
+    if len(hold) == 1:
+        face = hold[0]
+        upper = UPPER_BY_FACE[face]
+        if _is_open(scorecard, upper):
+            return f"Your hold keeps the {face} as a clean target for the open {CATEGORY_LABELS[upper]} box while rerolling everything else."
+        return f"Your hold keeps only the {face}, choosing flexibility over committing to a larger partial pattern."
+
+    return "Your hold protects a mixed partial structure while leaving the remaining dice available to improve it."
+
+
+def _personalized_adjustment(
+    user_hold: Sequence[int],
+    optimal_hold: Sequence[int],
+    *,
+    points_lost: float,
+    is_optimal: bool,
+) -> str:
+    user = list(canonical(user_hold))
+    optimal = list(canonical(optimal_hold))
+    if is_optimal:
+        return "No adjustment needed: your plan is already an exact best play in this position."
+
+    add = optimal.copy()
+    release = user.copy()
+    for value in canonical(user_hold):
+        if value in add:
+            add.remove(value)
+            release.remove(value)
+
+    if points_lost <= 0.25:
+        lead = "Tiny refinement"
+    elif points_lost <= 0.75:
+        lead = "Small refinement"
+    elif points_lost <= 2.50:
+        lead = "Upgrade the plan"
+    elif points_lost <= 6.00:
+        lead = "Clear adjustment"
+    else:
+        lead = "Major correction"
+
+    if add and not release:
+        return f"{lead}: keep your current idea, but also protect {_format_faces(add)}."
+    if release and not add:
+        return f"{lead}: keep the useful core, but release {_format_faces(release)} back into the reroll."
+    if add and release:
+        return f"{lead}: protect {_format_faces(add)} and release {_format_faces(release)}."
+    return f"{lead}: use the exact hold instead of the current selection."
+
+
+def _personalized_comparison(
+    scorecard: Mapping[str, int | None],
+    user_hold: Sequence[int],
+    optimal_hold: Sequence[int],
+    *,
+    visible_reason: str,
+    points_lost: float,
+    is_optimal: bool,
+) -> tuple[str, str, str]:
+    """Return player-plan, best-plan, and adjustment sentences for v39."""
+    user_idea = _hold_intent(user_hold, scorecard)
+    if is_optimal:
+        best_idea = "The exact solver agrees with that plan. " + visible_reason
+    else:
+        best_idea = f"The exact plan is {hold_text(optimal_hold)}. {visible_reason}"
+    adjustment = _personalized_adjustment(
+        user_hold, optimal_hold, points_lost=points_lost, is_optimal=is_optimal
+    )
+    return user_idea, best_idea, adjustment
+
 def _closeness_line(points_lost: float, is_optimal: bool) -> str:
     if is_optimal:
         return "Exact best play: no legal hold has a higher full-game expected score."
@@ -580,6 +702,14 @@ def build_exact_report(
     )
     difference = _hold_difference(user_hold, display_optimal)
     closeness = _closeness_line(points_lost, is_optimal)
+    user_idea, best_idea, adjustment = _personalized_comparison(
+        scorecard,
+        user_hold,
+        display_optimal,
+        visible_reason=visible_reason,
+        points_lost=points_lost,
+        is_optimal=is_optimal,
+    )
 
     if is_optimal:
         recommendation = f"Yes — {hold_text(display_optimal)}. {visible_reason}"
@@ -607,6 +737,11 @@ def build_exact_report(
         f"Your exact expected game value: {user_value:.2f}",
         f"Optimal exact expected game value: {best_value:.2f}",
         f"Expected game points lost: {points_lost:.2f}",
+        "",
+        "Your idea vs. best idea:",
+        f"- Your idea: {user_idea}",
+        f"- Best idea: {best_idea}",
+        f"- Adjustment: {adjustment}",
         "",
         "How close was it?",
         f"- {closeness}",
@@ -660,6 +795,9 @@ def build_exact_report(
         "legal_hold_count": len(results),
         "points_lost": float(points_lost),
         "lesson_title": lesson_title,
+        "user_idea": user_idea,
+        "best_idea": best_idea,
+        "adjustment": adjustment,
         "lookup_ms": (perf_counter() - started) * 1000.0,
     }
     return "\n".join(report), metadata

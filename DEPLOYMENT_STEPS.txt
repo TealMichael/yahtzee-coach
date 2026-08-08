@@ -1,31 +1,38 @@
-YAHTZEE COACH v37 — UPDATE CHECKLIST
+YAHTZEE COACH v39 — PERSONALIZED TEACHING UPDATE
 
-1. Download and unzip yahtzee_coach_streamlit_game_v37.zip.
-2. Open GitHub and go to: TealMichael/yahtzee-coach
-3. Open the repository root — the same place where the current app.py lives.
+FROM A WORKING v38 DEPLOYMENT:
+
+1. Download and unzip yahtzee_coach_streamlit_game_v39.zip.
+2. Open GitHub: TealMichael/yahtzee-coach
+3. Make sure you are on the main branch at the repository root.
 4. Click Add file -> Upload files.
-5. From inside the unzipped yahtzee_coach_game_v37 folder, upload:
+5. From inside yahtzee_coach_game_v39, upload these UPDATED files:
       app.py
-      yahtzee_engine.py
       exact_mode.py
-      exact_policy.npz
-      requirements.txt
-      README.md                  (recommended, not required by Streamlit)
-      exact_integration_tests.py (recommended, not required by Streamlit)
-      strategy_tests.py          (optional)
-      published_strategy_tests.py(optional)
+      README.md   (recommended)
 
-   IMPORTANT: upload the FILES themselves to the repository root.
-   Do not upload the zip file and do not create a nested v37 folder.
+   The exact_policy.npz file is unchanged from v38, so you do NOT need to
+   upload it again. yahtzee_engine.py is also unchanged.
 
-6. Use commit message:
-      Promote exact solver to live strategy - v37
-7. Commit directly to the main branch.
+6. Commit message:
+      Personalize exact coach feedback - v39
+7. Commit directly to main.
 8. Wait for Streamlit Community Cloud to redeploy automatically.
-9. Open the public app and refresh it.
-10. Play a few rounds. For a developer check, add ?solver=1 to the app URL.
-    The diagnostic panel should show Exact increasing and Fallbacks staying at 0.
+9. Refresh the public app and play several rounds.
+10. Optional developer check: add ?solver=1 to the app URL and confirm
+    Exact increases while Fallbacks stays at 0.
 
-Old shadow_mode.py, shadow_mode_tests.py, and exact_shadow_policy.npz can remain
-in the repository; v37 no longer imports them. They can be deleted later for
-cleanup, but deleting them is not required for this update.
+WHAT SHOULD LOOK DIFFERENT:
+- A new Your idea vs. best idea card appears in the result.
+- Your Idea describes the strategic structure your selected dice preserve.
+- Exact Best Idea explains the solver's plan in scorecard context.
+- Adjustment tells you exactly what to add, release, or change.
+- Exact-optimal choices are explicitly affirmed.
+- Near-ties are framed as refinements rather than major mistakes.
+
+WHAT SHOULD NOT LOOK DIFFERENT:
+- dice size / dice tapping
+- scorecard layout
+- practice flow
+- exact solver recommendations
+- exact policy file

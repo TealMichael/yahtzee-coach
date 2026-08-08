@@ -617,6 +617,53 @@ st.markdown(
         color:#111827 !important;
     }
     .coach-says * { color:#111827 !important; }
+    .idea-compare {
+        border:1px solid rgba(127,127,127,0.22);
+        background:rgba(255,255,255,0.92);
+        border-radius:16px;
+        padding:0.72rem;
+        margin:0.55rem 0;
+        color:#111827 !important;
+    }
+    .idea-compare * { color:#111827 !important; }
+    .idea-title {
+        font-size:0.78rem;
+        text-transform:uppercase;
+        letter-spacing:0.055em;
+        font-weight:900;
+        color:#6b7280 !important;
+        margin-bottom:0.45rem;
+    }
+    .idea-grid {
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:0.48rem;
+    }
+    .idea-box {
+        border-radius:13px;
+        padding:0.58rem 0.64rem;
+        line-height:1.36;
+        background:#f8fafc;
+        border:1px solid rgba(127,127,127,0.18);
+    }
+    .idea-box.best { background:#f3f7ff; border-color:rgba(25,103,210,0.22); }
+    .idea-kicker {
+        font-size:0.72rem;
+        text-transform:uppercase;
+        letter-spacing:0.05em;
+        font-weight:900;
+        color:#6b7280 !important;
+        margin-bottom:0.18rem;
+    }
+    .idea-box.best .idea-kicker { color:#1967d2 !important; }
+    .idea-adjust {
+        margin-top:0.48rem;
+        border-radius:12px;
+        padding:0.5rem 0.62rem;
+        background:#fff7ed;
+        border:1px solid #fed7aa;
+        line-height:1.36;
+    }
     .lesson-card {
         border:1px solid rgba(25,103,210,0.22);
         background:#f8fbff;
@@ -651,6 +698,7 @@ st.markdown(
         .score-value { font-size:0.86rem; }
         .grade-badge { font-size:1.8rem; min-width:4rem; }
         .result-mini { grid-template-columns:1fr; }
+        .idea-grid { grid-template-columns:1fr; }
     }
     </style>
     """,
@@ -683,7 +731,7 @@ def extract_section(report, header):
         "Roll 1 lookahead note:", "Game-aware note:", "Yahtzee-path note:",
         "What was good about your move?", "Bonus-chase check:",
         "Narrow upper-box note:", "Why was the optimal move better?",
-        "How close was it?", "Teaching takeaway:", "Top exact holds:",
+        "How close was it?", "Your idea vs. best idea:", "Teaching takeaway:", "Top exact holds:",
         "Top Roll 1 options:", "Coach recommendation:",
     }
     capture = False
@@ -1060,6 +1108,7 @@ def render_result(report):
     good_items = extract_section(report, "What was good about your move?")
     why_items = extract_section(report, "Why was the optimal move better?")
     closeness_items = extract_section(report, "How close was it?")
+    idea_items = extract_section(report, "Your idea vs. best idea:")
     takeaway_items = extract_section(report, "Teaching takeaway:")
     note_items = extract_section(report, "Narrow upper-box note:")
     grade_class = GRADE_BADGE_CLASS.get(grade, "grade-b")
@@ -1078,6 +1127,22 @@ def render_result(report):
         + "</div>",
         unsafe_allow_html=True,
     )
+
+    if idea_items:
+        user_idea = next((item[len("Your idea: "):] for item in idea_items if item.startswith("Your idea: ")), "")
+        best_idea = next((item[len("Best idea: "):] for item in idea_items if item.startswith("Best idea: ")), "")
+        adjustment = next((item[len("Adjustment: "):] for item in idea_items if item.startswith("Adjustment: ")), "")
+        if user_idea or best_idea:
+            st.markdown(
+                "<div class='idea-compare'><div class='idea-title'>Your idea vs. best idea</div>"
+                "<div class='idea-grid'>"
+                f"<div class='idea-box'><div class='idea-kicker'>Your idea</div><div>{user_idea or '—'}</div></div>"
+                f"<div class='idea-box best'><div class='idea-kicker'>Exact best idea</div><div>{best_idea or '—'}</div></div>"
+                "</div>"
+                + (f"<div class='idea-adjust'><b>Adjustment:</b> {adjustment}</div>" if adjustment else "")
+                + "</div>",
+                unsafe_allow_html=True,
+            )
 
     if takeaway_items:
         takeaway = takeaway_items[0]

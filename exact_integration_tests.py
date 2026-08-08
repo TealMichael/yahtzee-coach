@@ -142,6 +142,11 @@ def test_exact_first_router_on_every_record(policy, reps):
                 assert "Grade: A+" in report
                 assert "Hold rank: #1" in report
                 assert "Optimal choice:" in report
+                assert "Your idea vs. best idea:" in report
+                assert "How close was it?" in report
+                assert "Teaching takeaway:" in report
+                assert "Top exact holds:" in report
+                assert "Coach recommendation:" in report
                 routed += 1
 
     elapsed = time.perf_counter() - started

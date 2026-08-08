@@ -1,70 +1,78 @@
-# Yahtzee Coach v38 — Teaching Experience Pass
+# Yahtzee Coach v39 — Personalized Teaching Pass
 
-v38 keeps the exact dynamic-programming solver as the primary strategy engine and
-upgrades the player-facing coaching around that exact answer. The solver values
-and compact policy table are unchanged from v37; the improvement is in how the
-app explains, grades, and teaches each decision.
+v39 keeps the exact dynamic-programming solver as the strategy source of truth and
+makes the coaching respond directly to the player's chosen hold. The solver values,
+compact exact policy, dice UI, scorecard, and practice generator are unchanged from
+v38.
 
 ## What changed
 
-- Exact Roll 1 and Roll 2 recommendations remain the source of truth.
-- The main **Coach says** message now explains the visible strategic reason behind
-  the exact hold instead of merely saying that it has the highest value.
-- A new **Key lesson** card turns each result into a reusable Yahtzee idea.
-- A new **How close was it?** explanation distinguishes near-ties from meaningful
-  mistakes so players do not overlearn tiny solver differences.
-- Expected-value language is translated as **expected game points** and explicitly
-  defined as average final-game score across future rolls and optimal decisions.
-- The coach now compares the player's hold with the exact hold in concrete dice
-  terms: which dice are additionally protected or released.
-- Explanations recognize common strategic structures including:
-  - made hands
-  - four matching dice
-  - triples
-  - two-pair Full House paths
-  - four-die and three-die straight cores
-  - useful upper-section pairs
-  - constrained/endgame single-die holds
-  - full rerolls / flexibility decisions
-- The full report shows the top three exact holds and their expected-point gaps.
-- Tied exact-optimal holds are still treated as equally correct.
-- The letter grade remains a teaching rubric based on exact expected game points
-  lost.
-- The legacy heuristic coach remains only as a safe fallback.
-- Dice size, dice behavior, scorecard layout, session flow, and practice generator
-  are unchanged.
+The result now includes a prominent **Your idea vs. best idea** comparison:
 
-## Teaching examples protected by tests
+- **Your idea** describes what the player's selected dice actually preserve or chase.
+  The wording is intentionally cautious: it explains what the hold does rather than
+  pretending the app can read the player's mind.
+- **Exact best idea** explains the strategic plan behind the exact solver's hold in
+  the context of the current scorecard.
+- **Adjustment** gives one concrete action: protect additional dice, release weaker
+  dice, swap the structure, or make no change when the player is already optimal.
+- Near-ties get language such as **Tiny refinement** or **Small refinement** rather
+  than being treated like major mistakes.
+- Bigger expected-value losses use stronger coaching language such as **Clear
+  adjustment** or **Major correction**.
+- Exact-optimal choices are explicitly affirmed: the coach explains what the player
+  recognized correctly, not just that the grade is A+.
 
-`python teaching_experience_tests.py`
+The v38 teaching layers remain:
 
-The focused teaching suite checks that:
+- Coach says strategic explanation
+- Key Lesson card
+- How close was it?
+- expected game points / hold rank
+- concrete dice differences
+- top exact holds and expected-point gaps
+- safe legacy fallback if exact lookup fails
 
-- a 0.16-point two-pair decision is described as a near-tie rather than a bad move
-- breaking four 5s receives a clear “protect four matching dice” lesson
-- cramped scorecards explain why a lone useful upper die can beat a prettier pair
-- four-die straight cores are explicitly taught as premium structures
-- every exact report includes closeness, good thinking, why the exact hold wins,
-  a teaching takeaway, top exact alternatives, and a final recommendation
+## Personalized teaching examples protected by tests
 
-Result: **6 PASS / 0 FAIL**.
+Run:
+
+`python personalized_teaching_tests.py`
+
+The v39 focused suite checks that:
+
+- a close two-pair choice preserves the player's good pair idea and suggests adding
+  the second pair as a tiny refinement
+- breaking four 5s gets a specific major correction to protect the other three 5s
+- an exact-optimal triple is explained and affirmed as the correct plan
+- a visible straight chase can be recognized as sensible while the scorecard still
+  explains why another exact plan is better
+- the three personalized messages are exposed in metadata for future session-level
+  learning features
+
+Result: **5 PASS / 0 FAIL**.
+
+The v38 teaching suite also remains green: **6 PASS / 0 FAIL**.
 
 ## Exhaustive exact integration audit
 
+Run:
+
 `python exact_integration_tests.py`
 
-Measured on the v38 package:
+Measured on v39:
 
 - 40,824 / 40,824 state-roll policy records validated
 - 707,616 legal-hold exact-value lookups validated
 - 130 tied-best records handled correctly
 - 40,824 / 40,824 exact-first report routes used exact mode; zero fallbacks
-- every exact report produced the new teaching sections
+- every exact report includes the v39 personalized comparison plus the v38 teaching
+  sections
 - 100 / 100 deck templates covered (81 unique solver states)
 - 20,000 / 20,000 generated practice rounds mapped to an exact state
 - deliberate unsupported-state fallback: PASS
 - missing/corrupt policy-load fallback: PASS
-- 10,000 ranked exact lookups: about 0.355 s total, about 0.036 ms each
+- 10,000 ranked exact lookups: about 0.350 s total, about 0.035 ms each
 
 Legacy protection remains green:
 
@@ -74,18 +82,17 @@ Legacy protection remains green:
 
 ## Developer diagnostics
 
-`?solver=1` opens the hidden exact-mode diagnostics panel. `?shadow=1` remains
-an alias. Exact should continue increasing while Fallbacks remains at 0 for the
-current practice deck.
+`?solver=1` opens the hidden exact-mode diagnostics panel. `?shadow=1` remains an
+alias. Exact should continue increasing while Fallbacks remains at 0 for the current
+practice deck.
 
 ## Deployment files
 
-Because the exact policy itself did not change from v37, an existing v37 live
-app only needs these updated files at the GitHub repository root:
+Because the exact policy and engine did not change from v38, a working v38 live app
+only needs these updated files at the GitHub repository root:
 
 - `app.py`
 - `exact_mode.py`
 - `README.md` (recommended)
 
-The package also includes the unchanged policy, engine, requirements, and test
-files so it remains self-contained.
+The package includes all unchanged files as well so it remains self-contained.
