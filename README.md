@@ -1,169 +1,151 @@
-# Yahtzee Coach v42.6 — Realistic Game-State Pass
+# Yahtzee Coach v43A — Daily Challenge Gameplay Prototype
 
-v42.6 keeps the complete v42.5 exact solver, expanded 252-roll puzzle universe,
-mobile UI, grading, personalized teaching, Session Coach, mastery, and Daily-10
-readiness. The change is the **scorecard source**: practice no longer feels like
-it was assembled from strategically convenient boxes.
+v43A keeps the complete v42.6 Practice experience intact and adds the first
+playable version of **Daily Challenge**.
 
-The goal of this pass is simple: **hard decisions on believable scorecards**.
+The purpose of v43A is to prove the competitive game loop before adding a real
+shared database in v43B.
 
-## What changed
+## Two modes
 
-### 1. 85% of scorecard contexts now come from actual simulated game histories
+### Practice
 
-The bank still contains **420 exact scorecard contexts**, but the representative
-scorecards are now:
+Practice is unchanged from v42.6:
 
-- **357 (85%) Simulated Game** snapshots
-- **63 (15%) Curated Edge Case** snapshots
+- unlimited Roll 1 / Roll 2 hold training
+- 420 realistic/curated scorecard contexts
+- all 252 canonical five-dice rolls available
+- exact full-game strategy values
+- grades, visible hold rank, personalized teaching, Session Coach, mastery,
+  and achievements
 
-The simulated cards were produced by playing **4,000 complete turn-by-turn games**
-from an empty scorecard. Each turn rolls dice, makes two hold decisions, rolls
-again, and legally scores one category before the next snapshot is captured.
+### Daily Challenge
 
-This means a normal practice scorecard is no longer created by saying things
-like “make the bonus dead and leave Chance open.” It is a state an actual game
-simulation reached.
+Every challenge date produces the same deterministic Daily 10 for everybody.
+The current challenge clock uses **America/New_York (Eastern Time)**, so a new
+challenge begins at midnight Eastern.
 
-The simulator deliberately uses multiple human-style player profiles:
+The Daily 10 preserves the v42.6 composition rules:
 
-- **Strong** — usually makes the strongest-looking move, with occasional close alternatives
-- **Regular** — mostly sensible play with more second-best / human choices
-- **Messy** — still plausible, but more willing to make a questionable sacrifice
+- exactly 10 decisions
+- 5 Roll 1 and 5 Roll 2 decisions
+- 2 Opening, 3 Midgame, 3 Late Game, 2 True Endgame
+- 9 simulated-game scorecards + 1 curated edge case
+- deliberate difficulty and strategy-family variety
 
-The bank intentionally does **not** make every prior turn computer-perfect.
+During the official run the app deliberately hides:
 
-### 2. Human-looking imperfections are preserved
+- the strategy-family label
+- the difficulty label
+- the exact best hold
+- the grade
+- expected-value loss
+- teaching feedback
 
-Real scorecards sometimes contain choices such as zeroing an upper box while
-Chance remains open. v42.6 allows those situations when they arise from the
-simulated history instead of treating every imperfection as invalid.
+The player simply sees the scorecard, roll number, and dice. Each answer is
+locked before moving on.
 
-The final 420-context bank contains, among other examples:
+After Question 10, the complete exact coaching unlocks for all ten questions.
 
-- **27** contexts with at least one zeroed upper box while Chance is still open
-- **68** contexts where Chance has already been used with 7+ boxes still open
-- **303** contexts containing at least one non-cookie-cutter upper-section result
+## Scoring
 
-Those are not random corruptions. The 357 simulated contexts are snapshots after
-real simulated turns, with legal category scores and one category closed per turn.
+Leaderboard order is:
 
-### 3. The strategic coverage from v42.5 is retained
+1. **lowest total expected game points lost**
+2. **most exact holds**
+3. **lowest single worst miss**
 
-The game-stage balance remains:
+Speed is intentionally not part of the ranking.
 
-- **60 Opening** contexts (10–13 boxes open)
-- **120 Midgame** contexts (6–9 open)
-- **120 Late Game** contexts (3–5 open)
-- **120 True Endgame** contexts (1–2 open)
+A perfect Daily Challenge is 0.00 total expected game points lost.
 
-All upper-bonus states remain represented:
+## v43A demo leaderboard
 
-- On Pace
-- Under Pressure
-- Ahead
-- Bonus Earned
-- Bonus Dead / mathematically unreachable
+v43A does not connect an external database yet. Instead, it includes seven
+**deterministic simulated friend results** so the complete social/results UX can
+be tested now.
 
-All Yahtzee states remain represented:
+The user's row is scored by the real exact solver. The seven demo rows are
+clearly labeled as prototype data in the UI.
 
-- Yahtzee open
-- Yahtzee zeroed
-- Yahtzee scored for 50 / bonus live
+The results screen includes:
 
-All **81** exact states from the original v42 practice deck remain supported.
+- total EV lost
+- exact holds out of 10
+- best exact-hold streak
+- friend rank
+- prototype friend leaderboard
+- “Today's killer” question
+- most-solved / unanimous question
+- full ten-question coaching review
 
-### 4. The complete dice universe remains available
+## One-attempt and resume behavior in v43A
 
-v42.6 still supports:
+Within an active Streamlit session:
 
-- **420 scorecard contexts**
-- **252 canonical five-dice rolls**
-- **Roll 1 and Roll 2**
-- **211,680 exact state/roll situations**
-- **3,669,120 legal hold values**
+- answers are locked as they are submitted
+- switching to Practice and back preserves Daily Challenge progress
+- completing Question 10 locks the result
+- the finished result remains available when switching modes
 
-The exact full-game solver remains the source of truth for recommendations.
-The realism simulator only creates believable *scorecard histories*; it does not
-replace or weaken the exact strategy engine.
+Because v43A deliberately has no database yet, a completely new Streamlit
+session can start a fresh local attempt. A prototype-only reset button is also
+available after completion for testing.
 
-### 5. Unlimited Practice now targets the realistic mix
+**v43B will move attempt state to the shared database**, enforcing one official
+attempt per player/day and supporting true refresh/device resume.
 
-Practice draws scorecards at approximately:
+## Competitive safety
 
-- **85% Simulated Game**
-- **15% Curated Edge Case**
+Daily Challenge refuses to lock an answer if the exact solver is unavailable.
+Unlike Practice, it does **not** silently accept the legacy heuristic fallback,
+because competitive attempts must be scored identically for every player.
 
-It still balances game stage, Roll 1 / Roll 2, and strategy family so the harder
-v42.5 decision variety remains intact. Rare conditions such as a live extra-Yahtzee
-bonus or already-secured upper bonus are deliberately downweighted unless that
-condition is the lesson being practiced.
+## Challenge versioning
 
-The curated 15% is intentional. Rare or awkward states can be excellent teaching
-problems even if they do not occur often in ordinary play.
+The app creates a stable challenge-set id from:
 
-### 6. Daily Challenge readiness is more realistic too
+- challenge date
+- Daily Challenge version (`43A-bank42.6`)
+- the ten deterministic puzzle ids
 
-The deterministic Daily-10 selector remains hidden until the shared v43 social
-layer is built. It now selects:
+This provides the version hook v43B will store with leaderboard submissions.
 
-- **9 realistic simulated-game scorecards**
-- **1 curated edge case**
-- **5 Roll 1 + 5 Roll 2**
-- **2 Opening + 3 Midgame + 3 Late Game + 2 True Endgame**
-- a deliberate difficulty mix
-- broad strategy-family coverage
+## Validation
 
-The same date still recreates the same ten challenge IDs for every player.
+v43A adds focused Daily Challenge tests on top of the v42.6 suite:
 
-## Final bank audit
+- deterministic same-date Daily 10
+- unique challenge ids
+- 5/5 Roll 1/Roll 2 balance
+- 9 realistic + 1 curated composition
+- 2/3/3/2 game-stage composition
+- Eastern-time date boundary
+- exact scoring of all ten questions
+- perfect 10/10 run = 0.00 EV lost
+- deterministic demo leaderboard
+- leaderboard ranking/tiebreak path
+- group question statistics
+- Daily mode hides coaching until completion
+- Daily mode rejects heuristic fallback
+- mobile Daily result grid protection
 
-- 420 scorecard contexts
-- 357 simulated / 63 curated
-- 85.0% realistic-game share
-- 81 / 81 original v42 exact states preserved
-- 252 / 252 canonical dice rolls
-- 211,680 Roll-1/Roll-2 puzzle situations
-- 3,669,120 exact legal-hold values
-- 200,148 Daily-Challenge-eligible situations
+All existing exact-policy, expanded-bank, teaching, personalization, Session
+Coach, mastery, mobile UI, strategy-regression, and published-strategy tests
+remain passing.
 
-See `puzzle_bank_audit.json` and `puzzle_bank_contexts.csv` for the full audit.
+## v43B next
 
-## Runtime files
+Once the v43A loop feels right, v43B will replace the simulated friend data with:
 
-- `puzzle_bank.py` — realistic practice generator + deterministic Daily-10 selector
-- `puzzle_bank.npz` — 420 scorecards plus origin/profile/history metadata
-- `challenge_catalog.npz` — 211,680 tagged exact puzzle situations
-- `exact_policy.npz` — exact live policy for all 420 selected scorecard states
+- persistent player identity
+- friend groups / join codes
+- one official attempt per player/day
+- cross-device resume
+- real daily leaderboards
+- participation streaks
+- weekly standings
+- group question statistics from actual players
 
-Support/audit files:
-
-- `puzzle_bank_audit.json`
-- `puzzle_bank_contexts.csv`
-- `puzzle_bank_tests.py`
-- `advanced_context_teaching_tests.py`
-- `exact_integration_tests.py`
-
-## Deployment from v42.5
-
-Only the puzzle-bank branch changed. Upload these files to the **root** of the
-GitHub repo:
-
-- `exact_policy.npz`
-- `puzzle_bank.py`
-- `puzzle_bank.npz`
-- `challenge_catalog.npz`
-- `README.md` (recommended)
-
-`app.py`, `exact_mode.py`, `session_learning.py`, the dice UI, grading, teaching
-cards, and mastery system are unchanged from v42.5.
-
-Suggested commit message:
-
-`Make expanded scorecards realistic - v42.6`
-
-After Streamlit redeploys, play 10–15 normal practice rounds. The strategic
-difficulty should feel like v42.5, while the scorecards should look much more
-like snapshots from real games.
-
-The shared Daily Challenge leaderboard/database is still the planned v43 step.
+The puzzle engine and scoring format are already designed so that connecting the
+database does not require changing the underlying Daily Challenge.

@@ -11,6 +11,11 @@ from exact_mode import ExactPolicyTable, build_live_report_from_loader
 from session_learning import build_session_learning_summary
 from practice_progress import build_practice_progress, newly_unlocked_badges
 from puzzle_bank import generate_practice_challenge as generate_expanded_practice_challenge
+from daily_challenge import (
+    DAILY_CHALLENGE_VERSION, DAILY_TIMEZONE, build_leaderboard, challenge_set_id,
+    current_daily_date_key, daily_challenges as get_daily_challenges, group_story,
+    summarize_attempt, user_rank,
+)
 
 st.set_page_config(
     page_title="Yahtzee Coach",
@@ -1593,129 +1598,518 @@ def render_result(report):
         st.code(report, language="text")
 
 
-initialize_state()
-# Install this near the top of the page so the first dice tap can be caught before rerun.
-install_dice_scroll_guard()
-challenge = st.session_state.challenge
-round_id = st.session_state.round_id
-history = st.session_state.history
 
-st.markdown("<div id='app-top-anchor'></div>", unsafe_allow_html=True)
-if st.session_state.get("scroll_to_top", False):
-    components.html("""
-        <script>
-        setTimeout(function() {
-            const doc = window.parent.document;
-            const el = doc.getElementById('app-top-anchor') || doc.querySelector('.block-container');
-            if (el) { el.scrollIntoView({behavior: 'smooth', block: 'start'}); }
-            window.parent.scrollTo({top: 0, behavior: 'smooth'});
-            doc.documentElement.scrollTop = 0;
-            doc.body.scrollTop = 0;
-        }, 250);
-        </script>
-        """, height=0)
-    st.session_state.scroll_to_top = False
-
-st.markdown("<h1 class='top-title'>🎲 Yahtzee Coach</h1>", unsafe_allow_html=True)
-st.markdown("<div class='subtitle'>Hold Strategy Trainer</div>", unsafe_allow_html=True)
-
-render_session_progress(history, st.session_state.solver_history)
-
-
-roll_number = challenge["roll_number"]
-dice = challenge["dice"]
-scorecard = challenge["scorecard"]
-answer_submitted = st.session_state.report is not None
+# ---------------------------------------------------------------------------
+# v43A — Daily Challenge prototype
+# ---------------------------------------------------------------------------
 
 st.markdown(
-    f"""
-    <div class='soft-card'>
-        <span class='scenario-pill'>{challenge.get('scenario_name', 'Practice Round')}</span>
-        <div class='muted'>{challenge.get('scenario_description', '')}</div>
-        <div class='round-line'>Roll {roll_number} of 3 · {challenge.get('rolls_remaining', 3 - roll_number)} roll(s) remaining</div>
-    </div>
+    """
+    <style>
+    .mode-note { text-align:center; color:#6b7280; font-size:0.78rem; margin:-0.15rem 0 0.55rem 0; }
+    .daily-hero {
+        border:1px solid #d8e4ff; background:linear-gradient(135deg,#f4f8ff 0%,#ffffff 72%);
+        border-radius:20px; padding:0.9rem 0.95rem; margin:0.45rem 0 0.68rem 0; color:#111827 !important;
+    }
+    .daily-hero * { color:inherit; }
+    .daily-kicker { color:#1d4ed8 !important; font-size:0.75rem; font-weight:950; text-transform:uppercase; letter-spacing:0.055em; }
+    .daily-title { font-size:1.35rem; line-height:1.15; font-weight:950; margin:0.14rem 0 0.22rem 0; }
+    .daily-rule { color:#5f6b7a !important; font-size:0.88rem; line-height:1.35; }
+    .daily-progress {
+        display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:0.24rem; margin:0.55rem 0 0.62rem 0;
+    }
+    .daily-dot {
+        height:0.42rem; border-radius:999px; background:#e5e7eb; border:1px solid rgba(127,127,127,.12);
+    }
+    .daily-dot.done { background:#16a34a; }
+    .daily-dot.current { background:#2563eb; }
+    .daily-progress-copy { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-bottom:0.25rem; }
+    .daily-progress-copy b { font-size:0.9rem; }
+    .daily-progress-copy span { color:#6b7280; font-size:0.78rem; }
+    .daily-lock-note { color:#6b7280; font-size:0.78rem; text-align:center; margin:0.3rem 0 0.15rem 0; }
+    .daily-flash { border:1px solid #bbf7d0; background:#f0fdf4; color:#166534 !important; border-radius:12px; padding:0.46rem 0.62rem; font-weight:800; font-size:0.82rem; margin:0.3rem 0; }
+    .daily-result-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.4rem; margin:0.6rem 0; }
+    .daily-result-box { border:1px solid rgba(127,127,127,.22); border-radius:15px; background:#f8fafc; padding:0.58rem 0.42rem; text-align:center; color:#111827 !important; }
+    .daily-result-label { color:#6b7280 !important; font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.035em; }
+    .daily-result-value { font-size:1.17rem; font-weight:950; margin-top:0.08rem; }
+    .daily-rank-banner { border:1px solid #fde68a; background:#fffbeb; border-radius:17px; padding:0.72rem 0.78rem; margin:0.5rem 0; color:#78350f !important; }
+    .daily-rank-banner b { font-size:1.02rem; }
+    .group-story-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.42rem; margin:0.48rem 0; }
+    .group-story-card { border:1px solid rgba(127,127,127,.2); border-radius:15px; padding:0.62rem 0.68rem; background:#fff; color:#111827 !important; }
+    .group-story-card .story-kicker { color:#6b7280 !important; font-size:0.68rem; font-weight:900; text-transform:uppercase; letter-spacing:.04em; }
+    .group-story-card .story-title { font-weight:950; margin:0.12rem 0; }
+    .group-story-card .story-copy { color:#5f6b7a !important; font-size:0.79rem; }
+    .review-summary { display:grid; grid-template-columns:1fr 1fr; gap:0.35rem; margin:0.3rem 0 0.45rem 0; }
+    .review-box { border:1px solid rgba(127,127,127,.18); border-radius:13px; padding:0.5rem 0.58rem; background:#fafafa; }
+    .review-label { color:#6b7280; font-size:0.68rem; text-transform:uppercase; font-weight:850; }
+    .review-value { font-weight:900; font-size:0.88rem; margin-top:.08rem; }
+    .daily-dice-line { font-size:1.9rem; letter-spacing:.12rem; margin:.15rem 0 .42rem 0; }
+    .prototype-badge { display:inline-block; border-radius:999px; background:#f3e8ff; color:#6b21a8 !important; border:1px solid #e9d5ff; font-size:.69rem; font-weight:900; padding:.18rem .45rem; }
+    @media (max-width:640px) {
+        .daily-result-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.3rem; }
+        .group-story-grid { grid-template-columns:1fr; gap:.32rem; }
+        .daily-hero { padding:.72rem .7rem; border-radius:17px; }
+        .daily-title { font-size:1.18rem; }
+        .daily-progress { gap:.15rem; }
+        .daily-dot { height:.36rem; }
+    }
+    </style>
     """,
     unsafe_allow_html=True,
 )
 
-# Scorecard first, then dice selection.
-render_scorecard(scorecard)
 
-st.markdown("<div class='section-label'>Tap dice to hold</div>", unsafe_allow_html=True)
-st.markdown("<div class='dice-help'>Tap each die you want to keep. Red dice are held. Leave all unselected to reroll everything.</div>", unsafe_allow_html=True)
+def _reset_daily_local_attempt(date_key: str | None = None):
+    date_key = date_key or current_daily_date_key()
+    st.session_state.daily_date_key = date_key
+    st.session_state.daily_challenges = get_daily_challenges(date_key)
+    st.session_state.daily_set_id = challenge_set_id(date_key, st.session_state.daily_challenges)
+    st.session_state.daily_started = False
+    st.session_state.daily_completed = False
+    st.session_state.daily_question_index = 0
+    st.session_state.daily_answers = []
+    st.session_state.daily_flash = ""
+    st.session_state.daily_display_name = st.session_state.get("daily_display_name", "You") or "You"
 
-held_key = f"held_indices_{round_id}"
-if held_key not in st.session_state:
-    st.session_state[held_key] = []
 
-selected_indices = list(st.session_state[held_key])
+def initialize_daily_state():
+    today = current_daily_date_key()
+    if st.session_state.get("daily_date_key") != today:
+        _reset_daily_local_attempt(today)
+    elif "daily_challenges" not in st.session_state:
+        _reset_daily_local_attempt(today)
+    if "app_mode" not in st.session_state:
+        st.session_state.app_mode = "Practice"
 
-# V12 dice picker. This uses Streamlit's multi-select pills so all five dice
-# stay in one tight row on mobile. Labels include invisible zero-width characters
-# so duplicate dice (like three 2s) remain separately tappable by position.
-dice_positions = list(range(len(dice)))
-selected_indices = st.pills(
-    "Dice to hold",
-    options=dice_positions,
-    default=st.session_state.get(held_key, []),
-    format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
-    selection_mode="multi",
-    key=f"dice_pills_{round_id}",
-    label_visibility="collapsed",
-    disabled=answer_submitted,
-)
-selected_indices = list(selected_indices or [])
-st.session_state[held_key] = sorted(selected_indices)
-selected_hold = selected_hold_from_indices(dice, selected_indices)
-st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 
-if not answer_submitted:
-    if st.button("Submit hold", type="primary", use_container_width=True):
+def _daily_date_label(date_key: str) -> str:
+    try:
+        value = datetime.strptime(date_key, "%Y-%m-%d")
+        return value.strftime("%B %d, %Y").replace(" 0", " ")
+    except Exception:
+        return date_key
+
+
+def render_daily_progress(index: int, locked: int):
+    dots = []
+    for i in range(10):
+        css = "done" if i < locked else ("current" if i == index and locked < 10 else "")
+        dots.append(f"<div class='daily-dot {css}'></div>")
+    question_text = "Complete" if locked >= 10 else f"Question {index + 1} of 10"
+    st.markdown(
+        "<div class='daily-progress-copy'>"
+        f"<b>{question_text}</b><span>{locked}/10 answers locked</span>"
+        "</div><div class='daily-progress'>" + "".join(dots) + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _daily_solver_record(challenge, solver_record, selected_hold, report):
+    record = dict(solver_record)
+    record["scenario"] = challenge.get("scenario_name", "")
+    record["bank_version"] = challenge.get("bank_version", "")
+    record["daily_version"] = challenge.get("daily_version", DAILY_CHALLENGE_VERSION)
+    record["skill_tag"] = challenge.get("skill_tag", "")
+    record["difficulty"] = challenge.get("difficulty", "")
+    record["stage"] = challenge.get("stage", "")
+    record["bonus_status"] = challenge.get("bonus_status", "")
+    record["challenge_id"] = challenge.get("challenge_id", "")
+    record["daily_number"] = challenge.get("daily_number")
+    record["timestamp_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return {
+        "challenge": challenge,
+        "solver_record": record,
+        "selected_hold": list(selected_hold),
+        "report": report,
+    }
+
+
+def render_daily_intro():
+    date_key = st.session_state.daily_date_key
+    st.markdown(
+        "<div class='daily-hero'>"
+        "<div class='daily-kicker'>🎲 Daily Challenge <span class='prototype-badge'>v43A prototype</span></div>"
+        f"<div class='daily-title'>{_daily_date_label(date_key)}</div>"
+        "<div class='daily-rule'><b>10 hold decisions. Same challenge for everyone.</b><br>"
+        "Lose as few expected game points as possible. Your answers lock as you go, and the exact coaching is revealed only after Question 10.</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<div class='review-summary'>"
+        "<div class='review-box'><div class='review-label'>Format</div><div class='review-value'>5 Roll 1 · 5 Roll 2</div></div>"
+        "<div class='review-box'><div class='review-label'>Ranking</div><div class='review-value'>Lowest total EV loss</div></div>"
+        "<div class='review-box'><div class='review-label'>Attempt</div><div class='review-value'>One locked run</div></div>"
+        "<div class='review-box'><div class='review-label'>Reset</div><div class='review-value'>Midnight Eastern</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    name = st.text_input(
+        "Display name for the demo leaderboard",
+        value=st.session_state.get("daily_display_name", "You"),
+        max_chars=20,
+        key="daily_name_input",
+    ).strip()
+    st.caption("v43A uses a local demo leaderboard. v43B will replace it with real player profiles, groups, saved attempts, and streaks.")
+    if st.button("Start today's Daily Challenge", type="primary", use_container_width=True):
+        st.session_state.daily_display_name = name or "You"
+        st.session_state.daily_started = True
+        st.session_state.daily_question_index = len(st.session_state.daily_answers)
+        st.session_state.daily_flash = ""
+        st.rerun()
+
+
+def render_daily_question():
+    challenges = st.session_state.daily_challenges
+    answers = st.session_state.daily_answers
+    index = int(st.session_state.daily_question_index)
+    if index >= len(challenges):
+        st.session_state.daily_completed = True
+        st.rerun()
+        return
+
+    challenge = challenges[index]
+    locked = len(answers)
+    render_daily_progress(index, locked)
+    flash = st.session_state.get("daily_flash", "")
+    if flash:
+        st.markdown(f"<div class='daily-flash'>✓ {flash}</div>", unsafe_allow_html=True)
+        st.session_state.daily_flash = ""
+
+    st.markdown(
+        "<div class='soft-card'>"
+        f"<span class='scenario-pill'>Daily {index + 1}/10</span>"
+        "<div class='muted'>No strategy label or difficulty hint is shown during the official run.</div>"
+        f"<div class='round-line'>Roll {challenge['roll_number']} of 3 · {challenge.get('rolls_remaining', 3 - challenge['roll_number'])} roll(s) remaining</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    render_scorecard(challenge["scorecard"])
+    st.markdown("<div class='section-label'>Tap dice to hold</div>", unsafe_allow_html=True)
+    st.markdown("<div class='dice-help'>Make your decision exactly as you would in Practice. Once locked, you cannot go back during this attempt.</div>", unsafe_allow_html=True)
+
+    held_key = f"daily_held_{st.session_state.daily_date_key}_{index}"
+    if held_key not in st.session_state:
+        st.session_state[held_key] = []
+    dice = challenge["dice"]
+    selected_indices = st.pills(
+        "Daily dice to hold",
+        options=list(range(len(dice))),
+        default=st.session_state.get(held_key, []),
+        format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
+        selection_mode="multi",
+        key=f"daily_dice_pills_{st.session_state.daily_date_key}_{index}",
+        label_visibility="collapsed",
+    )
+    selected_indices = list(selected_indices or [])
+    st.session_state[held_key] = sorted(selected_indices)
+    selected_hold = selected_hold_from_indices(dice, selected_indices)
+    st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
+
+    if st.button(f"Lock answer {index + 1}/10", type="primary", use_container_width=True, key=f"daily_lock_{index}"):
         report, solver_record = build_live_report(
             dice,
-            scorecard,
+            challenge["scorecard"],
             selected_hold,
-            roll_number,
+            challenge["roll_number"],
         )
-        st.session_state.report = report
-        st.session_state.history.append({
-            "scenario": challenge.get("scenario_name", ""),
-            "roll": roll_number,
-            "dice": str(dice),
-            "choice": hold_label(selected_hold),
-            "optimal": extract_line(report, "Optimal choice:"),
-            "grade": extract_line(report, "Grade:"),
+        # Competitive mode must never silently fall back to the heuristic coach.
+        if solver_record.get("source") != "exact":
+            st.error("The exact scorer was unavailable, so this answer was NOT locked. Please try again.")
+            return
+        st.session_state.daily_answers.append(
+            _daily_solver_record(challenge, solver_record, selected_hold, report)
+        )
+        if index + 1 >= len(challenges):
+            st.session_state.daily_completed = True
+            st.session_state.daily_question_index = len(challenges)
+        else:
+            st.session_state.daily_question_index = index + 1
+            st.session_state.daily_flash = f"Answer {index + 1} locked."
+        st.rerun()
+
+    st.markdown("<div class='daily-lock-note'>Your score and the exact answer stay hidden until all 10 decisions are locked.</div>", unsafe_allow_html=True)
+
+
+def _leaderboard_frame(board):
+    rows = []
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    for item in board:
+        rank = int(item["rank"])
+        name = item["display_name"] + ("  ← you" if item.get("is_user") else "")
+        rows.append({
+            "Rank": f"{medals.get(rank, '')} {rank}".strip(),
+            "Player": name,
+            "EV Lost": f"{item['total_ev_loss']:.2f}",
+            "Exact": f"{item['exact_count']}/10",
+            "Worst miss": f"{item['worst_miss']:.2f}",
         })
+    return pd.DataFrame(rows)
 
-        solver_record["scenario"] = challenge.get("scenario_name", "")
-        solver_record["bank_version"] = challenge.get("bank_version", "")
-        solver_record["skill_tag"] = challenge.get("skill_tag", "")
-        solver_record["difficulty"] = challenge.get("difficulty", "")
-        solver_record["stage"] = challenge.get("stage", "")
-        solver_record["bonus_status"] = challenge.get("bonus_status", "")
-        solver_record["challenge_id"] = challenge.get("challenge_id", "")
-        solver_record["timestamp_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        before_solver_history = list(st.session_state.solver_history)
-        st.session_state.solver_history.append(solver_record)
-        st.session_state.new_badges = newly_unlocked_badges(
-            before_solver_history,
-            st.session_state.solver_history,
+
+def _daily_review_item(answer):
+    challenge = answer["challenge"]
+    record = answer["solver_record"]
+    report = answer["report"]
+    number = int(challenge.get("daily_number", 0))
+    loss = float(record.get("points_lost", 0.0) or 0.0)
+    grade = extract_line(report, "Grade:") or ("A+" if loss <= 1e-9 else "—")
+    lesson_items = extract_section(report, "Teaching takeaway:")
+    lesson = lesson_items[0] if lesson_items else record.get("lesson_title", "")
+    label = f"Q{number} · {grade} · {loss:.2f} pts lost · {challenge.get('scenario_name', 'Strategy Review')}"
+    with st.expander(label, expanded=False):
+        st.caption(
+            f"{challenge.get('stage', '')} · {challenge.get('difficulty', '')} · Roll {challenge.get('roll_number')} · {challenge.get('skill_tag', '')}"
         )
-        st.session_state.scroll_to_result = True
+        dice_faces = " ".join(DICE_FACE.get(int(die), str(die)) for die in challenge.get("dice", []))
+        st.markdown(f"<div class='daily-dice-line'>{dice_faces}</div>", unsafe_allow_html=True)
+        st.markdown("**Scorecard at the decision**")
+        st.markdown("<div class='score-section-title'>Upper</div>", unsafe_allow_html=True)
+        st.markdown(score_grid_html(challenge["scorecard"], UPPER_CATEGORIES), unsafe_allow_html=True)
+        st.markdown("<div class='score-section-title'>Lower</div>", unsafe_allow_html=True)
+        st.markdown(score_grid_html(challenge["scorecard"], LOWER_CATEGORIES, lower=True), unsafe_allow_html=True)
+        st.markdown(
+            "<div class='review-summary'>"
+            f"<div class='review-box'><div class='review-label'>You kept</div><div class='review-value'>{record.get('user_hold', '—')}</div></div>"
+            f"<div class='review-box'><div class='review-label'>Exact best</div><div class='review-value'>{record.get('optimal_hold', '—')}</div></div>"
+            f"<div class='review-box'><div class='review-label'>Hold rank</div><div class='review-value'>#{record.get('hold_rank', '—')} of {record.get('legal_hold_count', '—')}</div></div>"
+            f"<div class='review-box'><div class='review-label'>EV lost</div><div class='review-value'>{loss:.2f}</div></div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        if lesson:
+            st.markdown(f"**🧠 Key lesson:** {lesson}")
+        idea = record.get("adjustment", "")
+        if idea:
+            st.markdown(f"**Adjustment:** {idea}")
+        top_holds = extract_section(report, "Top exact holds:")
+        if top_holds:
+            st.markdown("**Top exact holds**")
+            st.markdown("".join(f"<div class='top-hold-line'>{line}</div>" for line in top_holds[:3]), unsafe_allow_html=True)
+
+
+def render_daily_results():
+    answers = st.session_state.daily_answers
+    records = [answer["solver_record"] for answer in answers]
+    challenges = st.session_state.daily_challenges
+    summary = summarize_attempt(records)
+    board = build_leaderboard(
+        st.session_state.daily_date_key,
+        challenges,
+        records,
+        user_name=st.session_state.get("daily_display_name", "You") or "You",
+    )
+    rank = user_rank(board)
+    story = group_story(board, challenges)
+
+    render_daily_progress(10, 10)
+    st.markdown(
+        "<div class='daily-hero'>"
+        "<div class='daily-kicker'>Challenge complete</div>"
+        f"<div class='daily-title'>{_daily_date_label(st.session_state.daily_date_key)}</div>"
+        f"<div class='daily-rule'>Attempt locked · Challenge ID <b>{st.session_state.daily_set_id}</b></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<div class='daily-result-grid'>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>EV Lost</div><div class='daily-result-value'>{summary['total_ev_loss']:.2f}</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Exact Holds</div><div class='daily-result-value'>{summary['exact_count']}/10</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Best Streak</div><div class='daily-result-value'>🔥 {summary['best_exact_streak']}</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Friend Rank</div><div class='daily-result-value'>#{rank} of {len(board)}</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    if summary["perfect"]:
+        rank_copy = "Perfect challenge: 0.00 expected game points lost."
+    elif rank == 1:
+        rank_copy = "You lead today's prototype group."
+    else:
+        rank_copy = f"You finished #{rank} in today's prototype group. Lowest total expected-point loss wins."
+    st.markdown(f"<div class='daily-rank-banner'><b>🏆 Daily result</b><br>{rank_copy}</div>", unsafe_allow_html=True)
+
+    st.markdown("### Friend leaderboard")
+    st.caption("Prototype data: the seven friend entries below are deterministic simulated players for v43A. Your row is real. v43B will replace the demo rows with your actual groups.")
+    st.dataframe(_leaderboard_frame(board), hide_index=True, use_container_width=True)
+
+    toughest = story.get("toughest")
+    easiest = story.get("easiest")
+    story_cards = []
+    if toughest:
+        q = toughest["question_number"]
+        challenge = challenges[q - 1]
+        story_cards.append(
+            "<div class='group-story-card'><div class='story-kicker'>Today's killer</div>"
+            f"<div class='story-title'>Question {q} · {challenge.get('scenario_name', '')}</div>"
+            f"<div class='story-copy'>{toughest['exact_count']} of {toughest['players']} players found an exact hold. "
+            f"Group average loss: {toughest['avg_loss']:.2f} pts.</div></div>"
+        )
+    if easiest:
+        q = easiest["question_number"]
+        challenge = challenges[q - 1]
+        headline = "Unanimous" if easiest["exact_count"] == easiest["players"] else "Most solved"
+        story_cards.append(
+            f"<div class='group-story-card'><div class='story-kicker'>{headline}</div>"
+            f"<div class='story-title'>Question {q} · {challenge.get('scenario_name', '')}</div>"
+            f"<div class='story-copy'>{easiest['exact_count']} of {easiest['players']} players found an exact hold. "
+            f"Group average loss: {easiest['avg_loss']:.2f} pts.</div></div>"
+        )
+    if story_cards:
+        st.markdown("<div class='group-story-grid'>" + "".join(story_cards) + "</div>", unsafe_allow_html=True)
+
+    st.markdown("### Review your 10")
+    st.caption("Now that the competitive run is over, every exact answer and teaching explanation is unlocked.")
+    for answer in answers:
+        _daily_review_item(answer)
+
+    with st.expander("v43A prototype controls", expanded=False):
+        st.caption("The real v43B database will enforce one attempt per player/day and resume across devices. v43A locks the run only inside this active Streamlit session so we can test the game loop first.")
+        if st.button("Reset today's local demo attempt", use_container_width=True):
+            _reset_daily_local_attempt(st.session_state.daily_date_key)
+            st.rerun()
+
+    render_solver_panel(records)
+
+
+def render_daily_mode():
+    if not st.session_state.daily_started:
+        render_daily_intro()
+        return
+    if st.session_state.daily_completed or len(st.session_state.daily_answers) >= 10:
+        st.session_state.daily_completed = True
+        render_daily_results()
+        return
+    st.caption(
+        f"🎲 Daily Challenge in progress · {_daily_date_label(st.session_state.daily_date_key)} · "
+        "switching to Practice and back will keep your locked answers in this session."
+    )
+    render_daily_question()
+
+
+def render_practice_mode():
+    challenge = st.session_state.challenge
+    round_id = st.session_state.round_id
+    history = st.session_state.history
+
+    if st.session_state.get("scroll_to_top", False):
+        components.html("""
+            <script>
+            setTimeout(function() {
+                const doc = window.parent.document;
+                const el = doc.getElementById('app-top-anchor') || doc.querySelector('.block-container');
+                if (el) { el.scrollIntoView({behavior: 'smooth', block: 'start'}); }
+                window.parent.scrollTo({top: 0, behavior: 'smooth'});
+                doc.documentElement.scrollTop = 0;
+                doc.body.scrollTop = 0;
+            }, 250);
+            </script>
+            """, height=0)
         st.session_state.scroll_to_top = False
-        st.rerun()
 
-if st.session_state.report:
-    render_result(st.session_state.report)
-    render_new_badges()
-    render_session_coach(st.session_state.solver_history)
-    render_practice_momentum(st.session_state.solver_history)
-    if st.button("Next round", type="primary", use_container_width=True):
-        new_round(scroll_to_top=True)
-        st.rerun()
+    render_session_progress(history, st.session_state.solver_history)
 
-if history:
-    with st.expander("Session history", expanded=False):
-        st.dataframe(pd.DataFrame(history), hide_index=True, use_container_width=True)
+    roll_number = challenge["roll_number"]
+    dice = challenge["dice"]
+    scorecard = challenge["scorecard"]
+    answer_submitted = st.session_state.report is not None
 
-render_solver_panel(st.session_state.solver_history)
+    st.markdown(
+        f"""
+        <div class='soft-card'>
+            <span class='scenario-pill'>{challenge.get('scenario_name', 'Practice Round')}</span>
+            <div class='muted'>{challenge.get('scenario_description', '')}</div>
+            <div class='round-line'>Roll {roll_number} of 3 · {challenge.get('rolls_remaining', 3 - roll_number)} roll(s) remaining</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    render_scorecard(scorecard)
+    st.markdown("<div class='section-label'>Tap dice to hold</div>", unsafe_allow_html=True)
+    st.markdown("<div class='dice-help'>Tap each die you want to keep. Red dice are held. Leave all unselected to reroll everything.</div>", unsafe_allow_html=True)
+
+    held_key = f"held_indices_{round_id}"
+    if held_key not in st.session_state:
+        st.session_state[held_key] = []
+    selected_indices = st.pills(
+        "Dice to hold",
+        options=list(range(len(dice))),
+        default=st.session_state.get(held_key, []),
+        format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
+        selection_mode="multi",
+        key=f"dice_pills_{round_id}",
+        label_visibility="collapsed",
+        disabled=answer_submitted,
+    )
+    selected_indices = list(selected_indices or [])
+    st.session_state[held_key] = sorted(selected_indices)
+    selected_hold = selected_hold_from_indices(dice, selected_indices)
+    st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
+
+    if not answer_submitted:
+        if st.button("Submit hold", type="primary", use_container_width=True):
+            report, solver_record = build_live_report(dice, scorecard, selected_hold, roll_number)
+            st.session_state.report = report
+            st.session_state.history.append({
+                "scenario": challenge.get("scenario_name", ""),
+                "roll": roll_number,
+                "dice": str(dice),
+                "choice": hold_label(selected_hold),
+                "optimal": extract_line(report, "Optimal choice:"),
+                "grade": extract_line(report, "Grade:"),
+            })
+            solver_record["scenario"] = challenge.get("scenario_name", "")
+            solver_record["bank_version"] = challenge.get("bank_version", "")
+            solver_record["skill_tag"] = challenge.get("skill_tag", "")
+            solver_record["difficulty"] = challenge.get("difficulty", "")
+            solver_record["stage"] = challenge.get("stage", "")
+            solver_record["bonus_status"] = challenge.get("bonus_status", "")
+            solver_record["challenge_id"] = challenge.get("challenge_id", "")
+            solver_record["timestamp_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            before_solver_history = list(st.session_state.solver_history)
+            st.session_state.solver_history.append(solver_record)
+            st.session_state.new_badges = newly_unlocked_badges(before_solver_history, st.session_state.solver_history)
+            st.session_state.scroll_to_result = True
+            st.session_state.scroll_to_top = False
+            st.rerun()
+
+    if st.session_state.report:
+        render_result(st.session_state.report)
+        render_new_badges()
+        render_session_coach(st.session_state.solver_history)
+        render_practice_momentum(st.session_state.solver_history)
+        if st.button("Next round", type="primary", use_container_width=True):
+            new_round(scroll_to_top=True)
+            st.rerun()
+
+    if history:
+        with st.expander("Session history", expanded=False):
+            st.dataframe(pd.DataFrame(history), hide_index=True, use_container_width=True)
+    render_solver_panel(st.session_state.solver_history)
+
+
+initialize_state()
+initialize_daily_state()
+# Install near the top so dice taps stay visually anchored on mobile.
+install_dice_scroll_guard()
+st.markdown("<div id='app-top-anchor'></div>", unsafe_allow_html=True)
+st.markdown("<h1 class='top-title'>🎲 Yahtzee Coach</h1>", unsafe_allow_html=True)
+st.markdown("<div class='subtitle'>Hold Strategy Trainer</div>", unsafe_allow_html=True)
+
+mode = st.radio(
+    "Mode",
+    options=["Practice", "Daily Challenge"],
+    horizontal=True,
+    key="app_mode",
+    label_visibility="collapsed",
+)
+st.markdown(
+    "<div class='mode-note'>Unlimited coaching in Practice · one locked competitive Daily 10 in Daily Challenge</div>",
+    unsafe_allow_html=True,
+)
+
+if mode == "Daily Challenge":
+    render_daily_mode()
+else:
+    render_practice_mode()

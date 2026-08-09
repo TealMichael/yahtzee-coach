@@ -1,29 +1,35 @@
-YAHTZEE COACH v42.6 — DEPLOYMENT FROM v42.5
+YAHTZEE COACH v43A — DEPLOYMENT
+================================
 
-1. Unzip yahtzee_coach_streamlit_game_v42_6.zip.
-2. Open the yahtzee_coach_game_v42_6 folder.
-3. In GitHub, open the ROOT of TealMichael/yahtzee-coach.
-4. Click Add file -> Upload files.
-5. Upload these files:
-   - exact_policy.npz
-   - puzzle_bank.py
-   - puzzle_bank.npz
-   - challenge_catalog.npz
-   - README.md (recommended)
-6. IMPORTANT: all .npz files must sit beside app.py in the repo root.
-7. Commit with:
-   Make expanded scorecards realistic - v42.6
-8. Wait for Streamlit Community Cloud to redeploy.
-9. Play 10–15 normal practice rounds.
-10. Add ?solver=1 to the URL and confirm:
-    - Exact count rises
-    - Fallbacks stay at 0
+This update assumes v42.6 is already live.
 
-What should feel different:
-- the hard v42.5 decisions remain
-- most scorecards now look like believable snapshots from actual games
-- imperfect prior choices can still appear (zeros, early Chance, missed bonus pace)
-- rare engineered edge cases still appear occasionally rather than constantly
+Upload these files to the ROOT of your GitHub repository (next to app.py):
 
-v42.5 UI/teaching/mastery features are unchanged.
-The shared Daily Challenge leaderboard/database is NOT live yet; v43 remains the next major step.
+1. app.py
+2. daily_challenge.py
+3. README.md  (recommended, but not required for the app to run)
+
+No policy/data file changed from v42.6, so you do NOT need to re-upload:
+- exact_policy.npz
+- puzzle_bank.npz
+- challenge_catalog.npz
+
+IMPORTANT:
+- daily_challenge.py must be next to app.py.
+- Do not upload the zip itself to the repo.
+- Do not place the files inside a v43A subfolder.
+
+Suggested commit message:
+Add Daily Challenge gameplay prototype - v43A
+
+After Streamlit redeploys:
+1. Confirm Practice still opens and behaves normally.
+2. Tap Daily Challenge at the top.
+3. Start today's challenge.
+4. Confirm no answer/grade/strategy hint appears after Questions 1–9.
+5. Complete Question 10.
+6. Confirm the result, demo friend leaderboard, group comparison, and 10-question review appear.
+7. Switch back to Practice and then Daily Challenge; the completed result should remain in the same Streamlit session.
+
+v43A intentionally uses simulated friends and local session state. Real shared
+players/groups/leaderboards/resume are the v43B database step.
