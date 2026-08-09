@@ -1,4 +1,4 @@
-Yahtzee Coach v43B Phase 2G — FULL CURRENT APP deployment
+Yahtzee Coach v43B Phase 2H — FULL CURRENT APP deployment
 
 This release contains the complete current Yahtzee Coach repository.
 There is NO new Supabase migration for this phase.
@@ -11,27 +11,28 @@ STEP 1 — UPLOAD THE FULL CURRENT APP TO GITHUB
 5. Commit directly to main.
 
 COPY/PASTE COMMIT MESSAGE:
-v43B Phase 2G - add spoiler-free Daily result sharing
+v43B Phase 2H - fix install button and show device-specific steps
 
 6. Wait for Streamlit Community Cloud to redeploy.
-7. Open a completed Daily result.
+7. Open the normal app.
 
-EXPECTED PHASE 2G BEHAVIOR
-- Completed Daily results show a Share your Daily card.
-- The share preview has 10 spoiler-free colored squares in two rows of five.
-- The score includes total EV lost, exact holds, and best exact streak.
-- If a friend-group leaderboard is active, current group rank can be included.
-- Share result uses the phone/device native share sheet when supported.
-- Copy score copies the formatted result for Messages/group chats.
-- Shared text never exposes dice, selected holds, exact answers, scenario names, or coaching.
-- Existing friend groups, invite links, Daily back/edit, persistence, and home-screen icon behavior remain unchanged.
+EXPECTED PHASE 2H BEHAVIOR
+- Tapping the green home-screen/install button always produces a visible result.
+- If a browser-native install prompt is available, the button opens it.
+- Otherwise the app opens clear instructions directly underneath the button.
+- iPhone/iPad instructions show Share -> Add to Home Screen -> Open as Web App -> Add.
+- Android instructions show the Chrome menu path.
+- Desktop Chrome instructions show Cast, save, and share -> Install page as app.
+- Mac Safari instructions also show File -> Add to Dock.
+- The custom mascot icon, Copy app link, Daily sharing, friend groups, and persistent Daily remain intact.
 
 OPTIONAL DATABASE PREFLIGHT
 https://teals-yahtzee-coach.streamlit.app/?dbcheck=1
-Expected: v43B Phase 2G database preflight + green connection message.
+Expected: v43B Phase 2H database preflight + green connection message.
 
 IMPORTANT
 - No Supabase SQL changes are needed for this phase.
-- Do NOT put SUPABASE_SECRET_KEY into GitHub or this ZIP.
+- iPhone/iPad requires the user to make the final Apple-controlled Home Screen taps.
+- Browser menus cannot be opened by the web page if the browser does not expose a native install prompt.
 - The exact solver, exact policy, Daily puzzle bank, and Practice strategy behavior are unchanged.
 - __pycache__ and .pyc files are intentionally excluded from the release.

@@ -69,7 +69,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2G database preflight is loaded.")
+    st.info("🔧 v43B Phase 2H database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -1976,7 +1976,7 @@ def install_app_shell_metadata():
 
 
 def render_install_app_control():
-    """Offer a smarter install/home-screen experience with the custom Yahtzee Coach icon."""
+    """Offer a visible, platform-aware install flow without pretending unsupported browsers can be forced."""
     icons = load_install_icon_data()
     html_block = """
         <div id="ycInstallCard" style="font-family:Arial,sans-serif;border:1px solid #d1d5db;border-radius:16px;padding:14px 14px 12px 14px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);box-shadow:0 2px 10px rgba(0,0,0,0.04);">
@@ -1984,17 +1984,15 @@ def render_install_app_control():
             <img src=__ICON_192__ alt="Yahtzee Coach icon" style="width:64px;height:64px;border-radius:14px;flex:0 0 auto;box-shadow:0 3px 10px rgba(0,0,0,0.12);" />
             <div>
               <div style="font-size:18px;font-weight:800;color:#0f172a;">📲 Add Yahtzee Coach to your Home Screen</div>
-              <div style="font-size:13px;color:#475569;line-height:1.4;">Use the new mascot icon and launch Yahtzee Coach more like a real app.</div>
+              <div style="font-size:13px;color:#475569;line-height:1.4;">Use the new mascot icon and open Yahtzee Coach more like a normal app.</div>
             </div>
           </div>
           <div style="display:flex;gap:10px;margin-top:12px;">
-            <button id="ycInstallPrimary" style="flex:1;border:1px solid #166534;background:#166534;color:white;border-radius:10px;padding:10px 12px;font-weight:700;cursor:pointer;">📲 Install / Add</button>
+            <button id="ycInstallPrimary" style="flex:1;border:1px solid #166534;background:#166534;color:white;border-radius:10px;padding:10px 12px;font-weight:700;cursor:pointer;">📲 Show install steps</button>
             <button id="ycCopyAppLink" style="flex:1;border:1px solid #cbd5e1;background:white;color:#0f172a;border-radius:10px;padding:10px 12px;font-weight:700;cursor:pointer;">🔗 Copy app link</button>
           </div>
-          <div id="ycInstallStatus" style="margin-top:10px;font-size:13px;color:#334155;line-height:1.45;"></div>
-          <div style="margin-top:8px;font-size:11px;color:#64748b;line-height:1.35;">
-            <b>iPhone / iPad (Safari)</b> and <b>Android (Chrome)</b> are both supported. Phones still require you to confirm the system Home Screen action; the app cannot press that final system button for you.
-          </div>
+          <div id="ycInstallStatus" style="margin-top:10px;font-size:12px;color:#64748b;line-height:1.4;">Tap the green button for the exact steps for this device.</div>
+          <div id="ycInstallSteps" style="display:none;margin-top:10px;border-radius:12px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;color:#14532d;font-size:13px;line-height:1.55;"></div>
         </div>
         <script>
         (function() {
@@ -2003,8 +2001,14 @@ def render_install_app_control():
           const primary = document.getElementById('ycInstallPrimary');
           const copyBtn = document.getElementById('ycCopyAppLink');
           const status = document.getElementById('ycInstallStatus');
+          const steps = document.getElementById('ycInstallSteps');
           const appUrl = __APP_URL__;
 
+          function setHeight(px) {
+            try {
+              parentWindow.postMessage({isStreamlitMessage: true, type: 'streamlit:setFrameHeight', height: px}, '*');
+            } catch (err) {}
+          }
           function isStandalone() {
             return !!(nav.standalone || parentWindow.matchMedia('(display-mode: standalone)').matches);
           }
@@ -2013,48 +2017,59 @@ def render_install_app_control():
             const isiPadOS = nav.platform === 'MacIntel' && nav.maxTouchPoints > 1;
             if (/iphone|ipad|ipod/.test(ua) || isiPadOS) return 'ios';
             if (/android/.test(ua)) return 'android';
-            if (/mac|win|linux|cros/.test(ua)) return 'desktop';
+            if (/mac/.test(ua)) return 'mac';
+            if (/win|linux|cros/.test(ua)) return 'desktop';
             return 'other';
           }
-          function installStepsText(kind) {
+          function stepHtml(kind) {
             if (kind === 'ios') {
-              return 'Tap <b>Share</b> in Safari → <b>Add to Home Screen</b> → <b>Add</b>. Keep <b>Open as Web App</b> on if Safari offers it.';
+              return '<b>iPhone / iPad (Safari)</b><br>1. Tap the <b>Share</b> button in Safari.<br>2. Scroll down and tap <b>Add to Home Screen</b>.<br>3. Leave <b>Open as Web App</b> on if it appears.<br>4. Tap <b>Add</b>.<br><br><span style="color:#475569;">Apple requires these final taps; a website cannot press that final system button for you or open the Add to Home Screen screen automatically.</span>';
             }
             if (kind === 'android') {
-              return 'Tap Chrome's <b>⋮</b> menu → <b>Add to Home screen</b> or <b>Install app</b>. If your browser shows its own install banner, use that.';
+              return '<b>Android (Chrome)</b><br>1. Tap Chrome's <b>⋮</b> menu.<br>2. Tap <b>Add to Home screen</b> or <b>Install app</b>.<br>3. Confirm the install.<br><br><span style="color:#475569;">If Chrome offers a direct app-install prompt, this green button will use it instead.</span>';
+            }
+            if (kind === 'mac') {
+              return '<b>Mac</b><br><b>Chrome:</b> More <b>⋮</b> → <b>Cast, save, and share</b> → <b>Install page as app</b>.<br><b>Safari:</b> <b>File → Add to Dock</b>.<br><br><span style="color:#475569;">The browser controls this system menu, so a webpage cannot open it for you.</span>';
             }
             if (kind === 'desktop') {
-              return 'In Chrome or Edge, use the <b>install icon</b> in the address bar or choose <b>Install app</b> from the browser menu.';
+              return '<b>Computer (Chrome / Edge)</b><br>1. Open the browser <b>⋮</b> menu.<br>2. In Chrome choose <b>Cast, save, and share → Install page as app</b>.<br>3. Follow the browser confirmation.<br><br><span style="color:#475569;">The browser controls this system menu, so a webpage cannot open it for you.</span>';
             }
-            return 'Use your browser menu to add Yahtzee Coach to your Home Screen or install it as an app if supported.';
+            return '<b>Install / Home Screen</b><br>Open your browser menu and look for <b>Install app</b>, <b>Install page as app</b>, or <b>Add to Home Screen</b>.';
           }
-          function renderStatus(message, tone) {
-            const color = tone === 'good' ? '#166534' : tone === 'warn' ? '#92400e' : '#334155';
-            status.style.color = color;
-            status.innerHTML = message;
+          function showSteps(message) {
+            steps.innerHTML = message;
+            steps.style.display = 'block';
+            status.textContent = 'Install steps opened below.';
+            setHeight(390);
           }
           function refreshUI() {
             if (isStandalone()) {
               primary.disabled = true;
               primary.textContent = '✅ Already added';
               primary.style.opacity = '0.75';
-              renderStatus('Yahtzee Coach is already running like an installed app on this device.', 'good');
+              status.textContent = 'Yahtzee Coach is already running like an installed app on this device.';
+              steps.style.display = 'none';
+              setHeight(235);
               return;
             }
             primary.disabled = false;
             primary.style.opacity = '1';
-            const kind = platform();
             if (parentWindow.__ycDeferredInstallPrompt) {
-              primary.textContent = kind === 'desktop' ? '⬇️ Install app now' : '📲 Install app now';
-              renderStatus('Your browser is offering an install prompt. Tap the button to open it.', 'good');
+              primary.textContent = '📲 Install app now';
+              status.textContent = 'Your browser is offering a direct install prompt.';
             } else {
-              primary.textContent = '📲 Install / Add';
-              renderStatus(installStepsText(kind), 'info');
+              const kind = platform();
+              primary.textContent = kind === 'ios' ? '📲 Show iPhone install steps' : '📲 Show install steps';
+              status.textContent = 'Tap the green button for the exact steps for this device.';
             }
           }
           parentWindow.addEventListener('beforeinstallprompt', function(event) {
             event.preventDefault();
             parentWindow.__ycDeferredInstallPrompt = event;
+            refreshUI();
+          });
+          parentWindow.addEventListener('appinstalled', function() {
+            parentWindow.__ycDeferredInstallPrompt = null;
             refreshUI();
           });
           primary.addEventListener('click', async function() {
@@ -2064,15 +2079,21 @@ def render_install_app_control():
             }
             const promptEvent = parentWindow.__ycDeferredInstallPrompt;
             if (promptEvent) {
-              promptEvent.prompt();
               try {
-                await promptEvent.userChoice;
-              } catch (err) {}
+                promptEvent.prompt();
+                const result = await promptEvent.userChoice;
+                if (result && result.outcome === 'accepted') {
+                  status.textContent = 'Install accepted — look for the Yahtzee Coach icon on your device.';
+                } else {
+                  showSteps(stepHtml(platform()));
+                }
+              } catch (err) {
+                showSteps(stepHtml(platform()));
+              }
               parentWindow.__ycDeferredInstallPrompt = null;
-              refreshUI();
               return;
             }
-            renderStatus(installStepsText(platform()), 'warn');
+            showSteps(stepHtml(platform()));
           });
           copyBtn.addEventListener('click', async function() {
             try {
@@ -2083,9 +2104,9 @@ def render_install_app_control():
               } else {
                 throw new Error('clipboard unavailable');
               }
-              renderStatus('App link copied. You can text it to yourself or a friend.', 'good');
+              status.textContent = 'App link copied. You can text it to yourself or a friend.';
             } catch (err) {
-              renderStatus('Copy was blocked by the browser. Use the address bar to copy the app link instead.', 'warn');
+              status.textContent = 'Copy was blocked. Use the browser address bar to copy the app link.';
             }
           });
           refreshUI();
@@ -2094,7 +2115,7 @@ def render_install_app_control():
         """
     html_block = html_block.replace('__ICON_192__', json.dumps(icons['icon192']))
     html_block = html_block.replace('__APP_URL__', json.dumps(PUBLIC_APP_URL))
-    components.html(html_block, height=245)
+    components.html(html_block, height=235)
 
 def _daily_puzzle_ids():
     return [str(challenge.get("challenge_id", "")) for challenge in st.session_state.daily_challenges]
@@ -2237,7 +2258,7 @@ def render_player_identity_gate():
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<div class='identity-note'><b>Phase 2G:</b> permanent players, saved Daily attempts, real friend groups, invite links, custom home-screen install polish, and spoiler-free Daily sharing are live. "
+        "<div class='identity-note'><b>Phase 2H:</b> permanent players, saved Daily attempts, real friend groups, invite links, custom home-screen install polish, and spoiler-free Daily sharing are live. "
         "Sign back in after a refresh or on another device to resume the same official attempt.</div>",
         unsafe_allow_html=True,
     )

@@ -1,0 +1,27 @@
+Yahtzee Coach v43B Phase 2H test summary
+
+All 21 automated test suites passed.
+
+- Daily Challenge integration: 17/17
+- Daily Challenge logic: 11/11
+- UI/mobile protections: 14/14
+- Practice UI protections: 12/12
+- Session learning: 7/7
+- Practice progress: 8/8
+- Strategy regressions / playtest protections: 26/26
+- Published strategy tests: 15/15
+- Expanded exact-policy audit: 3,669,120 legal hold values
+- Exact routing sample: 840/840
+- Expanded Practice sample: 20,000/20,000 exact
+- Puzzle-bank / Daily readiness: all pass
+- v43B persistence: 28/28
+- v43B player identity: 14/14
+- v43B Daily attempt UI: 19/19
+- v43B social: 14/14
+- v43B usability: 18/18
+- v43B home-screen icon/install: 9/9
+- v43B Daily share-result tests: 14/14
+- NEW install-flow fallback tests: 10/10
+- Teaching/personalization/context suites: all pass
+
+No exact-strategy behavior changed in this release.

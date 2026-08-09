@@ -1,3 +1,45 @@
+# Yahtzee Coach v43B Phase 2H — Install Button Fix + Clear Device Steps
+
+This checkpoint fixes the home-screen/install control after live testing showed that tapping **Install / Add** could appear to do nothing on both phones and computers.
+The exact strategy engine, Daily sharing, friend groups, persistent attempts, invite links, and custom mascot icon remain intact.
+
+## v43B Phase 2H changes
+
+- The install control no longer silently falls back when the browser does not provide a native install prompt.
+- On **iPhone / iPad**, the green button now opens a clearly visible in-app instruction panel with the required **Share → Add to Home Screen → Open as Web App → Add** sequence.
+- On **Android**, the fallback panel shows the Chrome **⋮ → Add to Home screen / Install app** path.
+- On **desktop Chrome**, the panel shows **⋮ → Cast, save, and share → Install page as app**.
+- On **Mac Safari**, the panel also shows **File → Add to Dock**.
+- If the browser actually exposes a native `beforeinstallprompt` event, Yahtzee Coach still uses the direct system install prompt.
+- If that prompt is declined or fails, the app immediately falls back to the visible manual steps instead of appearing unresponsive.
+- The custom teacher-die mascot icon, installed-mode detection, and **Copy app link** control remain.
+- No Supabase schema changes are required for this phase.
+
+## Why the previous button appeared broken
+
+The Phase 2F/2G button could directly prompt only when the browser had already granted the page a native install event. When that event was unavailable, clicking the button merely repeated guidance that was already visible, so there was little or no visible response. Phase 2H makes that fallback explicit and interactive.
+
+## What is intentionally NOT changed
+
+- Daily puzzle composition/version remains `43A-bank42.6`.
+- Exact policy and strategy recommendations are unchanged.
+- iPhone/iPad still requires the final Apple-controlled Home Screen confirmation taps.
+- Browser-controlled desktop install menus cannot be opened programmatically when the browser does not expose its install event.
+- Daily result sharing, real friend groups, back/edit review, persistence, and Practice are unchanged.
+
+## Phase 2H live-test goal
+
+1. Upload the full current app to GitHub.
+2. On your phone, tap the green install button and confirm a clear device-specific instruction panel opens underneath it.
+3. On iPhone/iPad Safari, follow Share → Add to Home Screen → Open as Web App → Add and confirm the mascot icon appears.
+4. On your computer, tap the green button and confirm the Chrome/Edge or Mac instructions visibly open.
+5. If your browser offers a native install prompt, confirm the button opens that prompt instead.
+6. Confirm Daily result sharing and the rest of the app still behave normally.
+
+---
+
+## Previous checkpoint
+
 # Yahtzee Coach v43B Phase 2G — Spoiler-Free Daily Result Sharing
 
 This checkpoint adds the Wordle-style social payoff to the completed Daily Challenge.
