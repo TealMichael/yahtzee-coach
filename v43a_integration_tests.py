@@ -50,7 +50,7 @@ def run():
     checks.append(("Practice can return to completed leaderboard", "View today's Daily leaderboard" in app_text and 'st.session_state.app_mode = "Daily Challenge"' in app_text))
     checks.append(("competitive mode rejects heuristic fallback", 'this answer was NOT locked' in app_text and 'solver_record.get("source") != "exact"' in app_text))
     checks.append(("coaching waits until completion", 'Now that the competitive run is over, every exact answer and teaching explanation is unlocked.' in app_text))
-    checks.append(("prototype reset control exists", "Reset today's local demo attempt" in app_text))
+    checks.append(("persistent Daily removes prototype reset control", "Reset today's local demo attempt" not in app_text and "cannot be reset" in app_text))
     checks.append(("mobile daily result grid protected", '@media (max-width:640px)' in app_text and '.daily-result-grid { grid-template-columns:repeat(2' in app_text))
 
     failed = [name for name, ok in checks if not ok]

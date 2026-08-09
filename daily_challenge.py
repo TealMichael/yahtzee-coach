@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-"""Daily Challenge gameplay helpers for Yahtzee Coach v43A.
+"""Daily Challenge gameplay helpers for Yahtzee Coach v43B.
 
-v43A intentionally keeps persistence local to the active Streamlit session.
-The shared database/player/group layer arrives in v43B.  The functions in this
-module are UI-independent so challenge scoring, deterministic demo leaderboards,
-and end-of-run summaries can be tested exhaustively before a database is added.
+The deterministic challenge generation and scoring helpers remain UI-independent.
+v43B persists player attempts through the separate DailyStore layer while this
+module continues to own the locked challenge composition, scoring summaries, and
+temporary deterministic demo leaderboard until real friend groups are enabled.
 """
 
 from dataclasses import dataclass

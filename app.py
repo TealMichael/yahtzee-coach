@@ -18,7 +18,10 @@ from daily_challenge import (
     summarize_attempt, user_rank,
 )
 from supabase_daily_store import SupabaseDailyStore
-from daily_store import InvalidPin, PlayerNameTaken
+from daily_store import (
+    AttemptAlreadyComplete, ChallengeMismatch, DailyStoreError, DuplicateAnswer,
+    InvalidOfficialAnswer, InvalidPin, OutOfOrderAnswer, PlayerNameTaken,
+)
 
 st.set_page_config(
     page_title="Yahtzee Coach",
@@ -46,7 +49,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2B database preflight is loaded.")
+    st.info("🔧 v43B Phase 2C database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -1633,7 +1636,7 @@ def render_result(report):
 
 
 # ---------------------------------------------------------------------------
-# v43B Phase 2B — Daily Challenge + persistent player identity
+# v43B Phase 2C — persistent Daily attempts + player identity
 # ---------------------------------------------------------------------------
 
 st.markdown(
@@ -1697,6 +1700,7 @@ st.markdown(
 
 
 def _reset_daily_local_attempt(date_key: str | None = None):
+    """Reset only the local mirror of a Daily attempt; never delete database data."""
     date_key = date_key or current_daily_date_key()
     st.session_state.daily_date_key = date_key
     st.session_state.daily_challenges = get_daily_challenges(date_key)
@@ -1706,7 +1710,13 @@ def _reset_daily_local_attempt(date_key: str | None = None):
     st.session_state.daily_question_index = 0
     st.session_state.daily_answers = []
     st.session_state.daily_flash = ""
+    st.session_state.daily_attempt_id = None
+    st.session_state.daily_persistence_sync_key = None
     st.session_state.daily_display_name = st.session_state.get("daily_display_name", "You") or "You"
+    # Held-die widget state is local UI state and must never leak between players/dates.
+    for key in list(st.session_state.keys()):
+        if str(key).startswith(("daily_held_", "daily_dice_pills_")):
+            del st.session_state[key]
 
 
 def initialize_daily_state():
@@ -1717,6 +1727,10 @@ def initialize_daily_state():
         _reset_daily_local_attempt(today)
     if "app_mode" not in st.session_state:
         st.session_state.app_mode = "Daily Challenge"
+    if "daily_attempt_id" not in st.session_state:
+        st.session_state.daily_attempt_id = None
+    if "daily_persistence_sync_key" not in st.session_state:
+        st.session_state.daily_persistence_sync_key = None
 
 
 def initialize_player_identity_state():
@@ -1730,7 +1744,7 @@ def initialize_player_identity_state():
 
 
 def _activate_player(player, *, created: bool = False):
-    """Switch the active v43B player without carrying another player's local Daily state."""
+    """Switch the active v43B player without carrying another player's Daily state."""
     previous_id = st.session_state.get("active_player_id")
     if previous_id != player.player_id:
         _reset_daily_local_attempt(current_daily_date_key())
@@ -1752,6 +1766,138 @@ def _sign_out_player():
     st.session_state.daily_display_name = "You"
 
 
+def _daily_puzzle_ids():
+    return [str(challenge.get("challenge_id", "")) for challenge in st.session_state.daily_challenges]
+
+
+def _hold_values_from_exact_label(label: str) -> list[int]:
+    """Convert exact-mode labels such as 'keep 2, 2, 5' back to die values."""
+    text = str(label or "").strip().lower()
+    if not text or "reroll" in text:
+        return []
+    return [int(value) for value in re.findall(r"\b[1-6]\b", text)]
+
+
+def _register_today_in_database(store):
+    return store.ensure_challenge(
+        st.session_state.daily_set_id,
+        st.session_state.daily_date_key,
+        DAILY_CHALLENGE_VERSION,
+        _daily_puzzle_ids(),
+    )
+
+
+def _rebuild_persisted_daily_answer(challenge, answer_record):
+    """Recreate the rich local review object from the immutable compact DB answer."""
+    if str(challenge.get("challenge_id", "")) != str(answer_record.puzzle_id):
+        raise ChallengeMismatch("Saved Daily answer does not match today's puzzle order.")
+    selected_hold = list(answer_record.chosen_hold)
+    report, solver_record = build_live_report(
+        challenge["dice"],
+        challenge["scorecard"],
+        selected_hold,
+        challenge["roll_number"],
+    )
+    if solver_record.get("source") != "exact":
+        raise InvalidOfficialAnswer("The exact solver is required to restore an official Daily answer.")
+    rebuilt_loss = float(solver_record.get("points_lost", 0.0) or 0.0)
+    if abs(rebuilt_loss - float(answer_record.points_lost)) > 1e-6:
+        raise ChallengeMismatch("Saved Daily score does not match the locked exact policy.")
+    return _daily_solver_record(challenge, solver_record, selected_hold, report)
+
+
+def _apply_daily_resume_state(resume_state, *, resumed_message: bool = False):
+    challenges = st.session_state.daily_challenges
+    answers = list(resume_state.answers)
+    if len(answers) > len(challenges):
+        raise ChallengeMismatch("Saved Daily attempt has too many answers.")
+    rebuilt = [
+        _rebuild_persisted_daily_answer(challenges[index], answer_record)
+        for index, answer_record in enumerate(answers)
+    ]
+    st.session_state.daily_attempt_id = resume_state.attempt.attempt_id
+    st.session_state.daily_started = True
+    st.session_state.daily_answers = rebuilt
+    st.session_state.daily_question_index = len(rebuilt)
+    st.session_state.daily_completed = bool(resume_state.attempt.complete or len(rebuilt) >= len(challenges))
+    st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
+    if resumed_message and 0 < len(rebuilt) < len(challenges):
+        st.session_state.daily_flash = f"Resumed your saved attempt after {len(rebuilt)} locked answer{'s' if len(rebuilt) != 1 else ''}."
+
+
+def _daily_sync_key():
+    return f"{st.session_state.get('active_player_id')}|{st.session_state.daily_set_id}"
+
+
+def _force_daily_resync():
+    st.session_state.daily_persistence_sync_key = None
+
+
+def sync_daily_attempt_from_database(*, force: bool = False) -> bool:
+    """Load today's existing attempt once per player/session, including refresh/device resume."""
+    if not st.session_state.get("active_player_id"):
+        return False
+    sync_key = _daily_sync_key()
+    if not force and st.session_state.get("daily_persistence_sync_key") == sync_key:
+        return True
+    try:
+        store = load_daily_store()
+        _register_today_in_database(store)
+        resume_state = store.get_resume_state(
+            st.session_state.active_player_id,
+            st.session_state.daily_set_id,
+        )
+        if resume_state is not None:
+            # If Question 10 was saved but finalization was interrupted, finish it safely now.
+            if len(resume_state.answers) == 10 and not resume_state.attempt.complete:
+                store.complete_attempt(resume_state.attempt.attempt_id)
+                resume_state = store.get_resume_state(
+                    st.session_state.active_player_id,
+                    st.session_state.daily_set_id,
+                )
+            _apply_daily_resume_state(resume_state, resumed_message=True)
+        else:
+            st.session_state.daily_started = False
+            st.session_state.daily_completed = False
+            st.session_state.daily_question_index = 0
+            st.session_state.daily_answers = []
+            st.session_state.daily_attempt_id = None
+        st.session_state.daily_persistence_sync_key = sync_key
+        return True
+    except Exception as exc:
+        st.error("Today's Daily Challenge could not be loaded from the v43B database. Your official attempt was not changed.")
+        if database_check_enabled():
+            st.caption(f"Daily persistence detail: {type(exc).__name__}: {exc}")
+        return False
+
+
+def start_persistent_daily_attempt() -> bool:
+    """Create the single official attempt, or restore it if another request already created it."""
+    try:
+        store = load_daily_store()
+        _register_today_in_database(store)
+        attempt, created = store.get_or_create_attempt(
+            st.session_state.active_player_id,
+            st.session_state.daily_set_id,
+        )
+        resume_state = store.get_resume_state(
+            st.session_state.active_player_id,
+            st.session_state.daily_set_id,
+        )
+        if resume_state is None:
+            raise DailyStoreError("The Daily attempt could not be reloaded after creation.")
+        _apply_daily_resume_state(resume_state, resumed_message=not created)
+        st.session_state.daily_persistence_sync_key = _daily_sync_key()
+        if created:
+            st.session_state.daily_flash = "Official attempt started and saved."
+        return True
+    except Exception as exc:
+        st.error("Your official Daily attempt could not be started, so nothing was locked. Please try again.")
+        if database_check_enabled():
+            st.caption(f"Daily start detail: {type(exc).__name__}: {exc}")
+        return False
+
+
 def render_player_identity_gate():
     """Create or restore the permanent v43B player used for Daily Challenge."""
     st.markdown(
@@ -1764,8 +1910,8 @@ def render_player_identity_gate():
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<div class='identity-note'><b>Phase 2B:</b> permanent player identity is live now. "
-        "Daily attempt resume and real friend groups are the next persistence steps.</div>",
+        "<div class='identity-note'><b>Phase 2C:</b> permanent player identity and Daily attempt saving are live. "
+        "Sign back in after a refresh or on another device to resume the same official attempt.</div>",
         unsafe_allow_html=True,
     )
 
@@ -1911,34 +2057,33 @@ def render_daily_intro():
     date_key = st.session_state.daily_date_key
     st.markdown(
         "<div class='daily-hero'>"
-        "<div class='daily-kicker'>🎲 Daily Challenge <span class='prototype-badge'>v43B identity live</span></div>"
+        "<div class='daily-kicker'>🎲 Daily Challenge <span class='prototype-badge'>v43B persistence live</span></div>"
         f"<div class='daily-title'>{_daily_date_label(date_key)}</div>"
         "<div class='daily-rule'><b>10 hold decisions. Same challenge for everyone.</b><br>"
         "Lose as few expected game points as possible. Your answers lock as you go; exact coaching unlocks after Question 10.<br>"
-        "<span style='font-size:.80rem'>5 Roll 1 · 5 Roll 2 · one locked attempt · new challenge at midnight Eastern</span></div>"
+        "<span style='font-size:.80rem'>5 Roll 1 · 5 Roll 2 · one official attempt · new challenge at midnight Eastern</span></div>"
         "</div>",
         unsafe_allow_html=True,
     )
     st.caption(f"Playing today's challenge as {st.session_state.get('active_player_name') or 'Player'}.")
-    start_col, practice_col = st.columns([2, 1])
-    with start_col:
-        if st.button("Start today's Daily Challenge", type="primary", use_container_width=True):
-            st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
-            st.session_state.daily_started = True
-            st.session_state.daily_question_index = len(st.session_state.daily_answers)
-            st.session_state.daily_flash = ""
+
+    if st.button("Start today's Daily Challenge", type="primary", use_container_width=True):
+        st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
+        if start_persistent_daily_attempt():
             st.rerun()
-    with practice_col:
-        if st.button("Open Practice", use_container_width=True):
-            st.session_state.app_mode = "Practice"
-            st.rerun()
+
+    if st.button("Open Practice", use_container_width=True):
+        st.session_state.app_mode = "Practice"
+        st.rerun()
+
     with st.expander("How the Daily Challenge works", expanded=False):
         st.markdown(
-            "- **Ranking:** lowest total expected game-point loss wins.\n"
-            "- **Answers lock:** no going backward during the official run.\n"
-            "- **Coaching waits:** grades, exact holds, and lessons appear after Question 10.\n"
-            "- **Player identity:** your v43B display name is now saved permanently.\n"
-            "- **Still in preview:** this phase keeps the demo leaderboard and session-local Daily attempt while we live-test identity."
+            "- **One official attempt:** starting today's challenge creates your one saved attempt for this player.\n"
+            "- **Answers lock permanently:** each exact-scored hold is saved as soon as you submit it.\n"
+            "- **Resume anywhere:** refresh, close the app, or sign in on another device and continue at the next unanswered question.\n"
+            "- **Coaching stays hidden:** grades, exact answers, and EV loss remain hidden until all 10 decisions are locked.\n"
+            "- **Reset:** a new challenge begins at midnight Eastern.\n"
+            "- **Still in preview:** the friend leaderboard remains simulated until real friend groups are connected."
         )
 
 
@@ -1970,7 +2115,7 @@ def render_daily_question():
 
     render_scorecard(challenge["scorecard"])
     st.markdown("<div class='section-label'>Tap dice to hold</div>", unsafe_allow_html=True)
-    st.markdown("<div class='dice-help'>Make your decision exactly as you would in Practice. Once locked, you cannot go back during this attempt.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='dice-help'>Make your decision exactly as you would in Practice. Once locked, it is saved permanently and you cannot go back.</div>", unsafe_allow_html=True)
 
     held_key = f"daily_held_{st.session_state.daily_date_key}_{index}"
     if held_key not in st.session_state:
@@ -2001,18 +2146,55 @@ def render_daily_question():
         if solver_record.get("source") != "exact":
             st.error("The exact scorer was unavailable, so this answer was NOT locked. Please try again.")
             return
+        attempt_id = st.session_state.get("daily_attempt_id")
+        if not attempt_id:
+            st.error("Your saved Daily attempt could not be found, so this answer was NOT locked. Please sign in again.")
+            _force_daily_resync()
+            return
+        try:
+            load_daily_store().save_answer(
+                attempt_id,
+                question_number=index + 1,
+                puzzle_id=str(challenge.get("challenge_id", "")),
+                chosen_hold=selected_hold,
+                optimal_hold=_hold_values_from_exact_label(solver_record.get("optimal_hold", "")),
+                points_lost=float(solver_record.get("points_lost", 0.0) or 0.0),
+                solver_source="exact",
+            )
+        except (DuplicateAnswer, OutOfOrderAnswer, AttemptAlreadyComplete, ChallengeMismatch):
+            # Another tab/device may have advanced this same one-attempt record.
+            _force_daily_resync()
+            if sync_daily_attempt_from_database(force=True):
+                st.session_state.daily_flash = "Your saved attempt was refreshed from the database."
+                st.rerun()
+            return
+        except Exception as exc:
+            st.error("This answer was NOT locked because the database could not save it. Please try again.")
+            if database_check_enabled():
+                st.caption(f"Daily save detail: {type(exc).__name__}: {exc}")
+            return
+
         st.session_state.daily_answers.append(
             _daily_solver_record(challenge, solver_record, selected_hold, report)
         )
         if index + 1 >= len(challenges):
+            try:
+                load_daily_store().complete_attempt(attempt_id)
+            except Exception as exc:
+                # Question 10 is already safely locked. A forced sync can finalize it on rerun.
+                _force_daily_resync()
+                if database_check_enabled():
+                    st.caption(f"Daily finalize detail: {type(exc).__name__}: {exc}")
+                st.rerun()
+                return
             st.session_state.daily_completed = True
             st.session_state.daily_question_index = len(challenges)
         else:
             st.session_state.daily_question_index = index + 1
-            st.session_state.daily_flash = f"Answer {index + 1} locked."
+            st.session_state.daily_flash = f"Answer {index + 1} locked and saved."
         st.rerun()
 
-    st.markdown("<div class='daily-lock-note'>Your score and the exact answer stay hidden until all 10 decisions are locked.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='daily-lock-note'>Your locked answers are saved to your v43B player. Your score and the exact answer stay hidden until all 10 decisions are locked.</div>", unsafe_allow_html=True)
 
 
 def _leaderboard_frame(board):
@@ -2113,7 +2295,7 @@ def render_daily_results():
     st.markdown(f"<div class='daily-rank-banner'><b>🏆 Daily result</b><br>{rank_copy}</div>", unsafe_allow_html=True)
 
     st.markdown("### Friend leaderboard")
-    st.caption("Phase 2B preview: your player identity is real, but the seven friend rows are still deterministic simulated players. A coming v43B patch will replace them with your actual groups.")
+    st.caption("v43B Phase 2C: your player and official Daily result are now persistent. The seven friend rows are still deterministic simulated players until real friend groups are connected.")
     st.dataframe(_leaderboard_frame(board), hide_index=True, use_container_width=True)
 
     toughest = story.get("toughest")
@@ -2147,18 +2329,14 @@ def render_daily_results():
             st.session_state.app_mode = "Practice"
             st.rerun()
     with stay_col:
-        st.caption("Come back to Daily Challenge anytime in this session to re-check today's leaderboard.")
+        st.caption("Your completed attempt is saved. Sign back in later to restore today's result and review.")
 
     st.markdown("### Review your 10")
     st.caption("Now that the competitive run is over, every exact answer and teaching explanation is unlocked.")
     for answer in answers:
         _daily_review_item(answer)
 
-    with st.expander("v43B preview controls", expanded=False):
-        st.caption("Your player identity is now stored in the v43B database. This Phase 2B build still keeps the Daily attempt inside the active Streamlit session; the next persistence patch will enforce one attempt per player/day and resume across devices.")
-        if st.button("Reset today's local demo attempt", use_container_width=True):
-            _reset_daily_local_attempt(st.session_state.daily_date_key)
-            st.rerun()
+    st.caption("🔒 This is your one official attempt for today. Its 10 locked answers and final result are stored with your v43B player and cannot be reset.")
 
     render_solver_panel(records)
 
@@ -2168,6 +2346,8 @@ def render_daily_mode():
         render_player_identity_gate()
         return
     render_player_status_bar()
+    if not sync_daily_attempt_from_database():
+        return
     if not st.session_state.daily_started:
         render_daily_intro()
         return
@@ -2177,7 +2357,7 @@ def render_daily_mode():
         return
     st.caption(
         f"🎲 Daily Challenge in progress · {_daily_date_label(st.session_state.daily_date_key)} · "
-        "switching to Practice and back will keep your locked answers in this session."
+        f"{len(st.session_state.daily_answers)} of 10 answers safely saved. You can leave and resume later."
     )
     render_daily_question()
 

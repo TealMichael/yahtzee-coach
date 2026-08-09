@@ -1,3 +1,48 @@
+# Yahtzee Coach v43B Phase 2C — Persistent Daily Attempts
+
+This checkpoint turns the permanent-player system into a true saved Daily Challenge.
+The exact strategy engine, exact policy, Daily puzzle composition, and Practice behavior remain locked.
+
+## v43B Phase 2C changes
+
+- Starting the Daily Challenge now creates the player's **one official attempt for that day** in Supabase.
+- The database uniqueness rule enforces one attempt per player / challenge even if two tabs or devices try to start at once.
+- Every answer is written to Supabase **before** the local UI advances to the next question.
+- Locked answers are immutable and remain exact-solver-only.
+- Refreshing, leaving the app, signing out, or switching devices no longer loses Daily progress.
+- After signing back in, the app restores the saved attempt and continues at the next unanswered question.
+- Completed attempts restore the full result/review screen after a later sign-in.
+- Question 10 completion is self-healing: if the tenth answer saves but finalization is interrupted, the next load safely finalizes the already-locked attempt.
+- The old prototype **Reset today's local demo attempt** control is removed. Official attempts cannot be reset.
+- Local held-die widget state is cleared when switching players/dates so an unsubmitted hold cannot leak from one player to another.
+- The Daily UI now explicitly shows how many answers are safely saved.
+- Adds `v43b_daily_attempt_ui_tests.py` for the live persistence wiring.
+- No Supabase schema migration is required for this patch; it activates the attempt/answer tables already installed during the v43B setup.
+
+## What is intentionally NOT changed yet
+
+- The seven friend leaderboard rows are still deterministic simulated players.
+- Real friend groups, join codes, real group leaderboards, streak display, and real group question stats are not visible yet.
+- Player identity still uses the lightweight display-name + PIN flow; users sign back in to restore a session on another device.
+- Exact solver behavior is unchanged.
+- Daily puzzle composition/version remains `43A-bank42.6`.
+- Practice behavior is unchanged and still works without signing in.
+
+## Phase 2C live-test goal
+
+1. Sign in to the same player that passed Phase 2B.
+2. Start today's Daily Challenge.
+3. Lock two or three answers.
+4. Refresh/close the app or sign out.
+5. Return and sign in with the same player.
+6. Confirm the challenge resumes at the next unanswered question with the earlier answers still locked.
+7. Finish all ten.
+8. Leave and return again; confirm the completed result/review restores instead of offering a second attempt.
+
+Once this passes live, the next major v43B step can replace the simulated friend leaderboard with real groups and real completed-player results.
+
+---
+
 # Yahtzee Coach v43B Phase 2B — Persistent Player Identity
 
 This checkpoint turns the working Supabase connection into the first visible v43B feature:
