@@ -1,3 +1,68 @@
+# Yahtzee Coach v43B Phase 2E — Invite Links + Editable Daily Review + Home-Screen Polish
+
+This checkpoint turns the successful Phase 2D social system into a much smoother friend-facing experience.
+The exact strategy engine, Daily puzzle composition, real friend groups, permanent player identity, and one-attempt-per-day rule remain intact.
+
+## v43B Phase 2E changes
+
+- Every friend group now has a **shareable invite URL** in addition to its short join code.
+- Group members get both **Share invite** and **Copy invite link** controls.
+- Opening an invite URL sends a new friend directly into the Daily/player flow with the group invite already queued.
+- A new player can create a display name + PIN, or a returning player can sign in, and then Yahtzee Coach **automatically joins that invited group**.
+- The invite query parameter is cleared after a successful join so normal app navigation resumes cleanly.
+- Daily Challenge now has a visible **Back** button.
+- Saved Daily choices can be revised before the player final-submits the ten-question set.
+- Back/edit does **not** reveal grades, EV loss, optimal holds, strategy labels, or coaching.
+- After Question 10, the player sees a **final no-feedback review** of all ten chosen holds.
+- The review screen can jump directly back to any question for correction.
+- **Submit final Daily Challenge** is now the permanent lock point. After final submission, the ten answers are immutable and the normal result/leaderboard/coaching screen unlocks.
+- Refresh/cross-device resume is preserved: saved draft choices still restore from Supabase before final submission.
+- The app home area now includes **Add Yahtzee Coach to your Home Screen** guidance for iPhone/iPad, Android, and desktop browsers.
+- Friend groups, live leaderboards, real group question stats, Practice, and exact strategy remain unchanged.
+
+## One-time database migration required
+
+Phase 2C/2D intentionally made every saved answer immutable immediately. Phase 2E changes the lock point to the player's explicit final submission, so previously saved answer rows must be allowed to update **only while the parent Daily attempt is incomplete**.
+
+Existing Supabase projects must run `v43b_phase2e_migration.sql` once in the Supabase SQL Editor before testing Back/edit.
+The migration is safe to run more than once and preserves these protections:
+
+- one attempt per player/challenge
+- first-pass answers still save sequentially
+- official answers remain exact-solver-only
+- question number / puzzle identity cannot be changed
+- answer rows cannot be deleted
+- completed Daily attempts cannot be revised
+
+`v43b_schema.sql` has also been updated so a brand-new v43B database would receive the Phase 2E behavior directly.
+
+## What is intentionally NOT changed
+
+- Daily puzzle composition/version remains `43A-bank42.6`.
+- The exact policy and strategy recommendations are unchanged.
+- The Daily still allows only one official attempt per player per day.
+- No feedback appears while answers remain editable.
+- Practice remains open and account-free.
+- PIN recovery and group-admin/delete tools are still future polish items.
+- Participation streak calculations exist in the persistence layer but are not yet surfaced prominently.
+
+## Phase 2E live-test goal
+
+1. Run the one-time `v43b_phase2e_migration.sql` in Supabase.
+2. Upload the full current app to GitHub.
+3. In a friend group, use **Copy invite link** or **Share invite** and open the link in a fresh/private browser.
+4. Create/sign in as a test player and confirm the player joins the group automatically without manually entering the code.
+5. Start the Daily, save at least three answers, then use **Back** to change an earlier hold.
+6. Refresh or sign out/in and confirm the revised saved answer is still there.
+7. Complete all ten and confirm the no-feedback review appears before the score.
+8. Edit one question from that review, return to review, then final-submit.
+9. Confirm the completed result is locked and the real friend leaderboard still works.
+10. On a phone, open **Add Yahtzee Coach to your Home Screen** and follow the device-specific install steps.
+
+---
+
+## Previous checkpoint
+
 # Yahtzee Coach v43B Phase 2D — Real Friend Groups + Live Leaderboards
 
 This checkpoint turns the Daily Challenge social layer from a demo into real shared competition.

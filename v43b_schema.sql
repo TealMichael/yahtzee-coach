@@ -1,6 +1,6 @@
 -- Yahtzee Coach v43B — Supabase/Postgres persistence schema
 -- Phase 1 contract: identity, friend groups, deterministic challenge IDs,
--- one attempt per player/challenge, immutable exact-only answers, resume state,
+-- one attempt per player/challenge, editable exact-only draft answers until final submit, resume state,
 -- leaderboard metrics, and participation-streak source data.
 --
 -- Run this in the Supabase SQL Editor for a NEW v43B project/database.
@@ -80,7 +80,7 @@ create index if not exists daily_attempts_challenge_idx on public.daily_attempts
 create index if not exists daily_attempts_completed_idx on public.daily_attempts(player_id, completed_at);
 create index if not exists daily_answers_attempt_idx on public.daily_answers(attempt_id);
 
--- Lock each answer at the database layer and ensure answers arrive sequentially.
+-- Save each answer at the database layer and ensure first-pass answers arrive sequentially.
 create or replace function public.guard_daily_answer_insert()
 returns trigger
 language plpgsql
@@ -140,21 +140,78 @@ create trigger daily_answers_insert_guard
 before insert on public.daily_answers
 for each row execute function public.guard_daily_answer_insert();
 
-create or replace function public.prevent_daily_answer_mutation()
+create or replace function public.guard_daily_answer_update()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    parent_attempt public.daily_attempts%rowtype;
+    expected_puzzle text;
+begin
+    select * into parent_attempt
+    from public.daily_attempts
+    where attempt_id = old.attempt_id
+    for update;
+
+    if not found then
+        raise exception 'Unknown Daily attempt';
+    end if;
+
+    if parent_attempt.completed_at is not null then
+        raise exception 'Completed Daily answers cannot be changed';
+    end if;
+
+    if new.attempt_id is distinct from old.attempt_id
+       or new.question_number is distinct from old.question_number
+       or new.puzzle_id is distinct from old.puzzle_id then
+        raise exception 'Daily answer identity cannot be changed';
+    end if;
+
+    select (puzzle_ids ->> (new.question_number - 1))
+    into expected_puzzle
+    from public.daily_challenges
+    where challenge_id = parent_attempt.challenge_id;
+
+    if expected_puzzle is distinct from new.puzzle_id then
+        raise exception 'Puzzle ID does not match registered Daily challenge slot';
+    end if;
+
+    if new.solver_source <> 'exact' then
+        raise exception 'Official Daily answers must use exact scoring';
+    end if;
+
+    if new.exact is distinct from (new.points_lost <= 0.000000001) then
+        raise exception 'Exact flag does not match points_lost';
+    end if;
+
+    new.submitted_at := now();
+    return new;
+end;
+$$;
+
+create or replace function public.prevent_daily_answer_delete()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
 begin
-    raise exception 'Locked Daily answers cannot be changed or deleted';
+    raise exception 'Daily answers cannot be deleted';
 end;
 $$;
 
 drop trigger if exists daily_answers_no_update on public.daily_answers;
-create trigger daily_answers_no_update
-before update or delete on public.daily_answers
-for each row execute function public.prevent_daily_answer_mutation();
+drop trigger if exists daily_answers_update_guard on public.daily_answers;
+create trigger daily_answers_update_guard
+before update on public.daily_answers
+for each row execute function public.guard_daily_answer_update();
+
+drop trigger if exists daily_answers_no_delete on public.daily_answers;
+create trigger daily_answers_no_delete
+before delete on public.daily_answers
+for each row execute function public.prevent_daily_answer_delete();
 
 -- Public browser/API access is intentionally closed for the custom-PIN v43B
 -- architecture.  The Streamlit server will perform authorization and use a

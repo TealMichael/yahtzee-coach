@@ -652,7 +652,87 @@ class SupabaseDailyStore:
             raise
         row = _first_row(response)
         if row is None:
-            raise DailyStoreError("Supabase did not return the locked answer.")
+            raise DailyStoreError("Supabase did not return the saved answer.")
+        return _answer_from_row(row)
+
+    def revise_answer(
+        self,
+        attempt_id: str,
+        *,
+        question_number: int,
+        puzzle_id: str,
+        chosen_hold: Sequence[int],
+        optimal_hold: Sequence[int],
+        points_lost: float,
+        solver_source: str = "exact",
+    ) -> AnswerRecord:
+        """Revise a previously saved answer while the attempt is still incomplete."""
+        attempt = _attempt_from_row(self._require_attempt_row(attempt_id))
+        if attempt.complete:
+            raise AttemptAlreadyComplete("Completed Daily attempts are immutable.")
+        if str(solver_source) != "exact":
+            raise InvalidOfficialAnswer("Official Daily answers must be scored by the exact solver.")
+
+        question_number = int(question_number)
+        if not 1 <= question_number <= 10:
+            raise ValueError("question_number must be 1-10.")
+
+        existing = {answer.question_number: answer for answer in self._answers_for_attempt(attempt_id)}
+        if question_number not in existing:
+            raise DailyStoreError("That Daily answer has not been saved yet.")
+
+        challenge_response = (
+            self.client.table("daily_challenges")
+            .select("*")
+            .eq("challenge_id", attempt.challenge_id)
+            .limit(1)
+            .execute()
+        )
+        challenge_row = _first_row(challenge_response)
+        if challenge_row is None:
+            raise DailyStoreError(f"Unknown challenge_id: {attempt.challenge_id}")
+        challenge = _challenge_from_row(challenge_row)
+        expected_puzzle_id = challenge.puzzle_ids[question_number - 1]
+        if str(puzzle_id) != expected_puzzle_id:
+            raise ChallengeMismatch(
+                "Answer puzzle_id does not match the registered Daily Challenge slot."
+            )
+
+        loss = float(points_lost)
+        if loss < -TIE_TOLERANCE:
+            raise ValueError("points_lost cannot be negative.")
+        loss = max(0.0, loss)
+        payload = {
+            "chosen_hold": [int(value) for value in chosen_hold],
+            "optimal_hold": [int(value) for value in optimal_hold],
+            "points_lost": loss,
+            "exact": loss <= TIE_TOLERANCE,
+            "solver_source": "exact",
+            "submitted_at": utc_now().isoformat(),
+        }
+        try:
+            response = (
+                self.client.table("daily_answers")
+                .update(payload)
+                .eq("attempt_id", str(attempt_id))
+                .eq("question_number", question_number)
+                .select("*")
+                .execute()
+            )
+        except Exception as exc:
+            text = _error_text(exc)
+            if "already complete" in text or "completed daily" in text:
+                raise AttemptAlreadyComplete("Completed Daily attempts are immutable.") from exc
+            if "puzzle id" in text:
+                raise ChallengeMismatch(
+                    "Answer puzzle_id does not match the registered Daily Challenge slot."
+                ) from exc
+            if "exact scoring" in text or "exact flag" in text:
+                raise InvalidOfficialAnswer("Official Daily answer failed exact-score validation.") from exc
+            raise
+        row = _first_row(response)
+        if row is None:
+            raise DailyStoreError("Supabase did not return the revised answer.")
         return _answer_from_row(row)
 
     def complete_attempt(self, attempt_id: str) -> AttemptRecord:
@@ -662,7 +742,7 @@ class SupabaseDailyStore:
 
         answers = self._answers_for_attempt(attempt_id)
         if len(answers) != 10 or [a.question_number for a in answers] != list(range(1, 11)):
-            raise DailyStoreError("A Daily attempt cannot complete until all 10 answers are locked.")
+            raise DailyStoreError("A Daily attempt cannot complete until all 10 answers are saved.")
 
         losses = [answer.points_lost for answer in answers]
         best_streak = 0

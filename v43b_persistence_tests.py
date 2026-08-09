@@ -111,7 +111,7 @@ def run():
         points_lost=0.42,
     )
     resume = store.get_resume_state(alice.player_id, challenge.challenge_id)
-    checks.append(("resume returns locked answers", len(resume.answers) == 2 and resume.next_question_number == 3))
+    checks.append(("resume returns saved answers", len(resume.answers) == 2 and resume.next_question_number == 3))
 
     try:
         store.save_answer(
@@ -123,7 +123,18 @@ def run():
         duplicate_answer_ok = False
     except DuplicateAnswer:
         duplicate_answer_ok = True
-    checks.append(("duplicate locked answer is rejected", duplicate_answer_ok))
+    checks.append(("duplicate first-save answer is rejected", duplicate_answer_ok))
+
+    revised = store.revise_answer(
+        attempt1.attempt_id,
+        question_number=2,
+        puzzle_id=challenge.puzzle_ids[1],
+        chosen_hold=[4, 6],
+        optimal_hold=[6, 6],
+        points_lost=0.42,
+    )
+    checks.append(("saved answer can be revised before completion", revised.chosen_hold == (4, 6) and revised.points_lost == 0.42))
+    checks.append(("revising an earlier answer preserves resume position", store.get_resume_state(alice.player_id, challenge.challenge_id).next_question_number == 3))
 
     try:
         store.save_answer(
@@ -160,7 +171,7 @@ def run():
             points_lost=0.0 if number not in (5, 8) else 0.10,
         )
     alice_done = store.complete_attempt(attempt1.attempt_id)
-    checks.append(("completion summary is calculated from locked answers", abs(alice_done.total_ev_loss - 0.62) < 1e-12 and alice_done.exact_count == 7 and abs(alice_done.worst_miss - 0.42) < 1e-12))
+    checks.append(("completion summary is calculated from final saved answers", abs(alice_done.total_ev_loss - 0.62) < 1e-12 and alice_done.exact_count == 7 and abs(alice_done.worst_miss - 0.42) < 1e-12))
     checks.append(("completed attempt resumes as complete", store.get_resume_state(alice.player_id, challenge.challenge_id).next_question_number is None))
     try:
         store.save_answer(
@@ -172,7 +183,18 @@ def run():
         completed_mutation_ok = False
     except AttemptAlreadyComplete:
         completed_mutation_ok = True
-    checks.append(("completed attempt is immutable", completed_mutation_ok))
+    checks.append(("completed attempt rejects new saves", completed_mutation_ok))
+    try:
+        store.revise_answer(
+            attempt1.attempt_id,
+            question_number=2,
+            puzzle_id=challenge.puzzle_ids[1],
+            chosen_hold=[6, 6], optimal_hold=[6, 6], points_lost=0.0,
+        )
+        completed_revision_ok = False
+    except AttemptAlreadyComplete:
+        completed_revision_ok = True
+    checks.append(("completed attempt rejects revisions", completed_revision_ok))
 
     # Leaderboard tie-break tests:
     # Bob: same total (0.62), MORE exact (8 vs Alice's 7) -> Bob ahead of Alice.

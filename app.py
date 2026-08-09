@@ -1,5 +1,6 @@
 import re
 import html
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,6 +30,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
+
 
 @st.cache_resource(show_spinner=False)
 def load_daily_store():
@@ -48,7 +51,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2D database preflight is loaded.")
+    st.info("🔧 v43B Phase 2E database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -1161,6 +1164,20 @@ def selected_hold_from_indices(dice, indices):
     return sorted([dice[int(i)] for i in sorted(indices)])
 
 
+def hold_indices_from_values(dice, held_values):
+    """Map a held-value multiset back to concrete die indices for editable Daily questions."""
+    remaining = [int(value) for value in held_values]
+    indices = []
+    for index, die in enumerate(dice):
+        try:
+            match = remaining.index(int(die))
+        except ValueError:
+            continue
+        indices.append(index)
+        remaining.pop(match)
+    return indices
+
+
 def die_pip_classes(die):
     pip_map = {
         1: ["pip-c"],
@@ -1635,7 +1652,7 @@ def render_result(report):
 
 
 # ---------------------------------------------------------------------------
-# v43B Phase 2D — friend groups + real Daily leaderboards
+# v43B Phase 2E — invite links, editable Daily review, and home-screen polish
 # ---------------------------------------------------------------------------
 
 st.markdown(
@@ -1706,6 +1723,7 @@ def _reset_daily_local_attempt(date_key: str | None = None):
     st.session_state.daily_set_id = challenge_set_id(date_key, st.session_state.daily_challenges)
     st.session_state.daily_started = False
     st.session_state.daily_completed = False
+    st.session_state.daily_ready_to_submit = False
     st.session_state.daily_question_index = 0
     st.session_state.daily_answers = []
     st.session_state.daily_flash = ""
@@ -1728,6 +1746,8 @@ def initialize_daily_state():
         st.session_state.app_mode = "Daily Challenge"
     if "daily_attempt_id" not in st.session_state:
         st.session_state.daily_attempt_id = None
+    if "daily_ready_to_submit" not in st.session_state:
+        st.session_state.daily_ready_to_submit = False
     if "daily_persistence_sync_key" not in st.session_state:
         st.session_state.daily_persistence_sync_key = None
 
@@ -1773,6 +1793,119 @@ def _sign_out_player():
     st.session_state.pop("friend_group_selector", None)
     _reset_daily_local_attempt(current_daily_date_key())
     st.session_state.daily_display_name = "You"
+
+
+def _query_param_value(name: str) -> str:
+    try:
+        value = st.query_params.get(name, "")
+    except Exception:
+        return ""
+    if isinstance(value, list):
+        value = value[0] if value else ""
+    return str(value or "").strip()
+
+
+def _pending_invite_code() -> str:
+    return re.sub(r"\s+", "", _query_param_value("invite")).upper()[:12]
+
+
+def _clear_pending_invite():
+    try:
+        if "invite" in st.query_params:
+            del st.query_params["invite"]
+    except Exception:
+        pass
+
+
+def _group_invite_url(join_code: str) -> str:
+    code = re.sub(r"\s+", "", str(join_code or "")).upper()
+    return f"{PUBLIC_APP_URL}?invite={code}"
+
+
+def process_pending_group_invite() -> bool:
+    """Auto-join a group after a player arrives through an invite link and signs in."""
+    code = _pending_invite_code()
+    if not code or not st.session_state.get("active_player_id"):
+        return False
+    try:
+        group = load_daily_store().join_group(st.session_state.active_player_id, code)
+    except GroupNotFound:
+        st.session_state.group_flash = "That invite link is no longer valid."
+        _clear_pending_invite()
+        return False
+    except Exception as exc:
+        st.warning("Your player is signed in, but the group invite could not be joined yet. Try the invite link again.")
+        if database_check_enabled():
+            st.caption(f"Invite join detail: {type(exc).__name__}: {exc}")
+        return False
+    st.session_state.active_group_id = group.group_id
+    st.session_state.group_flash = f"Joined {group.group_name} from the invite link."
+    st.session_state.app_mode = "Daily Challenge"
+    _clear_pending_invite()
+    return True
+
+
+def render_group_invite_controls(group):
+    """Share/copy a one-tap URL that queues this group before player sign-up/sign-in."""
+    invite_url = _group_invite_url(group.join_code)
+    url_js = json.dumps(invite_url)
+    title_js = json.dumps(f"Join {group.group_name} in Yahtzee Coach")
+    components.html(
+        f"""
+        <div style="display:flex;gap:8px;font-family:Arial,sans-serif;margin:2px 0 4px 0;">
+          <button id="shareInvite" style="flex:1;border:1px solid #2563eb;background:#2563eb;color:white;border-radius:9px;padding:9px 10px;font-weight:700;cursor:pointer;">📤 Share invite</button>
+          <button id="copyInvite" style="flex:1;border:1px solid #cbd5e1;background:white;color:#0f172a;border-radius:9px;padding:9px 10px;font-weight:700;cursor:pointer;">🔗 Copy invite link</button>
+        </div>
+        <div id="inviteStatus" style="font-family:Arial,sans-serif;font-size:12px;color:#64748b;text-align:center;height:16px;"></div>
+        <script>
+          const inviteUrl = {url_js};
+          const inviteTitle = {title_js};
+          const status = document.getElementById('inviteStatus');
+          async function copyInvite() {{
+            try {{
+              await window.parent.navigator.clipboard.writeText(inviteUrl);
+              status.textContent = 'Invite link copied.';
+            }} catch (e) {{
+              try {{
+                await navigator.clipboard.writeText(inviteUrl);
+                status.textContent = 'Invite link copied.';
+              }} catch (e2) {{
+                status.textContent = 'Copy was blocked — use the invite code shown above.';
+              }}
+            }}
+          }}
+          document.getElementById('copyInvite').addEventListener('click', copyInvite);
+          document.getElementById('shareInvite').addEventListener('click', async () => {{
+            const nav = window.parent.navigator || navigator;
+            if (nav.share) {{
+              try {{
+                await nav.share({{title: inviteTitle, text: 'Join my Yahtzee Coach friend group!', url: inviteUrl}});
+                status.textContent = 'Invite ready to share.';
+                return;
+              }} catch (e) {{ if (e && e.name === 'AbortError') return; }}
+            }}
+            await copyInvite();
+          }});
+        </script>
+        """,
+        height=64,
+    )
+
+
+def render_install_app_control():
+    """Offer a simple home-screen path without pretending browsers allow forced install."""
+    if "show_install_help" not in st.session_state:
+        st.session_state.show_install_help = False
+    if st.button("📲 Add Yahtzee Coach to your Home Screen", use_container_width=True, key="show_install_app_help"):
+        st.session_state.show_install_help = not st.session_state.show_install_help
+    if st.session_state.show_install_help:
+        st.markdown(
+            "**Use Yahtzee Coach like an app**  \n"
+            "- **iPhone / iPad (Safari):** tap **Share** → **Add to Home Screen** → **Add**. Keep **Open as Web App** on if it appears.  \n"
+            "- **Android (Chrome):** tap the **⋮** menu → **Add to Home screen** or **Install app**.  \n"
+            "- **Computer (Chrome / Edge):** use the install icon in the address bar or the browser menu if offered."
+        )
+        st.caption("Phones require you to confirm the system Home Screen action; a website cannot press that final system button for you.")
 
 
 def _daily_puzzle_ids():
@@ -1827,11 +1960,14 @@ def _apply_daily_resume_state(resume_state, *, resumed_message: bool = False):
     st.session_state.daily_attempt_id = resume_state.attempt.attempt_id
     st.session_state.daily_started = True
     st.session_state.daily_answers = rebuilt
-    st.session_state.daily_question_index = len(rebuilt)
-    st.session_state.daily_completed = bool(resume_state.attempt.complete or len(rebuilt) >= len(challenges))
+    st.session_state.daily_completed = bool(resume_state.attempt.complete)
+    st.session_state.daily_ready_to_submit = bool(not resume_state.attempt.complete and len(rebuilt) >= len(challenges))
+    st.session_state.daily_question_index = (len(challenges) - 1 if st.session_state.daily_ready_to_submit else len(rebuilt))
     st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
     if resumed_message and 0 < len(rebuilt) < len(challenges):
-        st.session_state.daily_flash = f"Resumed your saved attempt after {len(rebuilt)} locked answer{'s' if len(rebuilt) != 1 else ''}."
+        st.session_state.daily_flash = f"Resumed your saved attempt after {len(rebuilt)} saved answer{'s' if len(rebuilt) != 1 else ''}."
+    elif resumed_message and st.session_state.daily_ready_to_submit:
+        st.session_state.daily_flash = "All 10 choices are saved. Review them before final submission."
 
 
 def _daily_sync_key():
@@ -1857,17 +1993,11 @@ def sync_daily_attempt_from_database(*, force: bool = False) -> bool:
             st.session_state.daily_set_id,
         )
         if resume_state is not None:
-            # If Question 10 was saved but finalization was interrupted, finish it safely now.
-            if len(resume_state.answers) == 10 and not resume_state.attempt.complete:
-                store.complete_attempt(resume_state.attempt.attempt_id)
-                resume_state = store.get_resume_state(
-                    st.session_state.active_player_id,
-                    st.session_state.daily_set_id,
-                )
             _apply_daily_resume_state(resume_state, resumed_message=True)
         else:
             st.session_state.daily_started = False
             st.session_state.daily_completed = False
+            st.session_state.daily_ready_to_submit = False
             st.session_state.daily_question_index = 0
             st.session_state.daily_answers = []
             st.session_state.daily_attempt_id = None
@@ -1901,7 +2031,7 @@ def start_persistent_daily_attempt() -> bool:
             st.session_state.daily_flash = "Official attempt started and saved."
         return True
     except Exception as exc:
-        st.error("Your official Daily attempt could not be started, so nothing was locked. Please try again.")
+        st.error("Your official Daily attempt could not be started, so nothing was saved. Please try again.")
         if database_check_enabled():
             st.caption(f"Daily start detail: {type(exc).__name__}: {exc}")
         return False
@@ -1919,10 +2049,14 @@ def render_player_identity_gate():
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<div class='identity-note'><b>Phase 2D:</b> permanent player identity, saved Daily attempts, and real friend groups are live. "
+        "<div class='identity-note'><b>Phase 2E:</b> permanent players, saved Daily attempts, real friend groups, and invite links are live. "
         "Sign back in after a refresh or on another device to resume the same official attempt.</div>",
         unsafe_allow_html=True,
     )
+    invite_code = _pending_invite_code()
+    if invite_code:
+        st.success("🎟️ Friend-group invite detected. Create a player or sign in below; Yahtzee Coach will join the group automatically.")
+        st.caption(f"Invite code: {invite_code}")
 
     create_tab, return_tab = st.tabs(["Create player", "Returning player"])
 
@@ -2072,7 +2206,10 @@ def render_friend_group_hub(*, expanded: bool = False):
         st.markdown(
             f"**👥 {html.escape(active.group_name)}** · {member_count} member{'s' if member_count != 1 else ''}"
         )
-        st.caption(f"Invite code: **{active.join_code}** · Share this code with friends so they can join your leaderboard.")
+        st.caption(f"Invite code: **{active.join_code}** · Share the link below; friends will be guided through player setup and joined automatically.")
+        render_group_invite_controls(active)
+        with st.expander("Show invite link", expanded=False):
+            st.code(_group_invite_url(active.join_code), language=None)
         if members:
             with st.expander("Group members", expanded=False):
                 st.write(" · ".join(member["display_name"] for member in members))
@@ -2181,19 +2318,26 @@ def _daily_date_label(date_key: str) -> str:
         return date_key
 
 
-def render_daily_progress(index: int, locked: int):
+def render_daily_progress(index: int, saved: int, *, complete: bool = False):
     dots = []
     for i in range(10):
-        css = "done" if i < locked else ("current" if i == index and locked < 10 else "")
+        if complete:
+            css = "done"
+        elif i == index:
+            css = "current"
+        elif i < saved:
+            css = "done"
+        else:
+            css = ""
         dots.append(f"<div class='daily-dot {css}' title='Question {i + 1}'></div>")
-    question_text = "Challenge complete" if locked >= 10 else f"Question {index + 1} of 10"
-    percent = min(100, max(0, int(round((locked / 10) * 100))))
-    status_text = "10/10 locked" if locked >= 10 else f"{locked}/10 locked"
+    question_text = "Challenge complete" if complete else ("Review your 10" if saved >= 10 else f"Question {index + 1} of 10")
+    percent = min(100, max(0, int(round((saved / 10) * 100))))
+    status_text = "10/10 submitted" if complete else f"{saved}/10 saved"
     st.markdown(
         "<div class='daily-progress-copy'>"
         f"<b>{question_text}</b><span>{status_text}</span>"
         "</div><div class='daily-progress'>" + "".join(dots) + "</div>"
-        f"<div class='daily-progress-percent'>{percent}% complete</div>",
+        f"<div class='daily-progress-percent'>{percent}% saved</div>",
         unsafe_allow_html=True,
     )
 
@@ -2225,7 +2369,7 @@ def render_daily_intro():
         "<div class='daily-kicker'>🎲 Daily Challenge <span class='prototype-badge'>v43B social live</span></div>"
         f"<div class='daily-title'>{_daily_date_label(date_key)}</div>"
         "<div class='daily-rule'><b>10 hold decisions. Same challenge for everyone.</b><br>"
-        "Lose as few expected game points as possible. Your answers lock as you go; exact coaching unlocks after Question 10.<br>"
+        "Lose as few expected game points as possible. Your choices save as you go; you can go back and revise them before final submission. Exact coaching unlocks only after you submit all 10.<br>"
         "<span style='font-size:.80rem'>5 Roll 1 · 5 Roll 2 · one official attempt · new challenge at midnight Eastern</span></div>"
         "</div>",
         unsafe_allow_html=True,
@@ -2253,18 +2397,120 @@ def render_daily_intro():
         )
 
 
+def _daily_answer_at(index: int):
+    answers = st.session_state.get("daily_answers", [])
+    return answers[index] if 0 <= index < len(answers) else None
+
+
+def _daily_widget_keys(index: int) -> tuple[str, str]:
+    date_key = st.session_state.daily_date_key
+    return (
+        f"daily_held_{date_key}_{index}",
+        f"daily_dice_pills_{date_key}_{index}",
+    )
+
+
+def _saved_hold_indices(index: int) -> list[int]:
+    answer = _daily_answer_at(index)
+    if answer is None:
+        return []
+    dice = st.session_state.daily_challenges[index]["dice"]
+    return hold_indices_from_values(dice, answer.get("selected_hold", []))
+
+
+def _reset_daily_widget_to_saved(index: int):
+    """Discard an un-saved UI change when navigating backward."""
+    held_key, pills_key = _daily_widget_keys(index)
+    if pills_key in st.session_state:
+        del st.session_state[pills_key]
+    st.session_state[held_key] = _saved_hold_indices(index)
+
+
+def _save_daily_choice(index: int, selected_hold) -> bool:
+    """Save a new answer or revise an existing draft without exposing feedback."""
+    challenge = st.session_state.daily_challenges[index]
+    dice = challenge["dice"]
+    report, solver_record = build_live_report(
+        dice,
+        challenge["scorecard"],
+        selected_hold,
+        challenge["roll_number"],
+    )
+    if solver_record.get("source") != "exact":
+        st.error("The exact scorer was unavailable, so this choice was NOT saved. Please try again.")
+        return False
+
+    attempt_id = st.session_state.get("daily_attempt_id")
+    if not attempt_id:
+        st.error("Your saved Daily attempt could not be found, so this choice was NOT saved. Please sign in again.")
+        _force_daily_resync()
+        return False
+
+    saved_answer = _daily_answer_at(index)
+    same_choice = bool(
+        saved_answer is not None
+        and sorted(int(v) for v in saved_answer.get("selected_hold", []))
+        == sorted(int(v) for v in selected_hold)
+    )
+
+    try:
+        if saved_answer is None:
+            load_daily_store().save_answer(
+                attempt_id,
+                question_number=index + 1,
+                puzzle_id=str(challenge.get("challenge_id", "")),
+                chosen_hold=selected_hold,
+                optimal_hold=_hold_values_from_exact_label(solver_record.get("optimal_hold", "")),
+                points_lost=float(solver_record.get("points_lost", 0.0) or 0.0),
+                solver_source="exact",
+            )
+        elif not same_choice:
+            load_daily_store().revise_answer(
+                attempt_id,
+                question_number=index + 1,
+                puzzle_id=str(challenge.get("challenge_id", "")),
+                chosen_hold=selected_hold,
+                optimal_hold=_hold_values_from_exact_label(solver_record.get("optimal_hold", "")),
+                points_lost=float(solver_record.get("points_lost", 0.0) or 0.0),
+                solver_source="exact",
+            )
+    except (DuplicateAnswer, OutOfOrderAnswer, AttemptAlreadyComplete, ChallengeMismatch):
+        _force_daily_resync()
+        if sync_daily_attempt_from_database(force=True):
+            st.session_state.daily_flash = "Your saved attempt was refreshed from the database."
+            st.rerun()
+        return False
+    except Exception as exc:
+        detail = str(exc).lower()
+        if saved_answer is not None and "locked daily answers cannot be changed" in detail:
+            st.error("Back/edit needs the one-time Phase 2E Supabase migration. Your existing saved choice was not changed.")
+        else:
+            st.error("This choice was NOT saved because the database could not update it. Please try again.")
+        if database_check_enabled():
+            st.caption(f"Daily save detail: {type(exc).__name__}: {exc}")
+        return False
+
+    rich_answer = _daily_solver_record(challenge, solver_record, selected_hold, report)
+    if saved_answer is None:
+        st.session_state.daily_answers.append(rich_answer)
+    else:
+        st.session_state.daily_answers[index] = rich_answer
+
+    held_key, _ = _daily_widget_keys(index)
+    st.session_state[held_key] = hold_indices_from_values(dice, selected_hold)
+    return True
+
+
 def render_daily_question():
     challenges = st.session_state.daily_challenges
     answers = st.session_state.daily_answers
     index = int(st.session_state.daily_question_index)
-    if index >= len(challenges):
-        st.session_state.daily_completed = True
-        st.rerun()
-        return
+    index = max(0, min(index, len(challenges) - 1))
+    st.session_state.daily_question_index = index
 
     challenge = challenges[index]
-    locked = len(answers)
-    render_daily_progress(index, locked)
+    saved_count = len(answers)
+    render_daily_progress(index, saved_count)
     flash = st.session_state.get("daily_flash", "")
     if flash:
         st.markdown(f"<div class='daily-flash'>✓ {flash}</div>", unsafe_allow_html=True)
@@ -2281,11 +2527,14 @@ def render_daily_question():
 
     render_scorecard(challenge["scorecard"])
     st.markdown("<div class='section-label'>Tap dice to hold</div>", unsafe_allow_html=True)
-    st.markdown("<div class='dice-help'>Make your decision exactly as you would in Practice. Once locked, it is saved permanently and you cannot go back.</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='dice-help'>Your choice is saved when you move forward. You can use Back and revise any saved answer until final submission; no coaching is revealed.</div>",
+        unsafe_allow_html=True,
+    )
 
-    held_key = f"daily_held_{st.session_state.daily_date_key}_{index}"
+    held_key, pills_key = _daily_widget_keys(index)
     if held_key not in st.session_state:
-        st.session_state[held_key] = []
+        st.session_state[held_key] = _saved_hold_indices(index)
     dice = challenge["dice"]
     selected_indices = st.pills(
         "Daily dice to hold",
@@ -2293,7 +2542,7 @@ def render_daily_question():
         default=st.session_state.get(held_key, []),
         format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
         selection_mode="multi",
-        key=f"daily_dice_pills_{st.session_state.daily_date_key}_{index}",
+        key=pills_key,
         label_visibility="collapsed",
     )
     selected_indices = list(selected_indices or [])
@@ -2301,66 +2550,127 @@ def render_daily_question():
     selected_hold = selected_hold_from_indices(dice, selected_indices)
     st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 
-    if st.button(f"Lock answer {index + 1}/10", type="primary", use_container_width=True, key=f"daily_lock_{index}"):
-        report, solver_record = build_live_report(
-            dice,
-            challenge["scorecard"],
-            selected_hold,
-            challenge["roll_number"],
+    already_saved = index < len(answers)
+    all_ten_saved = len(answers) >= 10
+    if all_ten_saved:
+        primary_label = "Save changes & return to review"
+    elif index == len(challenges) - 1:
+        primary_label = "Save & review all 10"
+    elif already_saved:
+        primary_label = "Save changes & next"
+    else:
+        primary_label = "Save & next"
+
+    back_col, save_col = st.columns([1, 2])
+    with back_col:
+        back_clicked = st.button(
+            "← Back",
+            use_container_width=True,
+            disabled=index <= 0,
+            key=f"daily_back_{index}",
         )
-        # Competitive mode must never silently fall back to the heuristic coach.
-        if solver_record.get("source") != "exact":
-            st.error("The exact scorer was unavailable, so this answer was NOT locked. Please try again.")
+    with save_col:
+        save_clicked = st.button(
+            primary_label,
+            type="primary",
+            use_container_width=True,
+            key=f"daily_save_{index}",
+        )
+
+    if back_clicked:
+        _reset_daily_widget_to_saved(index)
+        st.session_state.daily_ready_to_submit = False
+        st.session_state.daily_question_index = index - 1
+        st.rerun()
+
+    if save_clicked:
+        if not _save_daily_choice(index, selected_hold):
             return
+        if all_ten_saved or index + 1 >= len(challenges):
+            st.session_state.daily_ready_to_submit = True
+            st.session_state.daily_question_index = len(challenges) - 1
+            st.session_state.daily_flash = "Choice saved. Review your 10 before final submission."
+        else:
+            st.session_state.daily_ready_to_submit = False
+            st.session_state.daily_question_index = index + 1
+            st.session_state.daily_flash = f"Answer {index + 1} saved."
+        st.rerun()
+
+    st.markdown(
+        "<div class='daily-lock-note'>Saved choices stay private and editable until final submission. After final submission, all 10 choices lock permanently and your result is revealed.</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_daily_submission_review():
+    """Show all 10 chosen holds without feedback, then let the player final-submit."""
+    answers = st.session_state.daily_answers
+    if len(answers) < 10:
+        st.session_state.daily_ready_to_submit = False
+        st.session_state.daily_question_index = len(answers)
+        st.rerun()
+        return
+
+    render_daily_progress(9, 10)
+    st.markdown(
+        "<div class='daily-hero'>"
+        "<div class='daily-kicker'>Final review</div>"
+        "<div class='daily-title'>Check your 10 choices</div>"
+        "<div class='daily-rule'><b>No grades, EV loss, or exact answers are shown yet.</b><br>"
+        "Edit anything you entered by mistake. Final submission permanently locks all 10 choices.</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    review_rows = []
+    for i, answer in enumerate(answers, start=1):
+        challenge = answer["challenge"]
+        dice_faces = " ".join(DICE_FACE.get(int(die), str(die)) for die in challenge.get("dice", []))
+        review_rows.append({
+            "Q": i,
+            "Roll": challenge.get("roll_number"),
+            "Dice": dice_faces,
+            "Your hold": hold_label(answer.get("selected_hold", [])),
+        })
+    st.dataframe(pd.DataFrame(review_rows), hide_index=True, use_container_width=True)
+
+    edit_question = st.selectbox(
+        "Need to fix one?",
+        options=list(range(1, 11)),
+        format_func=lambda q: f"Question {q}: {hold_label(answers[q - 1].get('selected_hold', []))}",
+        key="daily_review_edit_question",
+    )
+    edit_col, back_col = st.columns(2)
+    with edit_col:
+        if st.button("✏️ Edit selected question", use_container_width=True, key="daily_review_edit"):
+            st.session_state.daily_ready_to_submit = False
+            st.session_state.daily_question_index = int(edit_question) - 1
+            st.rerun()
+    with back_col:
+        if st.button("← Back to Question 10", use_container_width=True, key="daily_review_back"):
+            st.session_state.daily_ready_to_submit = False
+            st.session_state.daily_question_index = 9
+            st.rerun()
+
+    st.warning("Final submit ends your official attempt. After this point, the 10 choices cannot be changed.")
+    if st.button("🏁 Submit final Daily Challenge", type="primary", use_container_width=True, key="daily_final_submit"):
         attempt_id = st.session_state.get("daily_attempt_id")
         if not attempt_id:
-            st.error("Your saved Daily attempt could not be found, so this answer was NOT locked. Please sign in again.")
+            st.error("Your saved Daily attempt could not be found. Please sign in again before submitting.")
             _force_daily_resync()
             return
         try:
-            load_daily_store().save_answer(
-                attempt_id,
-                question_number=index + 1,
-                puzzle_id=str(challenge.get("challenge_id", "")),
-                chosen_hold=selected_hold,
-                optimal_hold=_hold_values_from_exact_label(solver_record.get("optimal_hold", "")),
-                points_lost=float(solver_record.get("points_lost", 0.0) or 0.0),
-                solver_source="exact",
-            )
-        except (DuplicateAnswer, OutOfOrderAnswer, AttemptAlreadyComplete, ChallengeMismatch):
-            # Another tab/device may have advanced this same one-attempt record.
-            _force_daily_resync()
-            if sync_daily_attempt_from_database(force=True):
-                st.session_state.daily_flash = "Your saved attempt was refreshed from the database."
-                st.rerun()
-            return
+            load_daily_store().complete_attempt(attempt_id)
         except Exception as exc:
-            st.error("This answer was NOT locked because the database could not save it. Please try again.")
+            st.error("Your final submission could not be completed. All 10 choices are still safely saved and editable.")
             if database_check_enabled():
-                st.caption(f"Daily save detail: {type(exc).__name__}: {exc}")
+                st.caption(f"Daily finalize detail: {type(exc).__name__}: {exc}")
             return
-
-        st.session_state.daily_answers.append(
-            _daily_solver_record(challenge, solver_record, selected_hold, report)
-        )
-        if index + 1 >= len(challenges):
-            try:
-                load_daily_store().complete_attempt(attempt_id)
-            except Exception as exc:
-                # Question 10 is already safely locked. A forced sync can finalize it on rerun.
-                _force_daily_resync()
-                if database_check_enabled():
-                    st.caption(f"Daily finalize detail: {type(exc).__name__}: {exc}")
-                st.rerun()
-                return
-            st.session_state.daily_completed = True
-            st.session_state.daily_question_index = len(challenges)
-        else:
-            st.session_state.daily_question_index = index + 1
-            st.session_state.daily_flash = f"Answer {index + 1} locked and saved."
+        st.session_state.daily_completed = True
+        st.session_state.daily_ready_to_submit = False
+        st.session_state.daily_question_index = 10
+        _force_daily_resync()
         st.rerun()
-
-    st.markdown("<div class='daily-lock-note'>Your locked answers are saved to your v43B player. Your score and the exact answer stay hidden until all 10 decisions are locked.</div>", unsafe_allow_html=True)
 
 
 def _leaderboard_frame(board):
@@ -2438,7 +2748,7 @@ def render_daily_results():
     story = _story_from_group_stats(stats)
     rank_value = f"#{rank} of {len(board)}" if rank is not None else "—"
 
-    render_daily_progress(10, 10)
+    render_daily_progress(9, 10, complete=True)
     st.markdown(
         "<div class='daily-hero'>"
         "<div class='daily-kicker'>Challenge complete</div>"
@@ -2547,13 +2857,15 @@ def render_daily_mode():
     if not st.session_state.daily_started:
         render_daily_intro()
         return
-    if st.session_state.daily_completed or len(st.session_state.daily_answers) >= 10:
-        st.session_state.daily_completed = True
+    if st.session_state.daily_completed:
         render_daily_results()
+        return
+    if st.session_state.get("daily_ready_to_submit"):
+        render_daily_submission_review()
         return
     st.caption(
         f"🎲 Daily Challenge in progress · {_daily_date_label(st.session_state.daily_date_key)} · "
-        f"{len(st.session_state.daily_answers)} of 10 answers safely saved. You can leave and resume later."
+        f"{len(st.session_state.daily_answers)} of 10 choices safely saved. You can leave, resume, or go back and revise before final submission."
     )
     render_daily_question()
 
@@ -2673,6 +2985,10 @@ def render_practice_mode():
 initialize_state()
 initialize_daily_state()
 initialize_player_identity_state()
+if _pending_invite_code():
+    st.session_state.app_mode = "Daily Challenge"
+if process_pending_group_invite():
+    st.rerun()
 # Install near the top so dice taps stay visually anchored on mobile.
 install_dice_scroll_guard()
 st.markdown("<div id='app-top-anchor'></div>", unsafe_allow_html=True)
@@ -2692,6 +3008,8 @@ player_note = (
     else "Daily Challenge first · sign in for Daily · unlimited open practice anytime"
 )
 st.markdown(f"<div class='mode-note'>{html.escape(player_note)}</div>", unsafe_allow_html=True)
+if mode == "Practice" or not st.session_state.get("daily_started") or st.session_state.get("daily_completed"):
+    render_install_app_control()
 
 if mode == "Daily Challenge":
     render_daily_mode()

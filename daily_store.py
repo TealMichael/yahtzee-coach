@@ -213,6 +213,9 @@ class DailyStore(Protocol):
     def save_answer(self, attempt_id: str, *, question_number: int, puzzle_id: str,
                     chosen_hold: Sequence[int], optimal_hold: Sequence[int], points_lost: float,
                     solver_source: str = "exact") -> AnswerRecord: ...
+    def revise_answer(self, attempt_id: str, *, question_number: int, puzzle_id: str,
+                      chosen_hold: Sequence[int], optimal_hold: Sequence[int], points_lost: float,
+                      solver_source: str = "exact") -> AnswerRecord: ...
     def complete_attempt(self, attempt_id: str) -> AttemptRecord: ...
     def leaderboard(self, group_id: str, challenge_id: str) -> list[dict]: ...
     def group_question_stats(self, group_id: str, challenge_id: str) -> list[dict]: ...
@@ -427,13 +430,54 @@ class InMemoryDailyStore:
         self.answers[key] = record
         return record
 
+    def revise_answer(self, attempt_id: str, *, question_number: int, puzzle_id: str,
+                      chosen_hold: Sequence[int], optimal_hold: Sequence[int], points_lost: float,
+                      solver_source: str = "exact") -> AnswerRecord:
+        """Replace a saved draft answer before the player final-submits the Daily.
+
+        Completed attempts remain immutable. The question slot and puzzle identity cannot change;
+        only the exact-scored hold/result for that slot may be revised.
+        """
+        attempt = self._require_attempt(attempt_id)
+        if attempt.complete:
+            raise AttemptAlreadyComplete("Completed Daily attempts are immutable.")
+        if str(solver_source) != "exact":
+            raise InvalidOfficialAnswer("Official Daily answers must be scored by the exact solver.")
+        question_number = int(question_number)
+        if not 1 <= question_number <= 10:
+            raise ValueError("question_number must be 1-10.")
+        key = (attempt_id, question_number)
+        if key not in self.answers:
+            raise DailyStoreError("That Daily answer has not been saved yet.")
+        challenge = self.challenges[attempt.challenge_id]
+        expected_puzzle_id = challenge.puzzle_ids[question_number - 1]
+        if str(puzzle_id) != expected_puzzle_id:
+            raise ChallengeMismatch("Answer puzzle_id does not match the registered Daily Challenge slot.")
+        loss = float(points_lost)
+        if loss < -TIE_TOLERANCE:
+            raise ValueError("points_lost cannot be negative.")
+        loss = max(0.0, loss)
+        record = AnswerRecord(
+            attempt_id=attempt_id,
+            question_number=question_number,
+            puzzle_id=str(puzzle_id),
+            chosen_hold=tuple(int(value) for value in chosen_hold),
+            optimal_hold=tuple(int(value) for value in optimal_hold),
+            points_lost=loss,
+            exact=loss <= TIE_TOLERANCE,
+            solver_source="exact",
+            submitted_at=self._now(),
+        )
+        self.answers[key] = record
+        return record
+
     def complete_attempt(self, attempt_id: str) -> AttemptRecord:
         attempt = self._require_attempt(attempt_id)
         if attempt.complete:
             return attempt
         answers = self._answers_for_attempt(attempt_id)
         if len(answers) != 10 or [answer.question_number for answer in answers] != list(range(1, 11)):
-            raise DailyStoreError("A Daily attempt cannot complete until all 10 answers are locked.")
+            raise DailyStoreError("A Daily attempt cannot complete until all 10 answers are saved.")
         losses = [answer.points_lost for answer in answers]
         best_streak = 0
         current = 0
