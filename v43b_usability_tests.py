@@ -31,8 +31,8 @@ def run():
         ("fresh schema still blocks deletes", "prevent_daily_answer_delete" in schema and "Daily answers cannot be deleted" in schema),
         ("migration replaces old no-update trigger", "drop trigger if exists daily_answers_no_update" in migration and "daily_answers_update_guard" in migration),
         ("home-screen button is visible outside active run", "📲 Add Yahtzee Coach to your Home Screen" in app and "Add to Home Screen" in app),
-        ("iOS and Android install instructions exist", "iPhone / iPad (Safari)" in app and "Android (Chrome)" in app),
-        ("home-screen help does not falsely promise forced install", "cannot press that final system button" in app),
+        ("iOS and Android install instructions exist", "🍎 iPhone / iPad" in app and "🤖 Android" in app and "Add to Home screen" in app),
+        ("home-screen help does not falsely promise forced install", "cannot press Add to Home Screen automatically" in app),
     ]
 
     failed = [name for name, ok in checks if not ok]

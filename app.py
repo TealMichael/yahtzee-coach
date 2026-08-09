@@ -69,7 +69,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2H database preflight is loaded.")
+    st.info("🔧 v43B Phase 2I database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -1930,8 +1930,8 @@ def install_app_shell_metadata():
     html_block = """
         <script>
         (function() {
-          const parentWindow = window.parent;
-          const parentDoc = parentWindow.document;
+          const parentWindow = window;
+          const parentDoc = document;
           const head = parentDoc.head;
           function ensureLink(rel, href) {
             let el = head.querySelector(`link[rel="${rel}"]`);
@@ -1972,150 +1972,54 @@ def install_app_shell_metadata():
     html_block = html_block.replace('__MANIFEST_JSON__', json.dumps(json.dumps(manifest)))
     html_block = html_block.replace('__APPLE_ICON__', json.dumps(icons['apple']))
     html_block = html_block.replace('__ICON_192__', json.dumps(icons['icon192']))
-    components.html(html_block, height=0)
+    st.html(html_block, unsafe_allow_javascript=True)
 
 
-def render_install_app_control():
-    """Offer a visible, platform-aware install flow without pretending unsupported browsers can be forced."""
-    icons = load_install_icon_data()
-    html_block = """
-        <div id="ycInstallCard" style="font-family:Arial,sans-serif;border:1px solid #d1d5db;border-radius:16px;padding:14px 14px 12px 14px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);box-shadow:0 2px 10px rgba(0,0,0,0.04);">
-          <div style="display:flex;gap:12px;align-items:center;">
-            <img src=__ICON_192__ alt="Yahtzee Coach icon" style="width:64px;height:64px;border-radius:14px;flex:0 0 auto;box-shadow:0 3px 10px rgba(0,0,0,0.12);" />
-            <div>
-              <div style="font-size:18px;font-weight:800;color:#0f172a;">📲 Add Yahtzee Coach to your Home Screen</div>
-              <div style="font-size:13px;color:#475569;line-height:1.4;">Use the new mascot icon and open Yahtzee Coach more like a normal app.</div>
-            </div>
-          </div>
-          <div style="display:flex;gap:10px;margin-top:12px;">
-            <button id="ycInstallPrimary" style="flex:1;border:1px solid #166534;background:#166534;color:white;border-radius:10px;padding:10px 12px;font-weight:700;cursor:pointer;">📲 Show install steps</button>
-            <button id="ycCopyAppLink" style="flex:1;border:1px solid #cbd5e1;background:white;color:#0f172a;border-radius:10px;padding:10px 12px;font-weight:700;cursor:pointer;">🔗 Copy app link</button>
-          </div>
-          <div id="ycInstallStatus" style="margin-top:10px;font-size:12px;color:#64748b;line-height:1.4;">Tap the green button for the exact steps for this device.</div>
-          <div id="ycInstallSteps" style="display:none;margin-top:10px;border-radius:12px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;color:#14532d;font-size:13px;line-height:1.55;"></div>
-        </div>
-        <script>
-        (function() {
-          const parentWindow = window.parent;
-          const nav = parentWindow.navigator;
-          const primary = document.getElementById('ycInstallPrimary');
-          const copyBtn = document.getElementById('ycCopyAppLink');
-          const status = document.getElementById('ycInstallStatus');
-          const steps = document.getElementById('ycInstallSteps');
-          const appUrl = __APP_URL__;
+def render_install_mode():
+    """Render a reliable third-mode Home Screen guide using native Streamlit controls."""
+    st.markdown("## 📲 Add Yahtzee Coach to your Home Screen")
+    left, center, right = st.columns([1, 1.1, 1])
+    with center:
+        st.image(str(APP_ICON_512_PATH), width=170)
 
-          function setHeight(px) {
-            try {
-              parentWindow.postMessage({isStreamlitMessage: true, type: 'streamlit:setFrameHeight', height: px}, '*');
-            } catch (err) {}
-          }
-          function isStandalone() {
-            return !!(nav.standalone || parentWindow.matchMedia('(display-mode: standalone)').matches);
-          }
-          function platform() {
-            const ua = (nav.userAgent || '').toLowerCase();
-            const isiPadOS = nav.platform === 'MacIntel' && nav.maxTouchPoints > 1;
-            if (/iphone|ipad|ipod/.test(ua) || isiPadOS) return 'ios';
-            if (/android/.test(ua)) return 'android';
-            if (/mac/.test(ua)) return 'mac';
-            if (/win|linux|cros/.test(ua)) return 'desktop';
-            return 'other';
-          }
-          function stepHtml(kind) {
-            if (kind === 'ios') {
-              return '<b>iPhone / iPad (Safari)</b><br>1. Tap the <b>Share</b> button in Safari.<br>2. Scroll down and tap <b>Add to Home Screen</b>.<br>3. Leave <b>Open as Web App</b> on if it appears.<br>4. Tap <b>Add</b>.<br><br><span style="color:#475569;">Apple requires these final taps; a website cannot press that final system button for you or open the Add to Home Screen screen automatically.</span>';
-            }
-            if (kind === 'android') {
-              return '<b>Android (Chrome)</b><br>1. Tap Chrome's <b>⋮</b> menu.<br>2. Tap <b>Add to Home screen</b> or <b>Install app</b>.<br>3. Confirm the install.<br><br><span style="color:#475569;">If Chrome offers a direct app-install prompt, this green button will use it instead.</span>';
-            }
-            if (kind === 'mac') {
-              return '<b>Mac</b><br><b>Chrome:</b> More <b>⋮</b> → <b>Cast, save, and share</b> → <b>Install page as app</b>.<br><b>Safari:</b> <b>File → Add to Dock</b>.<br><br><span style="color:#475569;">The browser controls this system menu, so a webpage cannot open it for you.</span>';
-            }
-            if (kind === 'desktop') {
-              return '<b>Computer (Chrome / Edge)</b><br>1. Open the browser <b>⋮</b> menu.<br>2. In Chrome choose <b>Cast, save, and share → Install page as app</b>.<br>3. Follow the browser confirmation.<br><br><span style="color:#475569;">The browser controls this system menu, so a webpage cannot open it for you.</span>';
-            }
-            return '<b>Install / Home Screen</b><br>Open your browser menu and look for <b>Install app</b>, <b>Install page as app</b>, or <b>Add to Home Screen</b>.';
-          }
-          function showSteps(message) {
-            steps.innerHTML = message;
-            steps.style.display = 'block';
-            status.textContent = 'Install steps opened below.';
-            setHeight(390);
-          }
-          function refreshUI() {
-            if (isStandalone()) {
-              primary.disabled = true;
-              primary.textContent = '✅ Already added';
-              primary.style.opacity = '0.75';
-              status.textContent = 'Yahtzee Coach is already running like an installed app on this device.';
-              steps.style.display = 'none';
-              setHeight(235);
-              return;
-            }
-            primary.disabled = false;
-            primary.style.opacity = '1';
-            if (parentWindow.__ycDeferredInstallPrompt) {
-              primary.textContent = '📲 Install app now';
-              status.textContent = 'Your browser is offering a direct install prompt.';
-            } else {
-              const kind = platform();
-              primary.textContent = kind === 'ios' ? '📲 Show iPhone install steps' : '📲 Show install steps';
-              status.textContent = 'Tap the green button for the exact steps for this device.';
-            }
-          }
-          parentWindow.addEventListener('beforeinstallprompt', function(event) {
-            event.preventDefault();
-            parentWindow.__ycDeferredInstallPrompt = event;
-            refreshUI();
-          });
-          parentWindow.addEventListener('appinstalled', function() {
-            parentWindow.__ycDeferredInstallPrompt = null;
-            refreshUI();
-          });
-          primary.addEventListener('click', async function() {
-            if (isStandalone()) {
-              refreshUI();
-              return;
-            }
-            const promptEvent = parentWindow.__ycDeferredInstallPrompt;
-            if (promptEvent) {
-              try {
-                promptEvent.prompt();
-                const result = await promptEvent.userChoice;
-                if (result && result.outcome === 'accepted') {
-                  status.textContent = 'Install accepted — look for the Yahtzee Coach icon on your device.';
-                } else {
-                  showSteps(stepHtml(platform()));
-                }
-              } catch (err) {
-                showSteps(stepHtml(platform()));
-              }
-              parentWindow.__ycDeferredInstallPrompt = null;
-              return;
-            }
-            showSteps(stepHtml(platform()));
-          });
-          copyBtn.addEventListener('click', async function() {
-            try {
-              if (window.parent.navigator.clipboard && window.parent.navigator.clipboard.writeText) {
-                await window.parent.navigator.clipboard.writeText(appUrl);
-              } else if (navigator.clipboard && navigator.clipboard.writeText) {
-                await navigator.clipboard.writeText(appUrl);
-              } else {
-                throw new Error('clipboard unavailable');
-              }
-              status.textContent = 'App link copied. You can text it to yourself or a friend.';
-            } catch (err) {
-              status.textContent = 'Copy was blocked. Use the browser address bar to copy the app link.';
-            }
-          });
-          refreshUI();
-        })();
-        </script>
-        """
-    html_block = html_block.replace('__ICON_192__', json.dumps(icons['icon192']))
-    html_block = html_block.replace('__APP_URL__', json.dumps(PUBLIC_APP_URL))
-    components.html(html_block, height=235)
+    st.markdown(
+        "Save **Yahtzee Coach** to your phone or computer for quick access with the custom teacher-die icon. "
+        "The final Add/Install action is controlled by your browser, so this page gives the exact route instead of showing a button that may do nothing."
+    )
+
+    ios_tab, android_tab, computer_tab = st.tabs(["🍎 iPhone / iPad", "🤖 Android", "💻 Computer"])
+
+    with ios_tab:
+        st.markdown("""
+**Safari**  
+1. Tap the **Share** button.  
+2. Scroll down and tap **Add to Home Screen**.  
+3. Leave **Open as Web App** on if it appears.  
+4. Tap **Add**.
+""")
+        st.caption("Apple requires those final system taps; the website cannot press Add to Home Screen automatically.")
+
+    with android_tab:
+        st.markdown("""
+**Chrome**  
+1. Tap the **⋮** browser menu.  
+2. Tap **Add to Home screen** or **Install app**.  
+3. Confirm the install.
+""")
+        st.caption("Chrome may also show its own install option when it considers the site installable.")
+
+    with computer_tab:
+        st.markdown("""
+**Chrome / Edge**  
+Use the browser's install option in the address bar or menu. In Chrome, look under **⋮ → Cast, save, and share → Install page as app**.
+
+**Safari on Mac**  
+Choose **File → Add to Dock**.
+""")
+
+    st.divider()
+    st.caption("Direct app link")
+    st.code(PUBLIC_APP_URL, language=None)
 
 def _daily_puzzle_ids():
     return [str(challenge.get("challenge_id", "")) for challenge in st.session_state.daily_challenges]
@@ -2258,7 +2162,7 @@ def render_player_identity_gate():
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<div class='identity-note'><b>Phase 2H:</b> permanent players, saved Daily attempts, real friend groups, invite links, custom home-screen install polish, and spoiler-free Daily sharing are live. "
+        "<div class='identity-note'><b>Phase 2I:</b> permanent players, saved Daily attempts, real friend groups, invite links, custom home-screen install polish, and spoiler-free Daily sharing are live. "
         "Sign back in after a refresh or on another device to resume the same official attempt.</div>",
         unsafe_allow_html=True,
     )
@@ -2933,15 +2837,11 @@ def build_daily_share_text(records, summary, rank=None, completed_count=0):
 
 
 def render_daily_share_result(records, summary, rank=None, completed_count=0):
-    """Render native-share and copy controls for a completed spoiler-free Daily result."""
+    """Render top-level native-share and copy controls for a completed spoiler-free Daily result."""
     share_text = build_daily_share_text(records, summary, rank=rank, completed_count=completed_count)
-    title = f"Yahtzee Coach Daily — {_daily_date_label(st.session_state.daily_date_key)}"
     share_text_js = json.dumps(share_text)
-    title_js = json.dumps(title)
-    url_js = json.dumps(PUBLIC_APP_URL)
     preview_html = html.escape(share_text).replace("\n", "<br>")
-    components.html(
-        f"""
+    share_html = f"""
         <div style="font-family:Arial,sans-serif;border:1px solid #d1d5db;border-radius:16px;padding:14px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);box-shadow:0 2px 10px rgba(0,0,0,0.04);">
           <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;font-weight:800;color:#64748b;">Share your Daily</div>
           <div style="font-size:20px;font-weight:850;color:#0f172a;margin:3px 0 8px 0;">🎲 Spoiler-free result</div>
@@ -2950,36 +2850,51 @@ def render_daily_share_result(records, summary, rank=None, completed_count=0):
             <button id="shareDaily" style="flex:1;border:1px solid #166534;background:#166534;color:white;border-radius:10px;padding:10px 12px;font-weight:800;cursor:pointer;">📤 Share result</button>
             <button id="copyDaily" style="flex:1;border:1px solid #cbd5e1;background:white;color:#0f172a;border-radius:10px;padding:10px 12px;font-weight:800;cursor:pointer;">📋 Copy score</button>
           </div>
-          <div id="shareDailyStatus" style="height:18px;margin-top:7px;font-size:12px;color:#64748b;text-align:center;"></div>
+          <div id="shareDailyStatus" style="min-height:18px;margin-top:7px;font-size:12px;color:#64748b;text-align:center;"></div>
         </div>
         <script>
         (function() {{
           const shareText = {share_text_js};
-          const shareTitle = {title_js};
-          const appUrl = {url_js};
           const status = document.getElementById('shareDailyStatus');
+
           async function copyScore() {{
             try {{
-              const nav = window.parent.navigator;
-              if (nav.clipboard && nav.clipboard.writeText) {{
-                await nav.clipboard.writeText(shareText);
-              }} else if (navigator.clipboard && navigator.clipboard.writeText) {{
+              if (navigator.clipboard && navigator.clipboard.writeText) {{
                 await navigator.clipboard.writeText(shareText);
               }} else {{
                 throw new Error('clipboard unavailable');
               }}
-              status.textContent = 'Score copied — paste it into a text or group chat!';
+              status.textContent = 'Full score copied — paste it into a text or group chat!';
+              return true;
             }} catch (err) {{
+              try {{
+                const area = document.createElement('textarea');
+                area.value = shareText;
+                area.style.position = 'fixed';
+                area.style.opacity = '0';
+                document.body.appendChild(area);
+                area.focus();
+                area.select();
+                const copied = document.execCommand('copy');
+                document.body.removeChild(area);
+                if (copied) {{
+                  status.textContent = 'Full score copied — paste it into a text or group chat!';
+                  return true;
+                }}
+              }} catch (fallbackErr) {{}}
               status.textContent = 'Copy was blocked by the browser. Select the preview text instead.';
+              return false;
             }}
           }}
+
           document.getElementById('copyDaily').addEventListener('click', copyScore);
           document.getElementById('shareDaily').addEventListener('click', async function() {{
-            const nav = window.parent.navigator;
-            if (nav.share) {{
+            if (navigator.share) {{
               try {{
-                await nav.share({{title: shareTitle, text: shareText, url: appUrl}});
-                status.textContent = 'Share sheet opened.';
+                // Share one text payload only. The app URL is already the last line of shareText.
+                // Some mobile share targets discarded the score when a separate URL field was supplied.
+                await navigator.share({{text: shareText}});
+                status.textContent = 'Share sheet opened with your full Daily score.';
                 return;
               }} catch (err) {{
                 if (err && err.name === 'AbortError') return;
@@ -2989,9 +2904,8 @@ def render_daily_share_result(records, summary, rank=None, completed_count=0):
           }});
         }})();
         </script>
-        """,
-        height=345,
-    )
+    """
+    st.html(share_html, unsafe_allow_javascript=True)
 
 
 def _daily_review_item(answer):
@@ -3305,21 +3219,22 @@ st.markdown("<div class='subtitle'>Hold Strategy Trainer</div>", unsafe_allow_ht
 
 mode = st.radio(
     "Mode",
-    options=["Daily Challenge", "Practice"],
+    options=["Daily Challenge", "Practice", "📲 Add to Home Screen"],
     horizontal=True,
     key="app_mode",
     label_visibility="collapsed",
 )
-player_note = (
-    f"Daily Challenge first · signed in as {st.session_state.get('active_player_name')} · unlimited open practice anytime"
-    if st.session_state.get("active_player_id")
-    else "Daily Challenge first · sign in for Daily · unlimited open practice anytime"
-)
+if mode == "📲 Add to Home Screen":
+    player_note = "Keep Yahtzee Coach one tap away with the custom teacher-die icon"
+elif st.session_state.get("active_player_id"):
+    player_note = f"Daily Challenge first · signed in as {st.session_state.get('active_player_name')} · unlimited open practice anytime"
+else:
+    player_note = "Daily Challenge first · sign in for Daily · unlimited open practice anytime"
 st.markdown(f"<div class='mode-note'>{html.escape(player_note)}</div>", unsafe_allow_html=True)
-if mode == "Practice" or not st.session_state.get("daily_started") or st.session_state.get("daily_completed"):
-    render_install_app_control()
 
 if mode == "Daily Challenge":
     render_daily_mode()
-else:
+elif mode == "Practice":
     render_practice_mode()
+else:
+    render_install_mode()

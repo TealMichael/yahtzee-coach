@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Focused v43B Phase 2F install/icon checks."""
+"""Focused v43B Phase 2I Home Screen icon/metadata checks."""
 
 from pathlib import Path
 
@@ -18,11 +18,10 @@ def run():
         ("install icon files are non-trivial", icon192.stat().st_size > 10000 and icon512.stat().st_size > 10000 and apple.stat().st_size > 10000),
         ("app loads compact icon paths", 'APP_ICON_192_PATH' in app and 'APP_ICON_512_PATH' in app and 'APPLE_TOUCH_ICON_PATH' in app),
         ("app injects home-screen metadata", 'def install_app_shell_metadata(' in app and 'apple-mobile-web-app-title' in app and 'application/manifest+json' in app),
-        ("install card uses custom mascot icon", 'Use the new mascot icon' in app and 'home_icon_192.png' in app),
-        ("install card handles installed mode", 'Already added' in app and 'display-mode: standalone' in app),
-        ("install card supports browser install prompt when offered", 'beforeinstallprompt' in app and 'Install app now' in app),
-        ("install card keeps iPhone manual path honest", 'Add to Home Screen' in app and 'Open as Web App' in app),
-        ("install card can copy app link", 'Copy app link' in app and 'text it to yourself or a friend' in app),
+        ("metadata injection uses top-level st.html instead of iframe", 'st.html(html_block, unsafe_allow_javascript=True)' in app),
+        ("install mode displays custom mascot icon", 'st.image(str(APP_ICON_512_PATH)' in app),
+        ("install mode keeps iPhone manual path honest", 'Add to Home Screen' in app and 'Open as Web App' in app and 'cannot press Add to Home Screen automatically' in app),
+        ("install mode is intentionally secondary navigation", 'options=["Daily Challenge", "Practice", "📲 Add to Home Screen"]' in app),
     ]
 
     failed = [name for name, ok in checks if not ok]

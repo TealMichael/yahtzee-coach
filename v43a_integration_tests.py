@@ -42,7 +42,7 @@ def run():
     checks.append(("group comparison produces killer/most-solved cards", story['toughest'] is not None and story['easiest'] is not None))
 
     app_text = (ROOT / "app.py").read_text()
-    checks.append(("Daily Challenge is first/default mode", 'options=["Daily Challenge", "Practice"]' in app_text and 'st.session_state.app_mode = "Daily Challenge"' in app_text))
+    checks.append(("Daily Challenge is first/default mode", 'options=["Daily Challenge", "Practice", "📲 Add to Home Screen"]' in app_text and 'st.session_state.app_mode = "Daily Challenge"' in app_text))
     checks.append(("daily answers hide strategy hints", 'No strategy label or difficulty hint is shown during the official run.' in app_text))
     checks.append(("visible segmented Daily progress bar", "daily-progress-percent" in app_text and "Question {index + 1} of 10" in app_text))
     checks.append(("intro summary boxes removed", "<div class='review-label'>Format</div>" not in app_text and "<div class='review-label'>Reset</div>" not in app_text))

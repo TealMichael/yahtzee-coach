@@ -1,38 +1,37 @@
-Yahtzee Coach v43B Phase 2H — FULL CURRENT APP deployment
+Yahtzee Coach v43B Phase 2I — FULL CURRENT APP deployment
 
 This release contains the complete current Yahtzee Coach repository.
 There is NO new Supabase migration for this phase.
 
-STEP 1 — UPLOAD THE FULL CURRENT APP TO GITHUB
-1. Open the UPLOAD_TO_GITHUB folder.
+UPLOAD THE FULL CURRENT APP TO GITHUB
+1. Open the UPLOAD_TO_GITHUB folder in the release ZIP.
 2. In GitHub, open the yahtzee-coach repository root.
 3. Choose Add file -> Upload files.
 4. Select ALL files inside UPLOAD_TO_GITHUB and upload them together.
 5. Commit directly to main.
 
 COPY/PASTE COMMIT MESSAGE:
-v43B Phase 2H - fix install button and show device-specific steps
+v43B Phase 2I - move Home Screen to navigation and fix full score sharing
 
 6. Wait for Streamlit Community Cloud to redeploy.
 7. Open the normal app.
 
-EXPECTED PHASE 2H BEHAVIOR
-- Tapping the green home-screen/install button always produces a visible result.
-- If a browser-native install prompt is available, the button opens it.
-- Otherwise the app opens clear instructions directly underneath the button.
-- iPhone/iPad instructions show Share -> Add to Home Screen -> Open as Web App -> Add.
-- Android instructions show the Chrome menu path.
-- Desktop Chrome instructions show Cast, save, and share -> Install page as app.
-- Mac Safari instructions also show File -> Add to Dock.
-- The custom mascot icon, Copy app link, Daily sharing, friend groups, and persistent Daily remain intact.
+EXPECTED PHASE 2I BEHAVIOR
+- Main navigation shows Daily Challenge, Practice, then Add to Home Screen.
+- No large Home Screen install card appears under Daily or Practice.
+- Add to Home Screen opens its own page with the custom teacher-die icon and iPhone/iPad, Android, and Computer instructions.
+- There is no custom install button that can appear dead.
+- Completed Daily Share result sends the full formatted score text, including squares, through the native share sheet.
+- The app URL is included as the last line of the score instead of being supplied as a separate share URL field.
+- Copy score copies the same complete spoiler-free score block.
+- All existing Daily, Practice, persistence, groups, invite links, and leaderboard behavior remains intact.
 
 OPTIONAL DATABASE PREFLIGHT
 https://teals-yahtzee-coach.streamlit.app/?dbcheck=1
-Expected: v43B Phase 2H database preflight + green connection message.
+Expected: v43B Phase 2I database preflight + green connection message.
 
 IMPORTANT
-- No Supabase SQL changes are needed for this phase.
-- iPhone/iPad requires the user to make the final Apple-controlled Home Screen taps.
-- Browser menus cannot be opened by the web page if the browser does not expose a native install prompt.
+- No Supabase SQL changes are needed.
+- Do NOT put SUPABASE_SECRET_KEY into GitHub or this ZIP.
 - The exact solver, exact policy, Daily puzzle bank, and Practice strategy behavior are unchanged.
 - __pycache__ and .pyc files are intentionally excluded from the release.
