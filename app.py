@@ -1,6 +1,7 @@
 import re
 import html
 import json
+import base64
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -31,6 +32,23 @@ st.set_page_config(
 )
 
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
+APP_ICON_192_PATH = Path(__file__).with_name("home_icon_192.png")
+APP_ICON_512_PATH = Path(__file__).with_name("home_icon_512.png")
+APPLE_TOUCH_ICON_PATH = Path(__file__).with_name("apple_touch_icon.png")
+
+
+@st.cache_data(show_spinner=False)
+def load_install_icon_data():
+    """Load compact icon assets used for Home Screen / install polish."""
+    def to_data_uri(path: Path) -> str:
+        data = base64.b64encode(path.read_bytes()).decode("ascii")
+        return f"data:image/png;base64,{data}"
+
+    return {
+        "icon192": to_data_uri(APP_ICON_192_PATH),
+        "icon512": to_data_uri(APP_ICON_512_PATH),
+        "apple": to_data_uri(APPLE_TOUCH_ICON_PATH),
+    }
 
 
 @st.cache_resource(show_spinner=False)
@@ -51,7 +69,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2E database preflight is loaded.")
+    st.info("🔧 v43B Phase 2G database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -1892,21 +1910,191 @@ def render_group_invite_controls(group):
     )
 
 
-def render_install_app_control():
-    """Offer a simple home-screen path without pretending browsers allow forced install."""
-    if "show_install_help" not in st.session_state:
-        st.session_state.show_install_help = False
-    if st.button("📲 Add Yahtzee Coach to your Home Screen", use_container_width=True, key="show_install_app_help"):
-        st.session_state.show_install_help = not st.session_state.show_install_help
-    if st.session_state.show_install_help:
-        st.markdown(
-            "**Use Yahtzee Coach like an app**  \n"
-            "- **iPhone / iPad (Safari):** tap **Share** → **Add to Home Screen** → **Add**. Keep **Open as Web App** on if it appears.  \n"
-            "- **Android (Chrome):** tap the **⋮** menu → **Add to Home screen** or **Install app**.  \n"
-            "- **Computer (Chrome / Edge):** use the install icon in the address bar or the browser menu if offered."
-        )
-        st.caption("Phones require you to confirm the system Home Screen action; a website cannot press that final system button for you.")
+def install_app_shell_metadata():
+    """Inject app-like metadata so Home Screen saves use the custom Yahtzee Coach icon."""
+    icons = load_install_icon_data()
+    manifest = {
+        "name": "Yahtzee Coach",
+        "short_name": "Yahtzee Coach",
+        "description": "Daily Yahtzee decision coach with exact strategy, friend groups, and leaderboards.",
+        "start_url": PUBLIC_APP_URL,
+        "display": "standalone",
+        "background_color": "#061b14",
+        "theme_color": "#0b3b2e",
+        "orientation": "portrait",
+        "icons": [
+            {"src": icons["icon192"], "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": icons["icon512"], "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ],
+    }
+    html_block = """
+        <script>
+        (function() {
+          const parentWindow = window.parent;
+          const parentDoc = parentWindow.document;
+          const head = parentDoc.head;
+          function ensureLink(rel, href) {
+            let el = head.querySelector(`link[rel="${rel}"]`);
+            if (!el) {
+              el = parentDoc.createElement('link');
+              el.setAttribute('rel', rel);
+              head.appendChild(el);
+            }
+            el.setAttribute('href', href);
+            return el;
+          }
+          function ensureMeta(name, content) {
+            let el = head.querySelector(`meta[name="${name}"]`);
+            if (!el) {
+              el = parentDoc.createElement('meta');
+              el.setAttribute('name', name);
+              head.appendChild(el);
+            }
+            el.setAttribute('content', content);
+          }
+          let manifestUrl = parentWindow.__ycManifestUrl;
+          if (!manifestUrl) {
+            const blob = new Blob([__MANIFEST_JSON__], {type: 'application/manifest+json'});
+            manifestUrl = URL.createObjectURL(blob);
+            parentWindow.__ycManifestUrl = manifestUrl;
+          }
+          ensureLink('manifest', manifestUrl);
+          ensureLink('apple-touch-icon', __APPLE_ICON__);
+          ensureLink('icon', __ICON_192__);
+          ensureMeta('apple-mobile-web-app-capable', 'yes');
+          ensureMeta('mobile-web-app-capable', 'yes');
+          ensureMeta('apple-mobile-web-app-title', 'Yahtzee Coach');
+          ensureMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
+          ensureMeta('theme-color', '#0b3b2e');
+        })();
+        </script>
+        """
+    html_block = html_block.replace('__MANIFEST_JSON__', json.dumps(json.dumps(manifest)))
+    html_block = html_block.replace('__APPLE_ICON__', json.dumps(icons['apple']))
+    html_block = html_block.replace('__ICON_192__', json.dumps(icons['icon192']))
+    components.html(html_block, height=0)
 
+
+def render_install_app_control():
+    """Offer a smarter install/home-screen experience with the custom Yahtzee Coach icon."""
+    icons = load_install_icon_data()
+    html_block = """
+        <div id="ycInstallCard" style="font-family:Arial,sans-serif;border:1px solid #d1d5db;border-radius:16px;padding:14px 14px 12px 14px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);box-shadow:0 2px 10px rgba(0,0,0,0.04);">
+          <div style="display:flex;gap:12px;align-items:center;">
+            <img src=__ICON_192__ alt="Yahtzee Coach icon" style="width:64px;height:64px;border-radius:14px;flex:0 0 auto;box-shadow:0 3px 10px rgba(0,0,0,0.12);" />
+            <div>
+              <div style="font-size:18px;font-weight:800;color:#0f172a;">📲 Add Yahtzee Coach to your Home Screen</div>
+              <div style="font-size:13px;color:#475569;line-height:1.4;">Use the new mascot icon and launch Yahtzee Coach more like a real app.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:12px;">
+            <button id="ycInstallPrimary" style="flex:1;border:1px solid #166534;background:#166534;color:white;border-radius:10px;padding:10px 12px;font-weight:700;cursor:pointer;">📲 Install / Add</button>
+            <button id="ycCopyAppLink" style="flex:1;border:1px solid #cbd5e1;background:white;color:#0f172a;border-radius:10px;padding:10px 12px;font-weight:700;cursor:pointer;">🔗 Copy app link</button>
+          </div>
+          <div id="ycInstallStatus" style="margin-top:10px;font-size:13px;color:#334155;line-height:1.45;"></div>
+          <div style="margin-top:8px;font-size:11px;color:#64748b;line-height:1.35;">
+            <b>iPhone / iPad (Safari)</b> and <b>Android (Chrome)</b> are both supported. Phones still require you to confirm the system Home Screen action; the app cannot press that final system button for you.
+          </div>
+        </div>
+        <script>
+        (function() {
+          const parentWindow = window.parent;
+          const nav = parentWindow.navigator;
+          const primary = document.getElementById('ycInstallPrimary');
+          const copyBtn = document.getElementById('ycCopyAppLink');
+          const status = document.getElementById('ycInstallStatus');
+          const appUrl = __APP_URL__;
+
+          function isStandalone() {
+            return !!(nav.standalone || parentWindow.matchMedia('(display-mode: standalone)').matches);
+          }
+          function platform() {
+            const ua = (nav.userAgent || '').toLowerCase();
+            const isiPadOS = nav.platform === 'MacIntel' && nav.maxTouchPoints > 1;
+            if (/iphone|ipad|ipod/.test(ua) || isiPadOS) return 'ios';
+            if (/android/.test(ua)) return 'android';
+            if (/mac|win|linux|cros/.test(ua)) return 'desktop';
+            return 'other';
+          }
+          function installStepsText(kind) {
+            if (kind === 'ios') {
+              return 'Tap <b>Share</b> in Safari → <b>Add to Home Screen</b> → <b>Add</b>. Keep <b>Open as Web App</b> on if Safari offers it.';
+            }
+            if (kind === 'android') {
+              return 'Tap Chrome's <b>⋮</b> menu → <b>Add to Home screen</b> or <b>Install app</b>. If your browser shows its own install banner, use that.';
+            }
+            if (kind === 'desktop') {
+              return 'In Chrome or Edge, use the <b>install icon</b> in the address bar or choose <b>Install app</b> from the browser menu.';
+            }
+            return 'Use your browser menu to add Yahtzee Coach to your Home Screen or install it as an app if supported.';
+          }
+          function renderStatus(message, tone) {
+            const color = tone === 'good' ? '#166534' : tone === 'warn' ? '#92400e' : '#334155';
+            status.style.color = color;
+            status.innerHTML = message;
+          }
+          function refreshUI() {
+            if (isStandalone()) {
+              primary.disabled = true;
+              primary.textContent = '✅ Already added';
+              primary.style.opacity = '0.75';
+              renderStatus('Yahtzee Coach is already running like an installed app on this device.', 'good');
+              return;
+            }
+            primary.disabled = false;
+            primary.style.opacity = '1';
+            const kind = platform();
+            if (parentWindow.__ycDeferredInstallPrompt) {
+              primary.textContent = kind === 'desktop' ? '⬇️ Install app now' : '📲 Install app now';
+              renderStatus('Your browser is offering an install prompt. Tap the button to open it.', 'good');
+            } else {
+              primary.textContent = '📲 Install / Add';
+              renderStatus(installStepsText(kind), 'info');
+            }
+          }
+          parentWindow.addEventListener('beforeinstallprompt', function(event) {
+            event.preventDefault();
+            parentWindow.__ycDeferredInstallPrompt = event;
+            refreshUI();
+          });
+          primary.addEventListener('click', async function() {
+            if (isStandalone()) {
+              refreshUI();
+              return;
+            }
+            const promptEvent = parentWindow.__ycDeferredInstallPrompt;
+            if (promptEvent) {
+              promptEvent.prompt();
+              try {
+                await promptEvent.userChoice;
+              } catch (err) {}
+              parentWindow.__ycDeferredInstallPrompt = null;
+              refreshUI();
+              return;
+            }
+            renderStatus(installStepsText(platform()), 'warn');
+          });
+          copyBtn.addEventListener('click', async function() {
+            try {
+              if (window.parent.navigator.clipboard && window.parent.navigator.clipboard.writeText) {
+                await window.parent.navigator.clipboard.writeText(appUrl);
+              } else if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(appUrl);
+              } else {
+                throw new Error('clipboard unavailable');
+              }
+              renderStatus('App link copied. You can text it to yourself or a friend.', 'good');
+            } catch (err) {
+              renderStatus('Copy was blocked by the browser. Use the address bar to copy the app link instead.', 'warn');
+            }
+          });
+          refreshUI();
+        })();
+        </script>
+        """
+    html_block = html_block.replace('__ICON_192__', json.dumps(icons['icon192']))
+    html_block = html_block.replace('__APP_URL__', json.dumps(PUBLIC_APP_URL))
+    components.html(html_block, height=245)
 
 def _daily_puzzle_ids():
     return [str(challenge.get("challenge_id", "")) for challenge in st.session_state.daily_challenges]
@@ -2049,7 +2237,7 @@ def render_player_identity_gate():
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<div class='identity-note'><b>Phase 2E:</b> permanent players, saved Daily attempts, real friend groups, and invite links are live. "
+        "<div class='identity-note'><b>Phase 2G:</b> permanent players, saved Daily attempts, real friend groups, invite links, custom home-screen install polish, and spoiler-free Daily sharing are live. "
         "Sign back in after a refresh or on another device to resume the same official attempt.</div>",
         unsafe_allow_html=True,
     )
@@ -2689,6 +2877,102 @@ def _leaderboard_frame(board):
     return pd.DataFrame(rows)
 
 
+def _share_square(points_lost: float) -> str:
+    """Convert EV loss into a compact spoiler-free Wordle-style result square."""
+    loss = max(0.0, float(points_lost or 0.0))
+    if loss <= 1e-9:
+        return "🟩"
+    if loss <= 0.10:
+        return "🟨"
+    if loss <= 1.00:
+        return "🟧"
+    return "🟥"
+
+
+def build_daily_share_text(records, summary, rank=None, completed_count=0):
+    """Build a compact spoiler-free Daily result suitable for text messages/social sharing."""
+    squares = [_share_square(item.get("points_lost", 0.0)) for item in records]
+    first_row = "".join(squares[:5])
+    second_row = "".join(squares[5:10])
+    date_label = _daily_date_label(st.session_state.daily_date_key)
+    lines = [
+        f"🎲 Yahtzee Coach Daily — {date_label}",
+        f"{summary['total_ev_loss']:.2f} EV lost · {summary['exact_count']}/10 exact",
+        first_row,
+        second_row,
+        f"🔥 Best exact streak: {summary['best_exact_streak']}",
+    ]
+    if rank is not None and int(completed_count or 0) > 0:
+        lines.append(f"🏆 Group rank right now: #{int(rank)} of {int(completed_count)}")
+    lines.extend([
+        "🟩 exact · 🟨 essentially optimal · 🟧 close · 🟥 miss",
+        PUBLIC_APP_URL,
+    ])
+    return "\n".join(lines)
+
+
+def render_daily_share_result(records, summary, rank=None, completed_count=0):
+    """Render native-share and copy controls for a completed spoiler-free Daily result."""
+    share_text = build_daily_share_text(records, summary, rank=rank, completed_count=completed_count)
+    title = f"Yahtzee Coach Daily — {_daily_date_label(st.session_state.daily_date_key)}"
+    share_text_js = json.dumps(share_text)
+    title_js = json.dumps(title)
+    url_js = json.dumps(PUBLIC_APP_URL)
+    preview_html = html.escape(share_text).replace("\n", "<br>")
+    components.html(
+        f"""
+        <div style="font-family:Arial,sans-serif;border:1px solid #d1d5db;border-radius:16px;padding:14px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);box-shadow:0 2px 10px rgba(0,0,0,0.04);">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;font-weight:800;color:#64748b;">Share your Daily</div>
+          <div style="font-size:20px;font-weight:850;color:#0f172a;margin:3px 0 8px 0;">🎲 Spoiler-free result</div>
+          <div style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;line-height:1.55;color:#0f172a;background:#f1f5f9;border-radius:12px;padding:11px;white-space:normal;">{preview_html}</div>
+          <div style="display:flex;gap:10px;margin-top:11px;">
+            <button id="shareDaily" style="flex:1;border:1px solid #166534;background:#166534;color:white;border-radius:10px;padding:10px 12px;font-weight:800;cursor:pointer;">📤 Share result</button>
+            <button id="copyDaily" style="flex:1;border:1px solid #cbd5e1;background:white;color:#0f172a;border-radius:10px;padding:10px 12px;font-weight:800;cursor:pointer;">📋 Copy score</button>
+          </div>
+          <div id="shareDailyStatus" style="height:18px;margin-top:7px;font-size:12px;color:#64748b;text-align:center;"></div>
+        </div>
+        <script>
+        (function() {{
+          const shareText = {share_text_js};
+          const shareTitle = {title_js};
+          const appUrl = {url_js};
+          const status = document.getElementById('shareDailyStatus');
+          async function copyScore() {{
+            try {{
+              const nav = window.parent.navigator;
+              if (nav.clipboard && nav.clipboard.writeText) {{
+                await nav.clipboard.writeText(shareText);
+              }} else if (navigator.clipboard && navigator.clipboard.writeText) {{
+                await navigator.clipboard.writeText(shareText);
+              }} else {{
+                throw new Error('clipboard unavailable');
+              }}
+              status.textContent = 'Score copied — paste it into a text or group chat!';
+            }} catch (err) {{
+              status.textContent = 'Copy was blocked by the browser. Select the preview text instead.';
+            }}
+          }}
+          document.getElementById('copyDaily').addEventListener('click', copyScore);
+          document.getElementById('shareDaily').addEventListener('click', async function() {{
+            const nav = window.parent.navigator;
+            if (nav.share) {{
+              try {{
+                await nav.share({{title: shareTitle, text: shareText, url: appUrl}});
+                status.textContent = 'Share sheet opened.';
+                return;
+              }} catch (err) {{
+                if (err && err.name === 'AbortError') return;
+              }}
+            }}
+            await copyScore();
+          }});
+        }})();
+        </script>
+        """,
+        height=345,
+    )
+
+
 def _daily_review_item(answer):
     challenge = answer["challenge"]
     record = answer["solver_record"]
@@ -2778,6 +3062,8 @@ def render_daily_results():
     else:
         rank_copy = "Your official result is locked; group standings are still loading."
     st.markdown(f"<div class='daily-rank-banner'><b>🏆 Daily result</b><br>{html.escape(rank_copy)}</div>", unsafe_allow_html=True)
+
+    render_daily_share_result(records, summary, rank=rank, completed_count=len(board))
 
     st.markdown("### Friend groups")
     render_friend_group_hub(expanded=active_group is None)
@@ -2991,6 +3277,7 @@ if process_pending_group_invite():
     st.rerun()
 # Install near the top so dice taps stay visually anchored on mobile.
 install_dice_scroll_guard()
+install_app_shell_metadata()
 st.markdown("<div id='app-top-anchor'></div>", unsafe_allow_html=True)
 st.markdown("<h1 class='top-title'>🎲 Yahtzee Coach</h1>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>Hold Strategy Trainer</div>", unsafe_allow_html=True)

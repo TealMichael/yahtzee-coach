@@ -1,3 +1,97 @@
+# Yahtzee Coach v43B Phase 2G — Spoiler-Free Daily Result Sharing
+
+This checkpoint adds the Wordle-style social payoff to the completed Daily Challenge.
+The exact strategy engine, Daily puzzle composition, permanent players, saved Daily attempts, friend groups, invite links, editable pre-submit review, and home-screen icon/install polish remain intact.
+
+## v43B Phase 2G changes
+
+- Completed Daily results now include a **Share your Daily** card.
+- The card creates a compact **two-row, 10-square result grid**, one square for each decision.
+- Result colors are spoiler-free and describe decision quality rather than the dice/hold itself:
+  - 🟩 exact
+  - 🟨 essentially optimal (within 0.10 EV)
+  - 🟧 close (within 1.00 EV)
+  - 🟥 meaningful miss (more than 1.00 EV)
+- Shared text also includes **total EV lost**, **exact holds**, and **best exact streak**.
+- If the player is in a friend group, the share can include the player's **current group rank among completed players**.
+- **Share result** opens the device's native share sheet when supported.
+- **Copy score** copies the full formatted result for pasting into Messages, group chats, email, etc.
+- If native sharing is unavailable, Share result falls back to copying the score.
+- Shared results intentionally contain **no dice, chosen holds, exact answers, scenario names, or coaching**, so friends can safely share before others play.
+- The Yahtzee Coach app link is included at the bottom of the copied/shared result.
+- No Supabase schema changes are required for this phase.
+
+## Example share
+
+🎲 Yahtzee Coach Daily — Aug 9, 2026  
+0.42 EV lost · 8/10 exact  
+🟩🟩🟨🟩🟩  
+🟩🟧🟩🟩🟩  
+🔥 Best exact streak: 5  
+🏆 Group rank right now: #1 of 3  
+🟩 exact · 🟨 essentially optimal · 🟧 close · 🟥 miss
+
+## What is intentionally NOT changed
+
+- Daily puzzle composition/version remains `43A-bank42.6`.
+- The exact policy and strategy recommendations are unchanged.
+- One official Daily attempt per player per day remains enforced.
+- Back/edit remains available only before final submission; sharing appears only after the result is locked.
+- Friend-group rank in a shared result is explicitly labeled **right now** because standings can change as more friends finish.
+- Practice remains open and account-free.
+
+## Phase 2G live-test goal
+
+1. Upload the full current app to GitHub.
+2. Complete / reopen today's already-completed Daily result.
+3. Confirm the new **Share your Daily** card appears.
+4. Confirm the 10 colored squares match the quality of the 10 completed decisions without revealing answers.
+5. Tap **Copy score**, paste it into a text message, and confirm the formatting survives.
+6. Tap **Share result** on a phone and confirm the native share sheet opens when supported.
+7. If you are in a friend group, confirm the copied text shows the current group rank.
+
+---
+
+## Previous checkpoint
+
+# Yahtzee Coach v43B Phase 2F — Custom App Icon + Smarter Home-Screen Install
+
+This checkpoint upgrades the phone/home-screen experience around the working Phase 2E app.
+The exact strategy engine, Daily puzzle composition, persistent players, saved Daily attempts, real friend groups, and invite links all remain intact.
+
+## v43B Phase 2F changes
+
+- The Home Screen flow now uses the chosen **cartoon teacher-die mascot icon**.
+- The app injects **Apple touch icon** and **web app metadata** automatically so iPhone/iPad Home Screen saves can use the branded icon and launch title.
+- The install/help card now detects when Yahtzee Coach is already running in **standalone / installed mode** and changes its message accordingly.
+- On browsers that expose the standard **beforeinstallprompt** event, the card can now open the browser's install prompt directly.
+- When a direct install prompt is not available, the card gives concise platform-specific guidance for **iPhone / iPad (Safari)**, **Android (Chrome)**, and **desktop Chrome/Edge**.
+- Adds a **Copy app link** control so players can text the app to themselves or a friend.
+- No Supabase schema changes are required for this phase.
+- Friend groups, real leaderboards, Practice, Daily back/edit review, and one-attempt-per-day protections are unchanged.
+
+## What is intentionally NOT changed
+
+- Daily puzzle composition/version remains `43A-bank42.6`.
+- The exact policy and strategy recommendations are unchanged.
+- Phones still require the user to confirm the final operating-system **Add to Home Screen / Install** step.
+- Practice remains open and account-free.
+- PIN recovery and group-admin/delete tools are still future polish items.
+- Participation streak calculations exist in the persistence layer but are not yet surfaced prominently.
+
+## Phase 2F live-test goal
+
+1. Upload the full current app to GitHub.
+2. Open Yahtzee Coach on a phone.
+3. Confirm the **Add Yahtzee Coach to your Home Screen** card shows the new mascot icon.
+4. On iPhone/iPad, use the guided **Share → Add to Home Screen** path and confirm the saved icon is the custom teacher-die.
+5. On a device/browser that already treats Yahtzee Coach like an installed app, confirm the card switches to **Already added** messaging.
+6. Optional: try the **Copy app link** button and text the app to yourself or a friend.
+
+---
+
+## Previous checkpoint
+
 # Yahtzee Coach v43B Phase 2E — Invite Links + Editable Daily Review + Home-Screen Polish
 
 This checkpoint turns the successful Phase 2D social system into a much smoother friend-facing experience.

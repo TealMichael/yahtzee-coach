@@ -1,18 +1,9 @@
-Yahtzee Coach v43B Phase 2E — FULL CURRENT APP deployment
+Yahtzee Coach v43B Phase 2G — FULL CURRENT APP deployment
 
 This release contains the complete current Yahtzee Coach repository.
-There is ONE extra Supabase step this time because Back/edit changes when Daily answers become permanently locked.
+There is NO new Supabase migration for this phase.
 
-STEP 1 — RUN THE ONE-TIME SUPABASE MIGRATION
-1. In this release package, open v43b_phase2e_migration.sql.
-2. In Supabase, open your Yahtzee Coach project -> SQL Editor -> New query.
-3. Copy/paste the entire migration file into the editor.
-4. Click Run.
-5. Expected result: Success. No rows returned.
-
-The migration is safe to run more than once. It allows saved Daily choices to be revised only before final submission; completed attempts remain immutable.
-
-STEP 2 — UPLOAD THE FULL CURRENT APP TO GITHUB
+STEP 1 — UPLOAD THE FULL CURRENT APP TO GITHUB
 1. Open the UPLOAD_TO_GITHUB folder.
 2. In GitHub, open the yahtzee-coach repository root.
 3. Choose Add file -> Upload files.
@@ -20,32 +11,27 @@ STEP 2 — UPLOAD THE FULL CURRENT APP TO GITHUB
 5. Commit directly to main.
 
 COPY/PASTE COMMIT MESSAGE:
-v43B Phase 2E - add invite links, Daily back/edit, and home-screen setup
+v43B Phase 2G - add spoiler-free Daily result sharing
 
 6. Wait for Streamlit Community Cloud to redeploy.
-7. Open the normal app and sign in to Daily Challenge.
+7. Open a completed Daily result.
 
-EXPECTED PHASE 2E BEHAVIOR
-- Friend groups show Share invite and Copy invite link controls.
-- Opening an invite link queues the group before player creation/sign-in.
-- After creating/signing into a player through that link, the player joins the invited group automatically.
-- Daily questions have a Back button.
-- Saved answers can be revised before final submission.
-- No exact answer, grade, EV loss, or coaching is shown while answers remain editable.
-- After all 10 are saved, a no-feedback review appears before final submission.
-- Final submission permanently locks the 10 answers and reveals the normal results/coaching/leaderboard.
-- Refresh/sign-out/cross-device resume still restores saved pre-submit choices.
-- The home area has Add Yahtzee Coach to your Home Screen guidance.
-- Practice remains available without signing in.
+EXPECTED PHASE 2G BEHAVIOR
+- Completed Daily results show a Share your Daily card.
+- The share preview has 10 spoiler-free colored squares in two rows of five.
+- The score includes total EV lost, exact holds, and best exact streak.
+- If a friend-group leaderboard is active, current group rank can be included.
+- Share result uses the phone/device native share sheet when supported.
+- Copy score copies the formatted result for Messages/group chats.
+- Shared text never exposes dice, selected holds, exact answers, scenario names, or coaching.
+- Existing friend groups, invite links, Daily back/edit, persistence, and home-screen icon behavior remain unchanged.
 
 OPTIONAL DATABASE PREFLIGHT
 https://teals-yahtzee-coach.streamlit.app/?dbcheck=1
-Expected: v43B Phase 2E database preflight + green connection message.
+Expected: v43B Phase 2G database preflight + green connection message.
 
 IMPORTANT
+- No Supabase SQL changes are needed for this phase.
 - Do NOT put SUPABASE_SECRET_KEY into GitHub or this ZIP.
-- Streamlit Secrets remain the only location for the private key.
-- Player PINs remain salted scrypt hashes, never plaintext.
 - The exact solver, exact policy, Daily puzzle bank, and Practice strategy behavior are unchanged.
-- v43b_phase2e_migration.sql is the only new Supabase SQL required for this phase.
 - __pycache__ and .pyc files are intentionally excluded from the release.
