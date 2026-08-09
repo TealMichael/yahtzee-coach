@@ -41,7 +41,7 @@ def run():
 
     source = Path(__file__).with_name("app.py").read_text(encoding="utf-8")
     checks.append(("Daily mode gates on persistent player identity", 'if not st.session_state.get("active_player_id")' in source and "render_player_identity_gate()" in source))
-    checks.append(("Create Player UI is present", 'st.tabs(["Create player", "Returning player"])' in source and 'load_daily_store().create_player' in source))
+    checks.append(("Returning Player is first/default and Create Player remains available", 'st.tabs(["Returning Player", "Create Player"])' in source and 'load_daily_store().create_player' in source))
     checks.append(("Returning Player UI authenticates against the store", 'load_daily_store().authenticate_player' in source and '"Display name or PIN did not match."' in source))
     checks.append(("Practice remains available without an account", 'Open Practice without signing in' in source))
     checks.append(("Daily leaderboard name comes from authenticated identity", 'st.session_state.daily_display_name = player.display_name' in source))

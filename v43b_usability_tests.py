@@ -16,7 +16,7 @@ def run():
 
     checks = [
         ("public invite URL uses group code query param", 'PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"' in app and '?invite={code}' in app),
-        ("invite link is detected before identity gate", "_pending_invite_code" in app and "Friend-group invite detected" in app),
+        ("invite link is detected before identity gate", "_pending_invite_code" in app and "You were invited to a friend group" in app),
         ("new/returning player auto-joins pending invite", "process_pending_group_invite" in app and ".join_group(st.session_state.active_player_id, code)" in app),
         ("invite query is cleared after successful join", "_clear_pending_invite()" in app and "Joined {group.group_name} from the invite link." in app),
         ("friend group has native share control", "📤 Share invite" in app and "nav.share" in app),

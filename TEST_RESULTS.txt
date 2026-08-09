@@ -1,30 +1,25 @@
-Yahtzee Coach v43B Phase 2I test summary
+Yahtzee Coach v43B Phase 2J — test summary
 
-All 21 automated test suites passed.
+ALL 22 AUTOMATED TEST SUITES PASSED.
 
-Core / strategy protections:
+Key coverage:
 - Daily Challenge integration: 17/17
 - Daily Challenge logic: 11/11
 - UI/mobile protections: 14/14
 - Practice UI protections: 12/12
-- Session learning: 7/7
-- Practice progress: 8/8
 - Strategy regressions / playtest protections: 26/26
 - Published strategy tests: 15/15
-- Teaching / personalization / advanced-context suites: all pass
 - Expanded exact-policy audit: 3,669,120 legal hold values
-- Exact routing sample: 840/840
+- Exact-first routing sample: 840/840
 - Expanded Practice sample: 20,000/20,000 exact
-- Puzzle-bank / Daily variety readiness: all pass
-
-v43B protections:
-- Persistence: 28/28
-- Player identity: 14/14
+- Puzzle-bank / Daily variety-readiness tests: all pass
+- v43B persistence contract: 28/28
+- Player Identity: 14/14
 - Persistent Daily UI: 19/19
-- Real social groups: 14/14
-- Usability / invite / back-edit: 18/18
-- Home Screen icon/metadata: 8/8
-- Home Screen navigation/install flow: 10/10
-- Spoiler-free Daily sharing: 18/18
+- Real friend-group/social tests: 14/14
+- Invite/back/edit usability: 18/18
+- Home Screen icon/metadata protections: 8/8
+- Spoiler-free result sharing: 18/18
+- New Phase 2J player-facing UI cleanup: 14/14
 
-No strategy or Daily puzzle composition changes are included in this release.
+No exact-strategy, scoring, Daily puzzle-composition, persistence, or leaderboard rule changed in Phase 2J.

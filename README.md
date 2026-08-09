@@ -1,3 +1,57 @@
+# Yahtzee Coach v43B Phase 2J — Player-Facing UI Cleanup + Native Icon Fix
+
+This checkpoint cleans the successful v43B feature set into a much more finished player experience.
+No competitive rules, exact-strategy behavior, persistence logic, puzzle composition, sharing logic, or friend-group scoring changed.
+
+## v43B Phase 2J changes
+
+- **Returning Player** is now the first/default sign-in tab; **Create Player** is secondary.
+- The sign-in screen removes version numbers, database/storage language, and implementation notes. It now simply explains the Daily and keeps the reassurance that the player's PIN is private.
+- The signed-in status is reduced to a compact **👤 Player Name · Sign out** treatment instead of repeating identity information several times.
+- The Daily intro removes the prototype/version badge and technical “official attempt” language while keeping the important player rules: same 10 for everyone, automatic saving, review before submission, hidden coaching until the end, and midnight Eastern reset.
+- The completed Daily screen has been reorganized around the order players actually care about:
+  1. **Result** — EV Lost, Exact, Group Rank, Best Streak
+  2. **Spoiler-free share blocks** and Share/Copy controls
+  3. **Friend leaderboard** and compact group insights
+  4. **Review Your 10**
+  5. **Invite & manage friends**
+- The full share-text preview is now collapsed under **Preview shared result** instead of taking over the result page.
+- The completed page removes Challenge ID, 10/10-submitted, 100%-saved, “real v43B results,” database/storage explanations, and similar developer-facing copy.
+- Group insights use friendlier labels such as **Today's Killer** and **Everyone Nailed It**.
+- The final lock message is now simply: **Today's Daily is complete. Come back tomorrow for a new set.**
+- **Review Your 10 is intentionally above Invite & manage friends.**
+
+## Home Screen icon fix attempt
+
+Live testing showed that iPhone successfully added the web app but used the Streamlit logo instead of the chosen teacher-die mascot.
+Phase 2J changes the icon path in two important ways:
+
+- The mascot PNG is now set as Streamlit's **native `page_icon` at page startup**, replacing the old dice/Streamlit fallback path.
+- The Apple touch icon metadata now points to the app's **real public GitHub-hosted PNG URL** instead of a temporary data/blob URL that Safari ignored during the previous live test.
+
+The dedicated **📲 Add to Home Screen** navigation page remains secondary to Daily Challenge and Practice.
+
+## What is intentionally NOT changed
+
+- Daily puzzle composition/version remains `43A-bank42.6`.
+- Exact strategy and scoring are unchanged.
+- Permanent players, one Daily per player/day, automatic resume, Back/edit-before-submit, friend groups, invite links, live leaderboards, and spoiler-free sharing are unchanged.
+- Practice remains open and account-free.
+- The final Add to Home Screen action is still controlled by the user's browser/operating system.
+
+## Phase 2J live-test goal
+
+1. Confirm the sign-in page opens on **Returning Player** with Create Player on the right.
+2. Confirm normal screens no longer show v43B/Phase/database/storage implementation language.
+3. Open an already-completed Daily and verify the new order: **Result → Share → Friends → Review Your 10 → Invite & manage friends**.
+4. Confirm the full share text is collapsed by default but Share result still sends the correct score.
+5. Remove the existing Streamlit-logo Home Screen shortcut from the phone before testing the icon again.
+6. Open Yahtzee Coach in Safari, use **Share → Add to Home Screen**, and confirm whether the new teacher-die mascot appears in the Add preview and on the Home Screen.
+
+---
+
+## Previous checkpoint
+
 # Yahtzee Coach v43B Phase 2I — Home Navigation + Full-Text Share Fix
 
 This checkpoint fixes two live usability issues from the Phase 2H/2G polish pass without changing any competitive or strategy behavior.

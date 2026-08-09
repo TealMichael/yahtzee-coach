@@ -1,37 +1,40 @@
-Yahtzee Coach v43B Phase 2I — FULL CURRENT APP deployment
+Yahtzee Coach v43B Phase 2J — FULL CURRENT APP deployment
 
 This release contains the complete current Yahtzee Coach repository.
-There is NO new Supabase migration for this phase.
+There is NO new Supabase step for this phase.
 
-UPLOAD THE FULL CURRENT APP TO GITHUB
-1. Open the UPLOAD_TO_GITHUB folder in the release ZIP.
+STEP 1 — UPLOAD THE FULL CURRENT APP TO GITHUB
+1. Open the UPLOAD_TO_GITHUB folder.
 2. In GitHub, open the yahtzee-coach repository root.
 3. Choose Add file -> Upload files.
 4. Select ALL files inside UPLOAD_TO_GITHUB and upload them together.
 5. Commit directly to main.
 
 COPY/PASTE COMMIT MESSAGE:
-v43B Phase 2I - move Home Screen to navigation and fix full score sharing
+v43B Phase 2J - clean player UI and fix native app icon
 
 6. Wait for Streamlit Community Cloud to redeploy.
-7. Open the normal app.
 
-EXPECTED PHASE 2I BEHAVIOR
-- Main navigation shows Daily Challenge, Practice, then Add to Home Screen.
-- No large Home Screen install card appears under Daily or Practice.
-- Add to Home Screen opens its own page with the custom teacher-die icon and iPhone/iPad, Android, and Computer instructions.
-- There is no custom install button that can appear dead.
-- Completed Daily Share result sends the full formatted score text, including squares, through the native share sheet.
-- The app URL is included as the last line of the score instead of being supplied as a separate share URL field.
-- Copy score copies the same complete spoiler-free score block.
-- All existing Daily, Practice, persistence, groups, invite links, and leaderboard behavior remains intact.
+LIVE TEST
+- Confirm Returning Player is the left/default sign-in option and Create Player is on the right.
+- Confirm version/database/developer language is gone from normal player screens.
+- Reopen a completed Daily and confirm the hierarchy is Result -> Share -> Friends -> Review Your 10 -> Invite & manage friends.
+- Confirm Review Your 10 is above Invite & manage friends.
+- Confirm Share result still sends the full spoiler-free score.
+
+HOME SCREEN ICON RETEST
+IMPORTANT: Delete the old Home Screen shortcut that shows the red Streamlit logo before retesting. iPhone can keep an old shortcut/icon cached.
+1. Open Yahtzee Coach in Safari after the new GitHub deploy is live.
+2. Tap Share -> Add to Home Screen.
+3. Check whether the preview now shows the teacher-die mascot.
+4. Tap Add and verify the Home Screen icon.
 
 OPTIONAL DATABASE PREFLIGHT
 https://teals-yahtzee-coach.streamlit.app/?dbcheck=1
-Expected: v43B Phase 2I database preflight + green connection message.
+Expected: Phase 2J preflight + green connection message.
 
 IMPORTANT
-- No Supabase SQL changes are needed.
 - Do NOT put SUPABASE_SECRET_KEY into GitHub or this ZIP.
-- The exact solver, exact policy, Daily puzzle bank, and Practice strategy behavior are unchanged.
-- __pycache__ and .pyc files are intentionally excluded from the release.
+- No Supabase SQL changes are needed for this phase.
+- Exact strategy, puzzle composition, Daily persistence, friend-group scoring, and sharing payloads are unchanged.
+- __pycache__ and .pyc files are intentionally excluded.

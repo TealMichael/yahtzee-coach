@@ -1,7 +1,6 @@
 import re
 import html
 import json
-import base64
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,31 +23,18 @@ from daily_store import (
     GroupNotFound, InvalidOfficialAnswer, InvalidPin, OutOfOrderAnswer, PlayerNameTaken,
 )
 
+APP_ICON_PATH = "apple_touch_icon.png"
+PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
+PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
+APP_ICON_192_PATH = Path(__file__).with_name("home_icon_192.png")
+APP_ICON_512_PATH = Path(__file__).with_name("home_icon_512.png")
+
 st.set_page_config(
     page_title="Yahtzee Coach",
-    page_icon="🎲",
+    page_icon=APP_ICON_PATH,
     layout="centered",
     initial_sidebar_state="collapsed",
 )
-
-PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_ICON_192_PATH = Path(__file__).with_name("home_icon_192.png")
-APP_ICON_512_PATH = Path(__file__).with_name("home_icon_512.png")
-APPLE_TOUCH_ICON_PATH = Path(__file__).with_name("apple_touch_icon.png")
-
-
-@st.cache_data(show_spinner=False)
-def load_install_icon_data():
-    """Load compact icon assets used for Home Screen / install polish."""
-    def to_data_uri(path: Path) -> str:
-        data = base64.b64encode(path.read_bytes()).decode("ascii")
-        return f"data:image/png;base64,{data}"
-
-    return {
-        "icon192": to_data_uri(APP_ICON_192_PATH),
-        "icon512": to_data_uri(APP_ICON_512_PATH),
-        "apple": to_data_uri(APPLE_TOUCH_ICON_PATH),
-    }
 
 
 @st.cache_resource(show_spinner=False)
@@ -69,7 +55,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2I database preflight is loaded.")
+    st.info("🔧 v43B Phase 2J database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -1704,6 +1690,7 @@ st.markdown(
     .daily-result-box { border:1px solid rgba(127,127,127,.22); border-radius:15px; background:#f8fafc; padding:0.58rem 0.42rem; text-align:center; color:#111827 !important; }
     .daily-result-label { color:#6b7280 !important; font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.035em; }
     .daily-result-value { font-size:1.17rem; font-weight:950; margin-top:0.08rem; }
+    .daily-result-sub { color:#6b7280 !important; font-size:0.66rem; margin-top:0.04rem; }
     .daily-rank-banner { border:1px solid #fde68a; background:#fffbeb; border-radius:17px; padding:0.72rem 0.78rem; margin:0.5rem 0; color:#78350f !important; }
     .daily-rank-banner b { font-size:1.02rem; }
     .group-story-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.42rem; margin:0.48rem 0; }
@@ -1795,11 +1782,7 @@ def _activate_player(player, *, created: bool = False):
     st.session_state.active_player_id = player.player_id
     st.session_state.active_player_name = player.display_name
     st.session_state.daily_display_name = player.display_name
-    st.session_state.player_auth_flash = (
-        f"Player {player.display_name} created. Your permanent player identity is ready."
-        if created
-        else f"Welcome back, {player.display_name}."
-    )
+    st.session_state.player_auth_flash = ""
 
 
 def _sign_out_player():
@@ -1911,8 +1894,10 @@ def render_group_invite_controls(group):
 
 
 def install_app_shell_metadata():
-    """Inject app-like metadata so Home Screen saves use the custom Yahtzee Coach icon."""
-    icons = load_install_icon_data()
+    """Add Home Screen metadata using real public image URLs instead of temporary data/blob icons."""
+    apple_icon_url = f"{PUBLIC_ASSET_BASE}apple_touch_icon.png"
+    icon192_url = f"{PUBLIC_ASSET_BASE}home_icon_192.png"
+    icon512_url = f"{PUBLIC_ASSET_BASE}home_icon_512.png"
     manifest = {
         "name": "Yahtzee Coach",
         "short_name": "Yahtzee Coach",
@@ -1921,22 +1906,19 @@ def install_app_shell_metadata():
         "display": "standalone",
         "background_color": "#061b14",
         "theme_color": "#0b3b2e",
-        "orientation": "portrait",
         "icons": [
-            {"src": icons["icon192"], "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-            {"src": icons["icon512"], "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+            {"src": icon192_url, "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": icon512_url, "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
         ],
     }
     html_block = """
         <script>
         (function() {
-          const parentWindow = window;
-          const parentDoc = document;
-          const head = parentDoc.head;
+          const head = document.head;
           function ensureLink(rel, href) {
             let el = head.querySelector(`link[rel="${rel}"]`);
             if (!el) {
-              el = parentDoc.createElement('link');
+              el = document.createElement('link');
               el.setAttribute('rel', rel);
               head.appendChild(el);
             }
@@ -1946,17 +1928,17 @@ def install_app_shell_metadata():
           function ensureMeta(name, content) {
             let el = head.querySelector(`meta[name="${name}"]`);
             if (!el) {
-              el = parentDoc.createElement('meta');
+              el = document.createElement('meta');
               el.setAttribute('name', name);
               head.appendChild(el);
             }
             el.setAttribute('content', content);
           }
-          let manifestUrl = parentWindow.__ycManifestUrl;
+          let manifestUrl = window.__ycManifestUrl;
           if (!manifestUrl) {
-            const blob = new Blob([__MANIFEST_JSON__], {type: 'application/manifest+json'});
+            const blob = new Blob([__MANIFEST__], {type: 'application/manifest+json'});
             manifestUrl = URL.createObjectURL(blob);
-            parentWindow.__ycManifestUrl = manifestUrl;
+            window.__ycManifestUrl = manifestUrl;
           }
           ensureLink('manifest', manifestUrl);
           ensureLink('apple-touch-icon', __APPLE_ICON__);
@@ -1969,9 +1951,9 @@ def install_app_shell_metadata():
         })();
         </script>
         """
-    html_block = html_block.replace('__MANIFEST_JSON__', json.dumps(json.dumps(manifest)))
-    html_block = html_block.replace('__APPLE_ICON__', json.dumps(icons['apple']))
-    html_block = html_block.replace('__ICON_192__', json.dumps(icons['icon192']))
+    html_block = html_block.replace("__MANIFEST__", json.dumps(json.dumps(manifest)))
+    html_block = html_block.replace("__APPLE_ICON__", json.dumps(apple_icon_url))
+    html_block = html_block.replace("__ICON_192__", json.dumps(icon192_url))
     st.html(html_block, unsafe_allow_javascript=True)
 
 
@@ -2078,9 +2060,9 @@ def _apply_daily_resume_state(resume_state, *, resumed_message: bool = False):
     st.session_state.daily_question_index = (len(challenges) - 1 if st.session_state.daily_ready_to_submit else len(rebuilt))
     st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
     if resumed_message and 0 < len(rebuilt) < len(challenges):
-        st.session_state.daily_flash = f"Resumed your saved attempt after {len(rebuilt)} saved answer{'s' if len(rebuilt) != 1 else ''}."
+        st.session_state.daily_flash = f"Welcome back — {len(rebuilt)} choice{'s' if len(rebuilt) != 1 else ''} restored."
     elif resumed_message and st.session_state.daily_ready_to_submit:
-        st.session_state.daily_flash = "All 10 choices are saved. Review them before final submission."
+        st.session_state.daily_flash = "All 10 choices are ready to review."
 
 
 def _daily_sync_key():
@@ -2117,7 +2099,7 @@ def sync_daily_attempt_from_database(*, force: bool = False) -> bool:
         st.session_state.daily_persistence_sync_key = sync_key
         return True
     except Exception as exc:
-        st.error("Today's Daily Challenge could not be loaded from the v43B database. Your official attempt was not changed.")
+        st.error("Today's Daily Challenge couldn't be loaded right now. Please try again.")
         if database_check_enabled():
             st.caption(f"Daily persistence detail: {type(exc).__name__}: {exc}")
         return False
@@ -2141,37 +2123,59 @@ def start_persistent_daily_attempt() -> bool:
         _apply_daily_resume_state(resume_state, resumed_message=not created)
         st.session_state.daily_persistence_sync_key = _daily_sync_key()
         if created:
-            st.session_state.daily_flash = "Official attempt started and saved."
+            st.session_state.daily_flash = ""
         return True
     except Exception as exc:
-        st.error("Your official Daily attempt could not be started, so nothing was saved. Please try again.")
+        st.error("Today's Daily couldn't be started right now. Please try again.")
         if database_check_enabled():
             st.caption(f"Daily start detail: {type(exc).__name__}: {exc}")
         return False
 
 
 def render_player_identity_gate():
-    """Create or restore the permanent v43B player used for Daily Challenge."""
+    """Create or restore the player used for Daily Challenge."""
     st.markdown(
         "<div class='daily-hero'>"
-        "<div class='daily-kicker'>👤 v43B Player Identity</div>"
-        "<div class='daily-title'>Your Daily Challenge player</div>"
-        "<div class='daily-rule'><b>Create a player once, then return with your display name and PIN.</b><br>"
-        "Your display name is public on friend-group leaderboards. Your PIN stays private and is stored only as a secure hash.</div>"
+        "<div class='daily-kicker'>👋 Welcome to Yahtzee Coach</div>"
+        "<div class='daily-title'>Play today's Daily Challenge</div>"
+        "<div class='daily-rule'>Sign in to save your Daily results and compete with friends.</div>"
         "</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        "<div class='identity-note'><b>Phase 2I:</b> permanent players, saved Daily attempts, real friend groups, invite links, custom home-screen install polish, and spoiler-free Daily sharing are live. "
-        "Sign back in after a refresh or on another device to resume the same official attempt.</div>",
         unsafe_allow_html=True,
     )
     invite_code = _pending_invite_code()
     if invite_code:
-        st.success("🎟️ Friend-group invite detected. Create a player or sign in below; Yahtzee Coach will join the group automatically.")
-        st.caption(f"Invite code: {invite_code}")
+        st.success("🎟️ You were invited to a friend group. Sign in or create a player and we'll join you automatically.")
 
-    create_tab, return_tab = st.tabs(["Create player", "Returning player"])
+    return_tab, create_tab = st.tabs(["Returning Player", "Create Player"])
+
+    with return_tab:
+        with st.form("returning_player_form", clear_on_submit=True):
+            return_name = st.text_input(
+                "Display name",
+                max_chars=24,
+                key="returning_player_name",
+            )
+            return_pin = st.text_input(
+                "PIN",
+                type="password",
+                max_chars=12,
+                key="returning_player_pin",
+            )
+            return_submitted = st.form_submit_button(
+                "Sign in", type="primary", use_container_width=True
+            )
+        st.caption("Your PIN is private.")
+        if return_submitted:
+            try:
+                player = load_daily_store().authenticate_player(return_name, return_pin)
+            except Exception:
+                st.error("Sign-in isn't available right now. Please try again.")
+            else:
+                if player is None:
+                    st.error("Display name or PIN did not match.")
+                else:
+                    _activate_player(player, created=False)
+                    st.rerun()
 
     with create_tab:
         with st.form("create_player_form", clear_on_submit=True):
@@ -2197,7 +2201,7 @@ def render_player_identity_gate():
             create_submitted = st.form_submit_button(
                 "Create player", type="primary", use_container_width=True
             )
-        st.caption("For this early build, PIN recovery is not available yet. Choose something you can remember.")
+        st.caption("Your display name is visible to friends. Your PIN is private.")
         if create_submitted:
             if new_pin != confirm_pin:
                 st.error("Those PINs do not match.")
@@ -2205,43 +2209,15 @@ def render_player_identity_gate():
                 try:
                     player = load_daily_store().create_player(new_name, new_pin)
                 except PlayerNameTaken:
-                    st.error("That display name is already in use. Try another name or use Returning player.")
+                    st.error("That display name is already in use. Try another name or use Returning Player.")
                 except InvalidPin as exc:
                     st.error(str(exc))
                 except ValueError as exc:
                     st.error(str(exc))
                 except Exception:
-                    st.error("Player creation could not reach the v43B database. Please try again.")
+                    st.error("Player creation isn't available right now. Please try again.")
                 else:
                     _activate_player(player, created=True)
-                    st.rerun()
-
-    with return_tab:
-        with st.form("returning_player_form", clear_on_submit=True):
-            return_name = st.text_input(
-                "Display name",
-                max_chars=24,
-                key="returning_player_name",
-            )
-            return_pin = st.text_input(
-                "PIN",
-                type="password",
-                max_chars=12,
-                key="returning_player_pin",
-            )
-            return_submitted = st.form_submit_button(
-                "Sign in", type="primary", use_container_width=True
-            )
-        if return_submitted:
-            try:
-                player = load_daily_store().authenticate_player(return_name, return_pin)
-            except Exception:
-                st.error("Sign-in could not reach the v43B database. Please try again.")
-            else:
-                if player is None:
-                    st.error("Display name or PIN did not match.")
-                else:
-                    _activate_player(player, created=False)
                     st.rerun()
 
     if st.button("Open Practice without signing in", use_container_width=True, key="identity_to_practice"):
@@ -2251,17 +2227,14 @@ def render_player_identity_gate():
 
 def render_player_status_bar():
     name = st.session_state.get("active_player_name") or "Player"
-    left, right = st.columns([4, 1])
+    left, right = st.columns([5, 1])
     with left:
-        st.caption(f"👤 Signed in as **{name}** · permanent v43B player")
+        st.caption(f"👤 **{name}**")
     with right:
         if st.button("Sign out", use_container_width=True, key="player_sign_out"):
             _sign_out_player()
             st.rerun()
-    flash = st.session_state.get("player_auth_flash", "")
-    if flash:
-        st.success(flash)
-        st.session_state.player_auth_flash = ""
+
 
 
 
@@ -2288,48 +2261,55 @@ def _load_player_groups():
         return []
 
 
+def render_group_selector(groups, *, key="friend_group_selector"):
+    """Let players switch which group's standings they are viewing."""
+    active = _select_active_group(groups)
+    if not groups:
+        return None
+    if len(groups) == 1:
+        st.session_state.active_group_id = groups[0].group_id
+        return groups[0]
+    ids = [group.group_id for group in groups]
+    labels = {group.group_id: group.group_name for group in groups}
+    chosen_id = st.selectbox(
+        "Friend group",
+        options=ids,
+        index=ids.index(active.group_id) if active else 0,
+        format_func=lambda group_id: labels[group_id],
+        key=key,
+    )
+    if chosen_id != st.session_state.get("active_group_id"):
+        st.session_state.active_group_id = chosen_id
+    return next(group for group in groups if group.group_id == chosen_id)
+
+
 def render_friend_group_hub(*, expanded: bool = False):
-    """Create/join/select real v43B friend groups without affecting Daily scoring."""
+    """Keep friend-group administration secondary to the Daily experience."""
     groups = _load_player_groups()
     active = _select_active_group(groups)
 
-    if groups:
-        if len(groups) > 1:
-            ids = [group.group_id for group in groups]
-            labels = {group.group_id: group.group_name for group in groups}
-            chosen_id = st.selectbox(
-                "Friend group",
-                options=ids,
-                index=ids.index(active.group_id) if active else 0,
-                format_func=lambda group_id: labels[group_id],
-                key="friend_group_selector",
+    with st.expander("👥 Invite & manage friends", expanded=expanded or not groups):
+        if groups:
+            active = render_group_selector(groups, key="friend_group_manage_selector")
+            try:
+                members = load_daily_store().list_group_members(active.group_id)
+            except Exception:
+                members = []
+            member_count = len(members)
+            st.markdown(
+                f"**{html.escape(active.group_name)}** · {member_count} member{'s' if member_count != 1 else ''}"
             )
-            if chosen_id != st.session_state.get("active_group_id"):
-                st.session_state.active_group_id = chosen_id
-                active = next(group for group in groups if group.group_id == chosen_id)
+            st.caption(f"Invite code: **{active.join_code}**")
+            render_group_invite_controls(active)
+            with st.expander("Show invite link", expanded=False):
+                st.code(_group_invite_url(active.join_code), language=None)
+            if members:
+                with st.expander("Group members", expanded=False):
+                    st.write(" · ".join(member["display_name"] for member in members))
         else:
-            active = groups[0]
-            st.session_state.active_group_id = active.group_id
+            st.markdown("**Play the Daily with friends.** Create a group or join one with an invite code.")
 
-        try:
-            members = load_daily_store().list_group_members(active.group_id)
-        except Exception:
-            members = []
-        member_count = len(members)
-        st.markdown(
-            f"**👥 {html.escape(active.group_name)}** · {member_count} member{'s' if member_count != 1 else ''}"
-        )
-        st.caption(f"Invite code: **{active.join_code}** · Share the link below; friends will be guided through player setup and joined automatically.")
-        render_group_invite_controls(active)
-        with st.expander("Show invite link", expanded=False):
-            st.code(_group_invite_url(active.join_code), language=None)
-        if members:
-            with st.expander("Group members", expanded=False):
-                st.write(" · ".join(member["display_name"] for member in members))
-    else:
-        st.info("You are not in a friend group yet. Create one or join a friend's group to unlock a real Daily leaderboard.")
-
-    with st.expander("Create or join a friend group", expanded=expanded or not groups):
+        st.markdown("#### Create or join a group")
         create_tab, join_tab = st.tabs(["Create group", "Join with code"])
         with create_tab:
             with st.form("create_friend_group_form", clear_on_submit=True):
@@ -2356,7 +2336,7 @@ def render_friend_group_hub(*, expanded: bool = False):
                         st.caption(f"Group create detail: {type(exc).__name__}: {exc}")
                 else:
                     st.session_state.active_group_id = group.group_id
-                    st.session_state.group_flash = f"Friend group {group.group_name} created. Invite code: {group.join_code}"
+                    st.session_state.group_flash = f"{group.group_name} created. Invite code: {group.join_code}"
                     st.rerun()
 
         with join_tab:
@@ -2479,16 +2459,23 @@ def render_daily_intro():
     date_key = st.session_state.daily_date_key
     st.markdown(
         "<div class='daily-hero'>"
-        "<div class='daily-kicker'>🎲 Daily Challenge <span class='prototype-badge'>v43B social live</span></div>"
+        "<div class='daily-kicker'>🎲 Daily Challenge</div>"
         f"<div class='daily-title'>{_daily_date_label(date_key)}</div>"
         "<div class='daily-rule'><b>10 hold decisions. Same challenge for everyone.</b><br>"
-        "Lose as few expected game points as possible. Your choices save as you go; you can go back and revise them before final submission. Exact coaching unlocks only after you submit all 10.<br>"
-        "<span style='font-size:.80rem'>5 Roll 1 · 5 Roll 2 · one official attempt · new challenge at midnight Eastern</span></div>"
+        "Lose as few expected game points as possible. You can review and change your choices before you submit, and coaching unlocks only after the Daily is finished.<br>"
+        "<span style='font-size:.80rem'>5 Roll 1 · 5 Roll 2 · new challenge at midnight Eastern</span></div>"
         "</div>",
         unsafe_allow_html=True,
     )
-    st.caption(f"Playing today's challenge as {st.session_state.get('active_player_name') or 'Player'}.")
-    render_friend_group_hub(expanded=False)
+
+    groups = _load_player_groups()
+    if groups:
+        active = render_group_selector(groups, key="daily_intro_group_selector")
+        try:
+            member_count = len(load_daily_store().list_group_members(active.group_id))
+        except Exception:
+            member_count = 0
+        st.caption(f"👥 Competing in **{active.group_name}**" + (f" · {member_count} members" if member_count else ""))
 
     if st.button("Start today's Daily Challenge", type="primary", use_container_width=True):
         st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
@@ -2501,13 +2488,15 @@ def render_daily_intro():
 
     with st.expander("How the Daily Challenge works", expanded=False):
         st.markdown(
-            "- **One official attempt:** starting today's challenge creates your one saved attempt for this player.\n"
-            "- **Answers lock permanently:** each exact-scored hold is saved as soon as you submit it.\n"
-            "- **Resume anywhere:** refresh, close the app, or sign in on another device and continue at the next unanswered question.\n"
-            "- **Coaching stays hidden:** grades, exact answers, and EV loss remain hidden until all 10 decisions are locked.\n"
-            "- **Reset:** a new challenge begins at midnight Eastern.\n"
-            "- **Real friend groups:** create or join a group with a code; completed members appear on the live leaderboard."
+            "- **One Daily each day:** everyone gets the same 10 decisions.\n"
+            "- **Your choices save automatically:** leave and come back without losing your place.\n"
+            "- **Review before submitting:** use Back or the final review to fix accidental taps.\n"
+            "- **No hints during the run:** grades, exact answers, and coaching appear only after you finish.\n"
+            "- **Friends:** completed players appear on your group's leaderboard.\n"
+            "- **Reset:** a new challenge begins at midnight Eastern."
         )
+
+    render_friend_group_hub(expanded=not groups)
 
 
 def _daily_answer_at(index: int):
@@ -2590,7 +2579,7 @@ def _save_daily_choice(index: int, selected_hold) -> bool:
     except (DuplicateAnswer, OutOfOrderAnswer, AttemptAlreadyComplete, ChallengeMismatch):
         _force_daily_resync()
         if sync_daily_attempt_from_database(force=True):
-            st.session_state.daily_flash = "Your saved attempt was refreshed from the database."
+            st.session_state.daily_flash = "Your Daily was refreshed."
             st.rerun()
         return False
     except Exception as exc:
@@ -2598,7 +2587,7 @@ def _save_daily_choice(index: int, selected_hold) -> bool:
         if saved_answer is not None and "locked daily answers cannot be changed" in detail:
             st.error("Back/edit needs the one-time Phase 2E Supabase migration. Your existing saved choice was not changed.")
         else:
-            st.error("This choice was NOT saved because the database could not update it. Please try again.")
+            st.error("We couldn't save that change. Please try again.")
         if database_check_enabled():
             st.caption(f"Daily save detail: {type(exc).__name__}: {exc}")
         return False
@@ -2710,7 +2699,7 @@ def render_daily_question():
         st.rerun()
 
     st.markdown(
-        "<div class='daily-lock-note'>Saved choices stay private and editable until final submission. After final submission, all 10 choices lock permanently and your result is revealed.</div>",
+        "<div class='daily-lock-note'>Your choices stay private and editable until you submit. After that, your result is final.</div>",
         unsafe_allow_html=True,
     )
 
@@ -2730,7 +2719,7 @@ def render_daily_submission_review():
         "<div class='daily-kicker'>Final review</div>"
         "<div class='daily-title'>Check your 10 choices</div>"
         "<div class='daily-rule'><b>No grades, EV loss, or exact answers are shown yet.</b><br>"
-        "Edit anything you entered by mistake. Final submission permanently locks all 10 choices.</div>"
+        "Edit anything you entered by mistake. Once you submit, your result is final.</div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -2765,17 +2754,17 @@ def render_daily_submission_review():
             st.session_state.daily_question_index = 9
             st.rerun()
 
-    st.warning("Final submit ends your official attempt. After this point, the 10 choices cannot be changed.")
+    st.warning("Submitting ends today's Daily. After this point, your 10 choices cannot be changed.")
     if st.button("🏁 Submit final Daily Challenge", type="primary", use_container_width=True, key="daily_final_submit"):
         attempt_id = st.session_state.get("daily_attempt_id")
         if not attempt_id:
-            st.error("Your saved Daily attempt could not be found. Please sign in again before submitting.")
+            st.error("Your Daily couldn't be found. Please sign in again before submitting.")
             _force_daily_resync()
             return
         try:
             load_daily_store().complete_attempt(attempt_id)
         except Exception as exc:
-            st.error("Your final submission could not be completed. All 10 choices are still safely saved and editable.")
+            st.error("Your Daily couldn't be submitted yet. Your 10 choices are still saved and editable.")
             if database_check_enabled():
                 st.caption(f"Daily finalize detail: {type(exc).__name__}: {exc}")
             return
@@ -2837,16 +2826,19 @@ def build_daily_share_text(records, summary, rank=None, completed_count=0):
 
 
 def render_daily_share_result(records, summary, rank=None, completed_count=0):
-    """Render top-level native-share and copy controls for a completed spoiler-free Daily result."""
+    """Render compact spoiler-free Daily blocks with native share/copy controls."""
     share_text = build_daily_share_text(records, summary, rank=rank, completed_count=completed_count)
     share_text_js = json.dumps(share_text)
-    preview_html = html.escape(share_text).replace("\n", "<br>")
+    squares = [_share_square(item.get("points_lost", 0.0)) for item in records]
+    first_row = "".join(squares[:5])
+    second_row = "".join(squares[5:10])
     share_html = f"""
-        <div style="font-family:Arial,sans-serif;border:1px solid #d1d5db;border-radius:16px;padding:14px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);box-shadow:0 2px 10px rgba(0,0,0,0.04);">
-          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;font-weight:800;color:#64748b;">Share your Daily</div>
-          <div style="font-size:20px;font-weight:850;color:#0f172a;margin:3px 0 8px 0;">🎲 Spoiler-free result</div>
-          <div style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;line-height:1.55;color:#0f172a;background:#f1f5f9;border-radius:12px;padding:11px;white-space:normal;">{preview_html}</div>
-          <div style="display:flex;gap:10px;margin-top:11px;">
+        <div style="font-family:Arial,sans-serif;border:1px solid #d1d5db;border-radius:16px;padding:15px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);box-shadow:0 2px 10px rgba(0,0,0,0.04);">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;font-weight:800;color:#64748b;">Your Daily · Spoiler-free</div>
+          <div style="font-size:28px;line-height:1.18;letter-spacing:2px;margin:7px 0 1px 0;">{first_row}</div>
+          <div style="font-size:28px;line-height:1.18;letter-spacing:2px;">{second_row}</div>
+          <div style="font-size:12px;color:#64748b;margin-top:8px;">🟩 exact · 🟨 essentially optimal · 🟧 close · 🟥 miss</div>
+          <div style="display:flex;gap:10px;margin-top:12px;">
             <button id="shareDaily" style="flex:1;border:1px solid #166534;background:#166534;color:white;border-radius:10px;padding:10px 12px;font-weight:800;cursor:pointer;">📤 Share result</button>
             <button id="copyDaily" style="flex:1;border:1px solid #cbd5e1;background:white;color:#0f172a;border-radius:10px;padding:10px 12px;font-weight:800;cursor:pointer;">📋 Copy score</button>
           </div>
@@ -2856,7 +2848,6 @@ def render_daily_share_result(records, summary, rank=None, completed_count=0):
         (function() {{
           const shareText = {share_text_js};
           const status = document.getElementById('shareDailyStatus');
-
           async function copyScore() {{
             try {{
               if (navigator.clipboard && navigator.clipboard.writeText) {{
@@ -2864,7 +2855,7 @@ def render_daily_share_result(records, summary, rank=None, completed_count=0):
               }} else {{
                 throw new Error('clipboard unavailable');
               }}
-              status.textContent = 'Full score copied — paste it into a text or group chat!';
+              status.textContent = 'Score copied — paste it into a text or group chat!';
               return true;
             }} catch (err) {{
               try {{
@@ -2878,23 +2869,20 @@ def render_daily_share_result(records, summary, rank=None, completed_count=0):
                 const copied = document.execCommand('copy');
                 document.body.removeChild(area);
                 if (copied) {{
-                  status.textContent = 'Full score copied — paste it into a text or group chat!';
+                  status.textContent = 'Score copied — paste it into a text or group chat!';
                   return true;
                 }}
               }} catch (fallbackErr) {{}}
-              status.textContent = 'Copy was blocked by the browser. Select the preview text instead.';
+              status.textContent = 'Copy was blocked. Open Preview shared result below to copy it manually.';
               return false;
             }}
           }}
-
           document.getElementById('copyDaily').addEventListener('click', copyScore);
           document.getElementById('shareDaily').addEventListener('click', async function() {{
             if (navigator.share) {{
               try {{
-                // Share one text payload only. The app URL is already the last line of shareText.
-                // Some mobile share targets discarded the score when a separate URL field was supplied.
                 await navigator.share({{text: shareText}});
-                status.textContent = 'Share sheet opened with your full Daily score.';
+                status.textContent = 'Share sheet opened with your Daily score.';
                 return;
               }} catch (err) {{
                 if (err && err.name === 'AbortError') return;
@@ -2906,6 +2894,8 @@ def render_daily_share_result(records, summary, rank=None, completed_count=0):
         </script>
     """
     st.html(share_html, unsafe_allow_javascript=True)
+    with st.expander("Preview shared result", expanded=False):
+        st.code(share_text, language=None)
 
 
 def _daily_review_item(answer):
@@ -2955,76 +2945,60 @@ def render_daily_results():
     challenges = st.session_state.daily_challenges
     summary = summarize_attempt(records)
 
-    # Real group data is read fresh so returning later shows friends who finished after you.
+    # Keep group switching available, but put group administration later.
+    groups = _load_player_groups()
+    if len(groups) > 1:
+        render_group_selector(groups, key="daily_results_group_selector")
+
     try:
         active_group, members, board, stats = _real_group_context()
     except Exception as exc:
         active_group, members, board, stats = None, [], [], []
-        st.warning("Your Daily result is safe, but the friend leaderboard could not be refreshed right now.")
+        st.warning("Your Daily result is safe, but friend standings couldn't be refreshed right now.")
         if database_check_enabled():
             st.caption(f"Leaderboard detail: {type(exc).__name__}: {exc}")
     rank = _user_real_rank(board)
     story = _story_from_group_stats(stats)
     rank_value = f"#{rank} of {len(board)}" if rank is not None else "—"
 
-    render_daily_progress(9, 10, complete=True)
     st.markdown(
         "<div class='daily-hero'>"
-        "<div class='daily-kicker'>Challenge complete</div>"
+        "<div class='daily-kicker'>✅ Today's Daily</div>"
         f"<div class='daily-title'>{_daily_date_label(st.session_state.daily_date_key)}</div>"
-        f"<div class='daily-rule'>Attempt locked · Challenge ID <b>{st.session_state.daily_set_id}</b></div>"
+        "<div class='daily-rule'>Nice work. Here's how your 10 decisions turned out.</div>"
         "</div>",
         unsafe_allow_html=True,
     )
     st.markdown(
         "<div class='daily-result-grid'>"
-        f"<div class='daily-result-box'><div class='daily-result-label'>EV Lost</div><div class='daily-result-value'>{summary['total_ev_loss']:.2f}</div></div>"
-        f"<div class='daily-result-box'><div class='daily-result-label'>Exact Holds</div><div class='daily-result-value'>{summary['exact_count']}/10</div></div>"
-        f"<div class='daily-result-box'><div class='daily-result-label'>Best Streak</div><div class='daily-result-value'>🔥 {summary['best_exact_streak']}</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>EV Lost</div><div class='daily-result-value'>{summary['total_ev_loss']:.2f}</div><div class='daily-result-sub'>lower is better</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Exact</div><div class='daily-result-value'>{summary['exact_count']}/10</div></div>"
         f"<div class='daily-result-box'><div class='daily-result-label'>Group Rank</div><div class='daily-result-value'>{rank_value}</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Best Streak</div><div class='daily-result-value'>🔥 {summary['best_exact_streak']}</div></div>"
         "</div>",
         unsafe_allow_html=True,
     )
 
-    if active_group is None:
-        rank_copy = "Your official result is locked. Create or join a friend group to compare it on a real leaderboard."
-    elif len(board) == 1 and len(members) > 1:
-        rank_copy = f"You are the first finisher in {active_group.group_name}. Your friends will appear here when they complete today's Daily."
-    elif rank == 1 and len(board) > 1:
-        rank_copy = f"You lead {active_group.group_name} right now. Lowest total expected-point loss wins."
-    elif rank is not None:
-        rank_copy = f"You are #{rank} in {active_group.group_name} among {len(board)} completed player{'s' if len(board) != 1 else ''}."
-    else:
-        rank_copy = "Your official result is locked; group standings are still loading."
-    st.markdown(f"<div class='daily-rank-banner'><b>🏆 Daily result</b><br>{html.escape(rank_copy)}</div>", unsafe_allow_html=True)
-
     render_daily_share_result(records, summary, rank=rank, completed_count=len(board))
 
-    st.markdown("### Friend groups")
-    render_friend_group_hub(expanded=active_group is None)
-
-    # Refresh after group controls in case the selected group changed this rerun.
-    try:
-        active_group, members, board, stats = _real_group_context()
-    except Exception as exc:
-        active_group, members, board, stats = None, [], [], []
-        if database_check_enabled():
-            st.caption(f"Leaderboard refresh detail: {type(exc).__name__}: {exc}")
-    rank = _user_real_rank(board)
-    story = _story_from_group_stats(stats)
-
+    # Social payoff comes before group administration.
     if active_group is not None:
         completed = len(board)
         total_members = len(members)
-        st.markdown(f"### {active_group.group_name} leaderboard")
-        st.caption(
-            f"Real v43B results · {completed} of {total_members} member{'s' if total_members != 1 else ''} finished today. "
-            "Only completed official attempts appear; standings refresh whenever you return."
-        )
+        st.markdown(f"### 🏆 {active_group.group_name}")
+        if rank == 1 and completed > 1:
+            st.markdown(
+                f"<div class='daily-rank-banner'><b>You're #1 of {completed} today.</b><br>Lowest total EV lost leads the group.</div>",
+                unsafe_allow_html=True,
+            )
+        elif rank is not None:
+            st.markdown(
+                f"<div class='daily-rank-banner'><b>You're #{rank} of {completed} today.</b><br>Lowest total EV lost leads the group.</div>",
+                unsafe_allow_html=True,
+            )
+        st.caption(f"{completed} of {total_members} member{'s' if total_members != 1 else ''} finished today")
         if board:
             st.dataframe(_leaderboard_frame(board), hide_index=True, use_container_width=True)
-        else:
-            st.info("No completed results are available in this group yet.")
 
         toughest = story.get("toughest")
         easiest = story.get("easiest")
@@ -3032,41 +3006,53 @@ def render_daily_results():
         if toughest:
             q = toughest["question_number"]
             challenge = challenges[q - 1]
+            exact_copy = (
+                "Nobody got it exact."
+                if toughest["exact_count"] == 0
+                else f"{toughest['exact_count']}/{toughest['players']} exact."
+            )
             story_cards.append(
-                "<div class='group-story-card'><div class='story-kicker'>Today's killer</div>"
-                f"<div class='story-title'>Question {q} · {challenge.get('scenario_name', '')}</div>"
-                f"<div class='story-copy'>{toughest['exact_count']} of {toughest['players']} completed players found an exact hold. "
-                f"Group average loss: {toughest['avg_loss']:.2f} pts.</div></div>"
+                "<div class='group-story-card'><div class='story-kicker'>😈 Today's Killer</div>"
+                f"<div class='story-title'>Q{q} · {challenge.get('scenario_name', '')}</div>"
+                f"<div class='story-copy'>{exact_copy} Avg loss: {toughest['avg_loss']:.2f}.</div></div>"
             )
         if easiest:
             q = easiest["question_number"]
             challenge = challenges[q - 1]
-            headline = "Unanimous" if easiest["exact_count"] == easiest["players"] else "Most solved"
+            unanimous = easiest["exact_count"] == easiest["players"]
+            headline = "🎯 Everyone Nailed It" if unanimous else "🎯 Most Solved"
+            exact_copy = (
+                f"All {easiest['players']} players exact."
+                if unanimous
+                else f"{easiest['exact_count']}/{easiest['players']} exact."
+            )
             story_cards.append(
                 f"<div class='group-story-card'><div class='story-kicker'>{headline}</div>"
-                f"<div class='story-title'>Question {q} · {challenge.get('scenario_name', '')}</div>"
-                f"<div class='story-copy'>{easiest['exact_count']} of {easiest['players']} completed players found an exact hold. "
-                f"Group average loss: {easiest['avg_loss']:.2f} pts.</div></div>"
+                f"<div class='story-title'>Q{q} · {challenge.get('scenario_name', '')}</div>"
+                f"<div class='story-copy'>{exact_copy} Avg loss: {easiest['avg_loss']:.2f}.</div></div>"
             )
         if story_cards:
             st.markdown("<div class='group-story-grid'>" + "".join(story_cards) + "</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("### 🏆 Play with friends")
+        st.caption("Create or join a friend group to compare Daily results on a shared leaderboard.")
 
-    practice_col, stay_col = st.columns([1, 1])
-    with practice_col:
-        if st.button("🎯 Go to open Practice", type="primary", use_container_width=True, key="daily_to_practice"):
-            st.session_state.app_mode = "Practice"
-            st.rerun()
-    with stay_col:
-        st.caption("Your completed attempt is saved. Return later and the real group standings will refresh as friends finish.")
-
-    st.markdown("### Review your 10")
-    st.caption("Now that the competitive run is over, every exact answer and teaching explanation is unlocked.")
+    st.markdown("### Review Your 10")
+    st.caption("Tap any question to see the exact hold and coaching.")
     for answer in answers:
         _daily_review_item(answer)
 
-    st.caption("🔒 This is your one official attempt for today. Its 10 locked answers and final result are stored with your v43B player and cannot be reset.")
+    st.caption("🔒 Today's Daily is complete. Come back tomorrow for a new set.")
+
+    if st.button("🎯 Go to open Practice", type="primary", use_container_width=True, key="daily_to_practice"):
+        st.session_state.app_mode = "Practice"
+        st.rerun()
+
+    # Explicitly below Review Your 10, per the player-facing hierarchy.
+    render_friend_group_hub(expanded=active_group is None)
 
     render_solver_panel(records)
+
 
 def render_daily_mode():
     if not st.session_state.get("active_player_id"):
@@ -3085,8 +3071,8 @@ def render_daily_mode():
         render_daily_submission_review()
         return
     st.caption(
-        f"🎲 Daily Challenge in progress · {_daily_date_label(st.session_state.daily_date_key)} · "
-        f"{len(st.session_state.daily_answers)} of 10 choices safely saved. You can leave, resume, or go back and revise before final submission."
+        f"🎲 Daily in progress · {_daily_date_label(st.session_state.daily_date_key)} · "
+        f"{len(st.session_state.daily_answers)}/10 saved · You can leave, come back, or use Back before submitting."
     )
     render_daily_question()
 
@@ -3225,11 +3211,13 @@ mode = st.radio(
     label_visibility="collapsed",
 )
 if mode == "📲 Add to Home Screen":
-    player_note = "Keep Yahtzee Coach one tap away with the custom teacher-die icon"
+    player_note = "Keep Yahtzee Coach one tap away"
+elif mode == "Practice":
+    player_note = "Unlimited hold-strategy practice"
 elif st.session_state.get("active_player_id"):
-    player_note = f"Daily Challenge first · signed in as {st.session_state.get('active_player_name')} · unlimited open practice anytime"
+    player_note = f"Today's Daily · {st.session_state.get('active_player_name')}"
 else:
-    player_note = "Daily Challenge first · sign in for Daily · unlimited open practice anytime"
+    player_note = "Today's 10-puzzle Daily Challenge"
 st.markdown(f"<div class='mode-note'>{html.escape(player_note)}</div>", unsafe_allow_html=True)
 
 if mode == "Daily Challenge":

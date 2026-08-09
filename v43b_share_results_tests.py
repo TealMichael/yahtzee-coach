@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Focused v43B Phase 2I spoiler-free Daily sharing checks."""
+"""Focused v43B Phase 2J spoiler-free Daily sharing checks."""
 
 from pathlib import Path
 
@@ -31,7 +31,7 @@ def run():
         ("share runs in top-level Streamlit HTML instead of iframe", 'st.html(share_html, unsafe_allow_javascript=True)' in share_block and 'components.html' not in share_block),
         ("copy score fallback exists", "📋 Copy score" in share_block and "clipboard.writeText(shareText)" in share_block),
         ("copy has legacy fallback for blocked clipboard", "document.execCommand('copy')" in share_block),
-        ("share card explicitly says spoiler-free", "Spoiler-free result" in share_block),
+        ("share card explicitly says spoiler-free", "Spoiler-free" in share_block),
         ("share text does not expose holds", "Your hold" not in text_block),
         ("share text does not expose exact best", "Exact best" not in text_block),
         ("share text does not expose scenario names", "scenario_name" not in text_block),
