@@ -1,3 +1,52 @@
+# Yahtzee Coach v43B Phase 2B — Persistent Player Identity
+
+This checkpoint turns the working Supabase connection into the first visible v43B feature:
+**permanent Daily Challenge players**. The exact strategy engine, exact policy, Daily puzzle
+composition, and Practice behavior remain locked.
+
+## v43B Phase 2B changes
+
+- Adds a polished **Create player / Returning player** gate for Daily Challenge.
+- New players choose a public display name and private 4–12 digit PIN.
+- Returning players sign back in with the same display name + PIN.
+- Display names remain case-insensitively unique so returning-player lookup is unambiguous.
+- PINs are masked in the UI and stored in Supabase only as salted `scrypt` hashes — never plaintext.
+- Player identity is stored in the existing `players` table through the trusted Streamlit backend.
+- The active player is kept in per-user Streamlit Session State during the current app session.
+- Daily Challenge now requires a player identity; **Practice remains available without signing in**.
+- Adds a visible signed-in player status and **Sign out** control.
+- Switching players clears the local Daily preview attempt so one player's session state cannot be
+  carried into another player's run.
+- Keeps the hidden `?dbcheck=1` Supabase preflight, now labeled Phase 2B.
+- Adds `v43b_identity_tests.py` for identity-specific regression coverage.
+
+## What is intentionally NOT changed yet
+
+- Daily answers are still session-local in this Phase 2B live test.
+- One official attempt per player/day is not connected to the live UI yet.
+- Cross-device / refresh resume is not connected to the live UI yet.
+- The friend leaderboard still uses the deterministic v43A demo players.
+- Friend groups, join codes, real group leaderboards, streaks, and group question stats are not visible yet.
+- Exact solver behavior is unchanged.
+- Daily puzzle composition/version is unchanged.
+- Practice behavior is unchanged.
+
+## Phase 2B live-test goal
+
+After deployment, verify the smallest real identity loop before attempt persistence is enabled:
+
+1. Open Daily Challenge and create a player.
+2. Confirm the app shows the new player as signed in.
+3. Sign out.
+4. Use **Returning player** with the same display name + PIN.
+5. Confirm the same player returns successfully.
+6. Confirm **Open Practice without signing in** still works.
+
+Once this passes live, the next patch can safely connect the Daily attempt itself to Supabase:
+one attempt per player/day, locked-answer saving, and interruption resume.
+
+---
+
 # Yahtzee Coach v43B Phase 2A3 — Supabase URL Compatibility Fix
 
 This checkpoint begins the live v43B persistence rollout while preserving the locked

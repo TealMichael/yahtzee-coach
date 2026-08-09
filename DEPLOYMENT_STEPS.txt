@@ -1,43 +1,41 @@
-Yahtzee Coach v43B Phase 2A3 — FULL CURRENT APP deployment
+Yahtzee Coach v43B Phase 2B — FULL CURRENT APP deployment
 
-This package intentionally contains the complete current Yahtzee Coach repository.
-From this version forward, releases are packaged this way so no line-by-line editing is needed.
+This release contains the complete current Yahtzee Coach repository.
+No line-by-line code editing is needed.
 
 1. Unzip the release package.
 2. Open the UPLOAD_TO_GITHUB folder.
-3. Open the GitHub yahtzee-coach repository root.
+3. In GitHub, open the yahtzee-coach repository root.
 4. Choose Add file -> Upload files.
 5. Select ALL files inside UPLOAD_TO_GITHUB and upload them together.
    - Same-name files will be updated.
    - New v43B files will be added.
    - File order/alphabetical display does not matter.
 6. Commit directly to main.
-   Suggested commit message:
-   v43B Phase 2A3 - Supabase URL compatibility fix
+
+COPY/PASTE COMMIT MESSAGE:
+v43B Phase 2B - add persistent player identity
+
 7. Wait for Streamlit Community Cloud to redeploy.
-8. Confirm the normal app loads.
-9. Then open:
-   https://teals-yahtzee-coach.streamlit.app/?dbcheck=1
+8. Open the normal app and choose Daily Challenge.
 
-EXPECTED PREFLIGHT DISPLAY
-- First:  🔧 v43B Phase 2A3 database preflight is loaded.
-- Then either:
-  ✅ v43B database connection is working.
-  OR
-  ❌ v43B database connection failed.
+EXPECTED PHASE 2B UI
+- Daily Challenge should show two tabs:
+  Create player | Returning player
+- Create a test player using a display name and a private 4-12 digit PIN.
+- Do NOT put the PIN in GitHub or send it in chat.
+- After creation, the Daily intro should show that player as signed in.
+- Use Sign out, then Returning player, to verify the same identity can be restored.
+- Practice must still be available without an account.
 
-The second result proves whether Streamlit can use the private Supabase secrets and query the
-players table. If red, the detail shown underneath is safe to report as long as it does not
-contain or expose the actual secret key.
+OPTIONAL DATABASE PREFLIGHT
+https://teals-yahtzee-coach.streamlit.app/?dbcheck=1
+Expected: v43B Phase 2B database preflight + green connection message.
 
 IMPORTANT
 - Do NOT put SUPABASE_SECRET_KEY into GitHub or this ZIP.
 - Streamlit Secrets remain the only location for the private key.
+- Player PINs are stored only as salted scrypt hashes, never plaintext.
+- Daily attempt persistence is intentionally NOT live yet; this patch tests identity first.
 - The exact solver, exact policy, Daily puzzle bank, and Practice strategy behavior are unchanged.
-
-
-PHASE 2A3 NOTE
-- This build automatically accepts either the base Supabase Project URL or a URL ending in /rest/v1.
-- You should NOT need to edit Streamlit Secrets for this fix.
-- If the URL is corrected automatically, the preflight will show a small caption saying so.
-- __pycache__ and .pyc files are intentionally excluded from this release.
+- __pycache__ and .pyc files are intentionally excluded from the release.

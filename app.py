@@ -1,4 +1,5 @@
 import re
+import html
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from daily_challenge import (
     summarize_attempt, user_rank,
 )
 from supabase_daily_store import SupabaseDailyStore
+from daily_store import InvalidPin, PlayerNameTaken
 
 st.set_page_config(
     page_title="Yahtzee Coach",
@@ -44,7 +46,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2A3 database preflight is loaded.")
+    st.info("🔧 v43B Phase 2B database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -1631,7 +1633,7 @@ def render_result(report):
 
 
 # ---------------------------------------------------------------------------
-# v43A.1 — Daily Challenge UI refinement
+# v43B Phase 2B — Daily Challenge + persistent player identity
 # ---------------------------------------------------------------------------
 
 st.markdown(
@@ -1678,6 +1680,8 @@ st.markdown(
     .review-value { font-weight:900; font-size:0.88rem; margin-top:.08rem; }
     .daily-dice-line { font-size:1.9rem; letter-spacing:.12rem; margin:.15rem 0 .42rem 0; }
     .prototype-badge { display:inline-block; border-radius:999px; background:#f3e8ff; color:#6b21a8 !important; border:1px solid #e9d5ff; font-size:.69rem; font-weight:900; padding:.18rem .45rem; }
+    .identity-note { border:1px solid #bfdbfe; background:#eff6ff; color:#1e3a8a !important; border-radius:14px; padding:.62rem .7rem; margin:.42rem 0 .62rem 0; font-size:.82rem; line-height:1.35; }
+    .identity-note b { color:#1d4ed8 !important; }
     @media (max-width:640px) {
         .daily-result-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.3rem; }
         .group-story-grid { grid-template-columns:1fr; gap:.32rem; }
@@ -1713,6 +1717,149 @@ def initialize_daily_state():
         _reset_daily_local_attempt(today)
     if "app_mode" not in st.session_state:
         st.session_state.app_mode = "Daily Challenge"
+
+
+def initialize_player_identity_state():
+    """Keep private player identity only in this user's Streamlit session."""
+    if "active_player_id" not in st.session_state:
+        st.session_state.active_player_id = None
+    if "active_player_name" not in st.session_state:
+        st.session_state.active_player_name = None
+    if "player_auth_flash" not in st.session_state:
+        st.session_state.player_auth_flash = ""
+
+
+def _activate_player(player, *, created: bool = False):
+    """Switch the active v43B player without carrying another player's local Daily state."""
+    previous_id = st.session_state.get("active_player_id")
+    if previous_id != player.player_id:
+        _reset_daily_local_attempt(current_daily_date_key())
+    st.session_state.active_player_id = player.player_id
+    st.session_state.active_player_name = player.display_name
+    st.session_state.daily_display_name = player.display_name
+    st.session_state.player_auth_flash = (
+        f"Player {player.display_name} created. Your permanent player identity is ready."
+        if created
+        else f"Welcome back, {player.display_name}."
+    )
+
+
+def _sign_out_player():
+    st.session_state.active_player_id = None
+    st.session_state.active_player_name = None
+    st.session_state.player_auth_flash = ""
+    _reset_daily_local_attempt(current_daily_date_key())
+    st.session_state.daily_display_name = "You"
+
+
+def render_player_identity_gate():
+    """Create or restore the permanent v43B player used for Daily Challenge."""
+    st.markdown(
+        "<div class='daily-hero'>"
+        "<div class='daily-kicker'>👤 v43B Player Identity</div>"
+        "<div class='daily-title'>Your Daily Challenge player</div>"
+        "<div class='daily-rule'><b>Create a player once, then return with your display name and PIN.</b><br>"
+        "Your display name is public on future group leaderboards. Your PIN stays private and is stored only as a secure hash.</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<div class='identity-note'><b>Phase 2B:</b> permanent player identity is live now. "
+        "Daily attempt resume and real friend groups are the next persistence steps.</div>",
+        unsafe_allow_html=True,
+    )
+
+    create_tab, return_tab = st.tabs(["Create player", "Returning player"])
+
+    with create_tab:
+        with st.form("create_player_form", clear_on_submit=True):
+            new_name = st.text_input(
+                "Display name",
+                max_chars=24,
+                placeholder="2-24 characters",
+                key="create_player_name",
+            )
+            new_pin = st.text_input(
+                "Choose a PIN",
+                type="password",
+                max_chars=12,
+                placeholder="4-12 digits",
+                key="create_player_pin",
+            )
+            confirm_pin = st.text_input(
+                "Confirm PIN",
+                type="password",
+                max_chars=12,
+                key="create_player_pin_confirm",
+            )
+            create_submitted = st.form_submit_button(
+                "Create player", type="primary", use_container_width=True
+            )
+        st.caption("For this early build, PIN recovery is not available yet. Choose something you can remember.")
+        if create_submitted:
+            if new_pin != confirm_pin:
+                st.error("Those PINs do not match.")
+            else:
+                try:
+                    player = load_daily_store().create_player(new_name, new_pin)
+                except PlayerNameTaken:
+                    st.error("That display name is already in use. Try another name or use Returning player.")
+                except InvalidPin as exc:
+                    st.error(str(exc))
+                except ValueError as exc:
+                    st.error(str(exc))
+                except Exception:
+                    st.error("Player creation could not reach the v43B database. Please try again.")
+                else:
+                    _activate_player(player, created=True)
+                    st.rerun()
+
+    with return_tab:
+        with st.form("returning_player_form", clear_on_submit=True):
+            return_name = st.text_input(
+                "Display name",
+                max_chars=24,
+                key="returning_player_name",
+            )
+            return_pin = st.text_input(
+                "PIN",
+                type="password",
+                max_chars=12,
+                key="returning_player_pin",
+            )
+            return_submitted = st.form_submit_button(
+                "Sign in", type="primary", use_container_width=True
+            )
+        if return_submitted:
+            try:
+                player = load_daily_store().authenticate_player(return_name, return_pin)
+            except Exception:
+                st.error("Sign-in could not reach the v43B database. Please try again.")
+            else:
+                if player is None:
+                    st.error("Display name or PIN did not match.")
+                else:
+                    _activate_player(player, created=False)
+                    st.rerun()
+
+    if st.button("Open Practice without signing in", use_container_width=True, key="identity_to_practice"):
+        st.session_state.app_mode = "Practice"
+        st.rerun()
+
+
+def render_player_status_bar():
+    name = st.session_state.get("active_player_name") or "Player"
+    left, right = st.columns([4, 1])
+    with left:
+        st.caption(f"👤 Signed in as **{name}** · permanent v43B player")
+    with right:
+        if st.button("Sign out", use_container_width=True, key="player_sign_out"):
+            _sign_out_player()
+            st.rerun()
+    flash = st.session_state.get("player_auth_flash", "")
+    if flash:
+        st.success(flash)
+        st.session_state.player_auth_flash = ""
 
 
 def _daily_date_label(date_key: str) -> str:
@@ -1764,7 +1911,7 @@ def render_daily_intro():
     date_key = st.session_state.daily_date_key
     st.markdown(
         "<div class='daily-hero'>"
-        "<div class='daily-kicker'>🎲 Daily Challenge <span class='prototype-badge'>v43A.1 prototype</span></div>"
+        "<div class='daily-kicker'>🎲 Daily Challenge <span class='prototype-badge'>v43B identity live</span></div>"
         f"<div class='daily-title'>{_daily_date_label(date_key)}</div>"
         "<div class='daily-rule'><b>10 hold decisions. Same challenge for everyone.</b><br>"
         "Lose as few expected game points as possible. Your answers lock as you go; exact coaching unlocks after Question 10.<br>"
@@ -1772,16 +1919,11 @@ def render_daily_intro():
         "</div>",
         unsafe_allow_html=True,
     )
-    name = st.text_input(
-        "Display name for the demo leaderboard",
-        value=st.session_state.get("daily_display_name", "You"),
-        max_chars=20,
-        key="daily_name_input",
-    ).strip()
+    st.caption(f"Playing today's challenge as {st.session_state.get('active_player_name') or 'Player'}.")
     start_col, practice_col = st.columns([2, 1])
     with start_col:
         if st.button("Start today's Daily Challenge", type="primary", use_container_width=True):
-            st.session_state.daily_display_name = name or "You"
+            st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
             st.session_state.daily_started = True
             st.session_state.daily_question_index = len(st.session_state.daily_answers)
             st.session_state.daily_flash = ""
@@ -1795,7 +1937,8 @@ def render_daily_intro():
             "- **Ranking:** lowest total expected game-point loss wins.\n"
             "- **Answers lock:** no going backward during the official run.\n"
             "- **Coaching waits:** grades, exact holds, and lessons appear after Question 10.\n"
-            "- **Prototype:** v43A.1 uses a local demo leaderboard; v43B will save real players, groups, attempts, and streaks."
+            "- **Player identity:** your v43B display name is now saved permanently.\n"
+            "- **Still in preview:** this phase keeps the demo leaderboard and session-local Daily attempt while we live-test identity."
         )
 
 
@@ -1964,13 +2107,13 @@ def render_daily_results():
     if summary["perfect"]:
         rank_copy = "Perfect challenge: 0.00 expected game points lost."
     elif rank == 1:
-        rank_copy = "You lead today's prototype group."
+        rank_copy = "You lead today's preview group."
     else:
-        rank_copy = f"You finished #{rank} in today's prototype group. Lowest total expected-point loss wins."
+        rank_copy = f"You finished #{rank} in today's preview group. Lowest total expected-point loss wins."
     st.markdown(f"<div class='daily-rank-banner'><b>🏆 Daily result</b><br>{rank_copy}</div>", unsafe_allow_html=True)
 
     st.markdown("### Friend leaderboard")
-    st.caption("Prototype data: the seven friend entries below are deterministic simulated players for v43A. Your row is real. v43B will replace the demo rows with your actual groups.")
+    st.caption("Phase 2B preview: your player identity is real, but the seven friend rows are still deterministic simulated players. A coming v43B patch will replace them with your actual groups.")
     st.dataframe(_leaderboard_frame(board), hide_index=True, use_container_width=True)
 
     toughest = story.get("toughest")
@@ -2011,8 +2154,8 @@ def render_daily_results():
     for answer in answers:
         _daily_review_item(answer)
 
-    with st.expander("v43A prototype controls", expanded=False):
-        st.caption("The real v43B database will enforce one attempt per player/day and resume across devices. v43A locks the run only inside this active Streamlit session so we can test the game loop first.")
+    with st.expander("v43B preview controls", expanded=False):
+        st.caption("Your player identity is now stored in the v43B database. This Phase 2B build still keeps the Daily attempt inside the active Streamlit session; the next persistence patch will enforce one attempt per player/day and resume across devices.")
         if st.button("Reset today's local demo attempt", use_container_width=True):
             _reset_daily_local_attempt(st.session_state.daily_date_key)
             st.rerun()
@@ -2021,6 +2164,10 @@ def render_daily_results():
 
 
 def render_daily_mode():
+    if not st.session_state.get("active_player_id"):
+        render_player_identity_gate()
+        return
+    render_player_status_bar()
     if not st.session_state.daily_started:
         render_daily_intro()
         return
@@ -2149,6 +2296,7 @@ def render_practice_mode():
 
 initialize_state()
 initialize_daily_state()
+initialize_player_identity_state()
 # Install near the top so dice taps stay visually anchored on mobile.
 install_dice_scroll_guard()
 st.markdown("<div id='app-top-anchor'></div>", unsafe_allow_html=True)
@@ -2162,10 +2310,12 @@ mode = st.radio(
     key="app_mode",
     label_visibility="collapsed",
 )
-st.markdown(
-    "<div class='mode-note'>Daily Challenge first · unlimited open practice anytime</div>",
-    unsafe_allow_html=True,
+player_note = (
+    f"Daily Challenge first · signed in as {st.session_state.get('active_player_name')} · unlimited open practice anytime"
+    if st.session_state.get("active_player_id")
+    else "Daily Challenge first · sign in for Daily · unlimited open practice anytime"
 )
+st.markdown(f"<div class='mode-note'>{html.escape(player_note)}</div>", unsafe_allow_html=True)
 
 if mode == "Daily Challenge":
     render_daily_mode()
