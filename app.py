@@ -1600,7 +1600,7 @@ def render_result(report):
 
 
 # ---------------------------------------------------------------------------
-# v43A — Daily Challenge prototype
+# v43A.1 — Daily Challenge UI refinement
 # ---------------------------------------------------------------------------
 
 st.markdown(
@@ -1616,16 +1616,18 @@ st.markdown(
     .daily-title { font-size:1.35rem; line-height:1.15; font-weight:950; margin:0.14rem 0 0.22rem 0; }
     .daily-rule { color:#5f6b7a !important; font-size:0.88rem; line-height:1.35; }
     .daily-progress {
-        display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:0.24rem; margin:0.55rem 0 0.62rem 0;
+        display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:0.24rem; margin:0.28rem 0 0.18rem 0;
     }
     .daily-dot {
-        height:0.42rem; border-radius:999px; background:#e5e7eb; border:1px solid rgba(127,127,127,.12);
+        height:0.58rem; border-radius:999px; background:#e5e7eb; border:1px solid rgba(127,127,127,.12);
+        transition:background .15s ease, transform .15s ease;
     }
     .daily-dot.done { background:#16a34a; }
-    .daily-dot.current { background:#2563eb; }
-    .daily-progress-copy { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-bottom:0.25rem; }
-    .daily-progress-copy b { font-size:0.9rem; }
-    .daily-progress-copy span { color:#6b7280; font-size:0.78rem; }
+    .daily-dot.current { background:#2563eb; transform:scaleY(1.22); }
+    .daily-progress-copy { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-bottom:0.18rem; }
+    .daily-progress-copy b { font-size:0.92rem; }
+    .daily-progress-copy span { color:#6b7280; font-size:0.78rem; font-weight:700; }
+    .daily-progress-percent { color:#6b7280; font-size:0.72rem; text-align:right; margin-bottom:0.58rem; }
     .daily-lock-note { color:#6b7280; font-size:0.78rem; text-align:center; margin:0.3rem 0 0.15rem 0; }
     .daily-flash { border:1px solid #bbf7d0; background:#f0fdf4; color:#166534 !important; border-radius:12px; padding:0.46rem 0.62rem; font-weight:800; font-size:0.82rem; margin:0.3rem 0; }
     .daily-result-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.4rem; margin:0.6rem 0; }
@@ -1651,7 +1653,7 @@ st.markdown(
         .daily-hero { padding:.72rem .7rem; border-radius:17px; }
         .daily-title { font-size:1.18rem; }
         .daily-progress { gap:.15rem; }
-        .daily-dot { height:.36rem; }
+        .daily-dot { height:.48rem; }
     }
     </style>
     """,
@@ -1679,7 +1681,7 @@ def initialize_daily_state():
     elif "daily_challenges" not in st.session_state:
         _reset_daily_local_attempt(today)
     if "app_mode" not in st.session_state:
-        st.session_state.app_mode = "Practice"
+        st.session_state.app_mode = "Daily Challenge"
 
 
 def _daily_date_label(date_key: str) -> str:
@@ -1694,12 +1696,15 @@ def render_daily_progress(index: int, locked: int):
     dots = []
     for i in range(10):
         css = "done" if i < locked else ("current" if i == index and locked < 10 else "")
-        dots.append(f"<div class='daily-dot {css}'></div>")
-    question_text = "Complete" if locked >= 10 else f"Question {index + 1} of 10"
+        dots.append(f"<div class='daily-dot {css}' title='Question {i + 1}'></div>")
+    question_text = "Challenge complete" if locked >= 10 else f"Question {index + 1} of 10"
+    percent = min(100, max(0, int(round((locked / 10) * 100))))
+    status_text = "10/10 locked" if locked >= 10 else f"{locked}/10 locked"
     st.markdown(
         "<div class='daily-progress-copy'>"
-        f"<b>{question_text}</b><span>{locked}/10 answers locked</span>"
-        "</div><div class='daily-progress'>" + "".join(dots) + "</div>",
+        f"<b>{question_text}</b><span>{status_text}</span>"
+        "</div><div class='daily-progress'>" + "".join(dots) + "</div>"
+        f"<div class='daily-progress-percent'>{percent}% complete</div>",
         unsafe_allow_html=True,
     )
 
@@ -1728,19 +1733,11 @@ def render_daily_intro():
     date_key = st.session_state.daily_date_key
     st.markdown(
         "<div class='daily-hero'>"
-        "<div class='daily-kicker'>🎲 Daily Challenge <span class='prototype-badge'>v43A prototype</span></div>"
+        "<div class='daily-kicker'>🎲 Daily Challenge <span class='prototype-badge'>v43A.1 prototype</span></div>"
         f"<div class='daily-title'>{_daily_date_label(date_key)}</div>"
         "<div class='daily-rule'><b>10 hold decisions. Same challenge for everyone.</b><br>"
-        "Lose as few expected game points as possible. Your answers lock as you go, and the exact coaching is revealed only after Question 10.</div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        "<div class='review-summary'>"
-        "<div class='review-box'><div class='review-label'>Format</div><div class='review-value'>5 Roll 1 · 5 Roll 2</div></div>"
-        "<div class='review-box'><div class='review-label'>Ranking</div><div class='review-value'>Lowest total EV loss</div></div>"
-        "<div class='review-box'><div class='review-label'>Attempt</div><div class='review-value'>One locked run</div></div>"
-        "<div class='review-box'><div class='review-label'>Reset</div><div class='review-value'>Midnight Eastern</div></div>"
+        "Lose as few expected game points as possible. Your answers lock as you go; exact coaching unlocks after Question 10.<br>"
+        "<span style='font-size:.80rem'>5 Roll 1 · 5 Roll 2 · one locked attempt · new challenge at midnight Eastern</span></div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -1750,13 +1747,25 @@ def render_daily_intro():
         max_chars=20,
         key="daily_name_input",
     ).strip()
-    st.caption("v43A uses a local demo leaderboard. v43B will replace it with real player profiles, groups, saved attempts, and streaks.")
-    if st.button("Start today's Daily Challenge", type="primary", use_container_width=True):
-        st.session_state.daily_display_name = name or "You"
-        st.session_state.daily_started = True
-        st.session_state.daily_question_index = len(st.session_state.daily_answers)
-        st.session_state.daily_flash = ""
-        st.rerun()
+    start_col, practice_col = st.columns([2, 1])
+    with start_col:
+        if st.button("Start today's Daily Challenge", type="primary", use_container_width=True):
+            st.session_state.daily_display_name = name or "You"
+            st.session_state.daily_started = True
+            st.session_state.daily_question_index = len(st.session_state.daily_answers)
+            st.session_state.daily_flash = ""
+            st.rerun()
+    with practice_col:
+        if st.button("Open Practice", use_container_width=True):
+            st.session_state.app_mode = "Practice"
+            st.rerun()
+    with st.expander("How the Daily Challenge works", expanded=False):
+        st.markdown(
+            "- **Ranking:** lowest total expected game-point loss wins.\n"
+            "- **Answers lock:** no going backward during the official run.\n"
+            "- **Coaching waits:** grades, exact holds, and lessons appear after Question 10.\n"
+            "- **Prototype:** v43A.1 uses a local demo leaderboard; v43B will save real players, groups, attempts, and streaks."
+        )
 
 
 def render_daily_question():
@@ -1958,6 +1967,14 @@ def render_daily_results():
     if story_cards:
         st.markdown("<div class='group-story-grid'>" + "".join(story_cards) + "</div>", unsafe_allow_html=True)
 
+    practice_col, stay_col = st.columns([1, 1])
+    with practice_col:
+        if st.button("🎯 Go to open Practice", type="primary", use_container_width=True, key="daily_to_practice"):
+            st.session_state.app_mode = "Practice"
+            st.rerun()
+    with stay_col:
+        st.caption("Come back to Daily Challenge anytime in this session to re-check today's leaderboard.")
+
     st.markdown("### Review your 10")
     st.caption("Now that the competitive run is over, every exact answer and teaching explanation is unlocked.")
     for answer in answers:
@@ -1991,6 +2008,16 @@ def render_practice_mode():
     challenge = st.session_state.challenge
     round_id = st.session_state.round_id
     history = st.session_state.history
+
+    if st.session_state.get("daily_completed") and len(st.session_state.get("daily_answers", [])) >= 10:
+        st.markdown(
+            "<div class='daily-rank-banner'><b>🏆 Today's Daily Challenge is complete.</b><br>"
+            "Your result and leaderboard are still available.</div>",
+            unsafe_allow_html=True,
+        )
+        if st.button("View today's Daily leaderboard", use_container_width=True, key="practice_to_daily_results"):
+            st.session_state.app_mode = "Daily Challenge"
+            st.rerun()
 
     if st.session_state.get("scroll_to_top", False):
         components.html("""
@@ -2099,13 +2126,13 @@ st.markdown("<div class='subtitle'>Hold Strategy Trainer</div>", unsafe_allow_ht
 
 mode = st.radio(
     "Mode",
-    options=["Practice", "Daily Challenge"],
+    options=["Daily Challenge", "Practice"],
     horizontal=True,
     key="app_mode",
     label_visibility="collapsed",
 )
 st.markdown(
-    "<div class='mode-note'>Unlimited coaching in Practice · one locked competitive Daily 10 in Daily Challenge</div>",
+    "<div class='mode-note'>Daily Challenge first · unlimited open practice anytime</div>",
     unsafe_allow_html=True,
 )
 

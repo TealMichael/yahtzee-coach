@@ -1,35 +1,12 @@
-YAHTZEE COACH v43A — DEPLOYMENT
-================================
+Yahtzee Coach v43A.1 deployment
 
-This update assumes v42.6 is already live.
+From v43A, only app.py is required for the live UI patch.
+README.md is optional for repository documentation.
 
-Upload these files to the ROOT of your GitHub repository (next to app.py):
+1. Open the GitHub repo root.
+2. Add file -> Upload files.
+3. Upload app.py from this folder (and README.md if desired).
+4. Commit with: Refine Daily Challenge home and navigation - v43A.1
+5. Wait for Streamlit to redeploy.
 
-1. app.py
-2. daily_challenge.py
-3. README.md  (recommended, but not required for the app to run)
-
-No policy/data file changed from v42.6, so you do NOT need to re-upload:
-- exact_policy.npz
-- puzzle_bank.npz
-- challenge_catalog.npz
-
-IMPORTANT:
-- daily_challenge.py must be next to app.py.
-- Do not upload the zip itself to the repo.
-- Do not place the files inside a v43A subfolder.
-
-Suggested commit message:
-Add Daily Challenge gameplay prototype - v43A
-
-After Streamlit redeploys:
-1. Confirm Practice still opens and behaves normally.
-2. Tap Daily Challenge at the top.
-3. Start today's challenge.
-4. Confirm no answer/grade/strategy hint appears after Questions 1–9.
-5. Complete Question 10.
-6. Confirm the result, demo friend leaderboard, group comparison, and 10-question review appear.
-7. Switch back to Practice and then Daily Challenge; the completed result should remain in the same Streamlit session.
-
-v43A intentionally uses simulated friends and local session state. Real shared
-players/groups/leaderboards/resume are the v43B database step.
+No .npz policy/puzzle files changed from v43A/v42.6.

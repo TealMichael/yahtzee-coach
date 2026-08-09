@@ -1,10 +1,21 @@
-# Yahtzee Coach v43A — Daily Challenge Gameplay Prototype
+# Yahtzee Coach v43A.1 — Daily Challenge UI Refinement
 
-v43A keeps the complete v42.6 Practice experience intact and adds the first
-playable version of **Daily Challenge**.
+v43A.1 keeps the complete v42.6 Practice experience intact and refines the first
+playable version of **Daily Challenge** after live desktop/mobile feedback.
 
-The purpose of v43A is to prove the competitive game loop before adding a real
-shared database in v43B.
+The purpose of v43A.1 is to make Daily Challenge the main attraction and clean up
+the competitive game loop before adding a real shared database in v43B.
+
+## v43A.1 live-feedback changes
+
+- Daily Challenge is now the first/default mode when the app loads.
+- Practice remains available at any time.
+- The large four-box rules summary was removed from the Daily intro.
+- Daily rules are condensed into the hero with an optional **How the Daily Challenge works** expander.
+- The 10-question segmented progress bar is larger and now shows percentage complete.
+- The completed Daily screen has a direct **Go to open Practice** button.
+- After switching to Practice, a completed Daily attempt shows a **View today's Daily leaderboard** return button.
+- In v43A.1 that return behavior lasts for the active Streamlit session; v43B persistence will make the leaderboard available after leaving and reopening the app.
 
 ## Two modes
 
