@@ -44,9 +44,12 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2A2 database preflight is loaded.")
+    st.info("🔧 v43B Phase 2A3 database preflight is loaded.")
     try:
-        load_daily_store().health_check()
+        daily_store = load_daily_store()
+        if getattr(daily_store, "url_was_normalized", False):
+            st.caption("🔧 Supabase Project URL format was automatically corrected for the Python client.")
+        daily_store.health_check()
         st.success("✅ v43B database connection is working.")
     except Exception as exc:
         st.error("❌ v43B database connection failed.")

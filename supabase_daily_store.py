@@ -17,6 +17,7 @@ The secret key must only be used from the trusted Streamlit server.
 from datetime import date, datetime, timedelta, timezone
 import re
 from typing import Mapping, Sequence
+from urllib.parse import urlsplit, urlunsplit
 
 from supabase import Client, create_client
 
@@ -44,6 +45,39 @@ from daily_store import (
     verify_pin,
 )
 
+
+
+def _normalize_supabase_url(value: str) -> tuple[str, bool]:
+    """Return the base Supabase project URL expected by create_client().
+
+    The dashboard can surface REST/Data API endpoints such as
+    https://<project>.supabase.co/rest/v1.  supabase-py expects the project base
+    URL instead and appends product routes itself.  Normalizing known API paths
+    here makes the deployment tolerant of either form without exposing secrets.
+    """
+    raw = str(value or "").strip().rstrip("/")
+    if not raw:
+        return raw, False
+
+    try:
+        parts = urlsplit(raw)
+    except Exception:
+        return raw, False
+
+    path = (parts.path or "").rstrip("/")
+    known_api_paths = (
+        "/rest/v1",
+        "/auth/v1",
+        "/storage/v1",
+        "/realtime/v1",
+        "/functions/v1",
+        "/graphql/v1",
+    )
+    if path in known_api_paths:
+        normalized = urlunsplit((parts.scheme, parts.netloc, "", "", "")).rstrip("/")
+        return normalized, normalized != raw
+
+    return raw, False
 
 def _as_datetime(value) -> datetime | None:
     if value is None:
@@ -152,12 +186,15 @@ class SupabaseDailyStore:
     """Production v43B DailyStore implementation backed by Supabase/Postgres."""
 
     def __init__(self, supabase_url: str, supabase_secret_key: str, *, client: Client | None = None):
-        url = str(supabase_url or "").strip()
+        raw_url = str(supabase_url or "").strip()
+        url, was_normalized = _normalize_supabase_url(raw_url)
         key = str(supabase_secret_key or "").strip()
         if not url:
             raise ValueError("SUPABASE_URL is missing.")
         if not key:
             raise ValueError("SUPABASE_SECRET_KEY is missing.")
+        self.supabase_url = url
+        self.url_was_normalized = was_normalized
         self.client: Client = client or create_client(url, key)
 
     @classmethod

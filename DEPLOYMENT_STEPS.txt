@@ -1,4 +1,4 @@
-Yahtzee Coach v43B Phase 2A2 — FULL CURRENT APP deployment
+Yahtzee Coach v43B Phase 2A3 — FULL CURRENT APP deployment
 
 This package intentionally contains the complete current Yahtzee Coach repository.
 From this version forward, releases are packaged this way so no line-by-line editing is needed.
@@ -13,14 +13,14 @@ From this version forward, releases are packaged this way so no line-by-line edi
    - File order/alphabetical display does not matter.
 6. Commit directly to main.
    Suggested commit message:
-   v43B Phase 2A2 - Supabase connection preflight
+   v43B Phase 2A3 - Supabase URL compatibility fix
 7. Wait for Streamlit Community Cloud to redeploy.
 8. Confirm the normal app loads.
 9. Then open:
    https://teals-yahtzee-coach.streamlit.app/?dbcheck=1
 
 EXPECTED PREFLIGHT DISPLAY
-- First:  🔧 v43B Phase 2A2 database preflight is loaded.
+- First:  🔧 v43B Phase 2A3 database preflight is loaded.
 - Then either:
   ✅ v43B database connection is working.
   OR
@@ -34,3 +34,10 @@ IMPORTANT
 - Do NOT put SUPABASE_SECRET_KEY into GitHub or this ZIP.
 - Streamlit Secrets remain the only location for the private key.
 - The exact solver, exact policy, Daily puzzle bank, and Practice strategy behavior are unchanged.
+
+
+PHASE 2A3 NOTE
+- This build automatically accepts either the base Supabase Project URL or a URL ending in /rest/v1.
+- You should NOT need to edit Streamlit Secrets for this fix.
+- If the URL is corrected automatically, the preflight will show a small caption saying so.
+- __pycache__ and .pyc files are intentionally excluded from this release.

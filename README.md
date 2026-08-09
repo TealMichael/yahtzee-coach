@@ -1,20 +1,22 @@
-# Yahtzee Coach v43B Phase 2A2 — Supabase Connection Preflight
+# Yahtzee Coach v43B Phase 2A3 — Supabase URL Compatibility Fix
 
 This checkpoint begins the live v43B persistence rollout while preserving the locked
 v43A.1 Daily Challenge and v42.6 Practice strategy behavior.
 
-## v43B Phase 2A2 changes
+## v43B Phase 2A3 changes
 
 - Adds the v43B persistence contract in `daily_store.py`.
 - Adds the production Supabase backend in `supabase_daily_store.py`.
 - Adds `supabase` to `requirements.txt`.
 - Includes the Supabase/Postgres schema in `v43b_schema.sql`.
 - Includes the v43B persistence regression suite in `v43b_persistence_tests.py`.
-- Adds a hidden database preflight at `?dbcheck=1`.
-- The preflight now shows an explicit **v43B Phase 2A2 loaded** banner before checking Supabase,
-  making it easy to confirm that Streamlit actually deployed this version.
-- If the database check fails, the developer-only preflight shows the exception type/detail so
-  setup problems can be diagnosed without changing normal player-facing UI.
+- Keeps the hidden database preflight at `?dbcheck=1`.
+- Fixes the first live Supabase preflight failure (`PGRST125: Invalid path specified in request URL`).
+- Automatically normalizes a Supabase REST/Data API endpoint such as
+  `https://<project>.supabase.co/rest/v1` back to the base Project URL expected by `supabase-py`.
+- The preflight reports when that safe URL correction was applied.
+- Keeps exception detail developer-only so setup problems can be diagnosed without changing normal player-facing UI.
+- Cleans generated `__pycache__` / `.pyc` artifacts from the release package.
 
 ## What is intentionally NOT changed yet
 
@@ -28,7 +30,8 @@ v43A.1 Daily Challenge and v42.6 Practice strategy behavior.
 
 Supabase tables have been created and Streamlit secrets are expected to contain
 `SUPABASE_URL` and `SUPABASE_SECRET_KEY`. The current checkpoint exists only to verify the
-Streamlit-to-Supabase connection safely before persistent player identity is enabled.
+Streamlit-to-Supabase connection safely before persistent player identity is enabled. Phase 2A3
+adds compatibility for either the base Project URL or the REST/Data API URL form in Streamlit Secrets.
 
 ---
 
