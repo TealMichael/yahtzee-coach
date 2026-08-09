@@ -4,8 +4,9 @@ from __future__ import annotations
 
 The deterministic challenge generation and scoring helpers remain UI-independent.
 v43B persists player attempts through the separate DailyStore layer while this
-module continues to own the locked challenge composition, scoring summaries, and
-temporary deterministic demo leaderboard until real friend groups are enabled.
+module continues to own the locked challenge composition and scoring summaries.
+The deterministic demo-leaderboard helpers are retained only for historical/regression
+coverage; the live v43B Phase 2D app uses Supabase friend groups and real results.
 """
 
 from dataclasses import dataclass
@@ -137,11 +138,10 @@ def _mock_question_result(rng: random.Random, challenge: Mapping, skill_adjustme
 
 
 def build_mock_friend_results(date_key: str, challenges: Sequence[Mapping]) -> list[dict]:
-    """Create deterministic v43A friend results for UI testing only.
+    """Create deterministic legacy friend results for regression testing only.
 
-    The mock group lets the complete social experience be tested before v43B
-    connects real players.  It is deterministic by date and challenge version,
-    so reloading the same Daily Challenge yields the same demo competition.
+    The live v43B app no longer displays these rows; they remain useful for
+    protecting the original v43A social scoring helpers in automated tests.
     """
     players: list[dict] = []
     for name, skill_adjustment in MOCK_FRIENDS:

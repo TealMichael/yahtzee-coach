@@ -77,6 +77,8 @@ def run():
     checks.append(("group join code is case-insensitive", joined.group_id == group.group_id))
     checks.append(("group creator is automatically a member", group.group_id in {g.group_id for g in store.list_groups(alice.player_id)}))
     checks.append(("group membership stores multiple players", len([1 for gid, _ in store.group_members if gid == group.group_id]) == 3))
+    members = store.list_group_members(group.group_id)
+    checks.append(("group member directory exposes public player names", [row["display_name"] for row in members] == ["Alice", "Bob", "Cara"]))
 
     challenge = add_challenge(store)
     same = store.ensure_challenge(challenge.challenge_id, challenge.challenge_date, challenge.challenge_version, challenge.puzzle_ids)

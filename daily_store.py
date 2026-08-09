@@ -205,6 +205,7 @@ class DailyStore(Protocol):
     def create_group(self, player_id: str, group_name: str) -> GroupRecord: ...
     def join_group(self, player_id: str, join_code: str) -> GroupRecord: ...
     def list_groups(self, player_id: str) -> list[GroupRecord]: ...
+    def list_group_members(self, group_id: str) -> list[dict]: ...
     def ensure_challenge(self, challenge_id: str, challenge_date: str,
                          challenge_version: str, puzzle_ids: Sequence[str]) -> ChallengeRecord: ...
     def get_or_create_attempt(self, player_id: str, challenge_id: str) -> tuple[AttemptRecord, bool]: ...
@@ -311,6 +312,20 @@ class InMemoryDailyStore:
         self._require_player(player_id)
         groups = [self.groups[group_id] for group_id, member_id in self.group_members if member_id == player_id]
         return sorted(groups, key=lambda group: (group.group_name.casefold(), group.group_id))
+
+    def list_group_members(self, group_id: str) -> list[dict]:
+        if str(group_id) not in self.groups:
+            raise GroupNotFound(f"Unknown group_id: {group_id}")
+        rows = []
+        for member_group_id, player_id in self.group_members:
+            if member_group_id != str(group_id):
+                continue
+            player = self._require_player(player_id).public()
+            rows.append({
+                "player_id": player.player_id,
+                "display_name": player.display_name,
+            })
+        return sorted(rows, key=lambda row: (row["display_name"].casefold(), row["player_id"]))
 
     def ensure_challenge(self, challenge_id: str, challenge_date: str,
                          challenge_version: str, puzzle_ids: Sequence[str]) -> ChallengeRecord:

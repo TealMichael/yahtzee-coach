@@ -127,16 +127,30 @@ def test_daily_determinism_and_balance():
 
 def test_daily_many_dates():
     all_ids=set()
+    underlying=[]
+    prior_day=set()
+    consecutive_overlap=[]
+    min_skill_families=99
     for day in range(1,32):
         challenges=generate_daily_challenge_set(f"2026-08-{day:02d}")
         assert len(challenges)==10
         assert len({x["challenge_id"] for x in challenges})==10
         assert Counter(x["roll_number"] for x in challenges)==Counter({1:5,2:5})
         assert Counter(x["scorecard_origin"] for x in challenges)==Counter({"Simulated Game":9,"Curated Edge Case":1})
-        assert len(set(x["skill_tag"] for x in challenges))>=6
+        skill_count=len(set(x["skill_tag"] for x in challenges))
+        assert skill_count>=6
+        min_skill_families=min(min_skill_families,skill_count)
         all_ids.update(x["challenge_id"] for x in challenges)
+        today={(x["bank_state_key"],tuple(x["dice"]),int(x["roll_number"])) for x in challenges}
+        underlying.extend(today)
+        if prior_day:
+            consecutive_overlap.append(len(today & prior_day))
+        prior_day=today
+    unique_underlying=len(set(underlying))
     assert len(all_ids) > 280
-    print(f"PASS 31-day Daily-10 simulation: {len(all_ids)} unique challenge IDs across 310 slots")
+    assert unique_underlying >= 300
+    assert max(consecutive_overlap, default=0) == 0
+    print(f"PASS 31-day Daily variety audit: {unique_underlying}/310 unique underlying decisions; 0 consecutive-day repeats; >= {min_skill_families} skill families/day")
 
 
 def main():

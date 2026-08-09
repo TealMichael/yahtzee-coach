@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Focused v43B Phase 2C persistent-Daily UI wiring checks.
+"""Focused v43B Phase 2D persistent-Daily UI wiring checks.
 
 Run:
     python v43b_daily_attempt_ui_tests.py
@@ -51,7 +51,7 @@ def run():
     checks.append(("UI tells player attempt cannot reset", "cannot be reset" in source))
     checks.append(("cross-player held dice state is cleared", 'startswith(("daily_held_", "daily_dice_pills_"))' in source))
     checks.append(("Practice remains independent", "def render_practice_mode():" in source and "Open Practice without signing in" in source))
-    checks.append(("friend leaderboard is still explicitly preview data", "seven friend rows are still deterministic simulated players" in source))
+    checks.append(("simulated friend leaderboard is removed from live Daily UI", "seven friend rows are still deterministic simulated players" not in source and "store.leaderboard(" in source and "Real v43B results" in source))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

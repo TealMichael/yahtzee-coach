@@ -1,4 +1,63 @@
-# Yahtzee Coach v43B Phase 2C — Persistent Daily Attempts
+# Yahtzee Coach v43B Phase 2D — Real Friend Groups + Live Leaderboards
+
+This checkpoint turns the Daily Challenge social layer from a demo into real shared competition.
+The permanent-player and persistent-attempt systems from Phase 2B/2C remain intact, and the exact
+strategy engine, exact policy, Daily puzzle composition, and Practice behavior remain locked.
+
+## v43B Phase 2D changes
+
+- Signed-in players can **create a friend group** and receive a short invite code.
+- Other permanent players can **join the group with that code**; codes are case-insensitive.
+- Group creators are automatically members.
+- Players can belong to more than one group and select which group's standings they want to view.
+- The Daily results screen now uses the **real Supabase leaderboard** instead of the seven simulated v43A rows.
+- Only **completed official Daily attempts** appear on the leaderboard; partial scores never leak during a run.
+- Leaderboard order remains locked to: lowest total EV loss, then most exact holds, then lowest worst miss.
+- The results screen shows how many group members have completed today's Daily and refreshes when the player returns.
+- “Today's killer” and “Most solved / Unanimous” cards now use **real completed group answers**.
+- Friend-group member names and the group's invite code are visible to group members.
+- Adds `list_group_members()` to both the reference persistence contract and Supabase production backend.
+- Adds `v43b_social_tests.py` and expands persistence/UI tests for real social behavior.
+- The old simulated friend helpers remain only in `daily_challenge.py` for historical regression coverage; the live app no longer imports or displays them.
+- No Supabase schema migration is required for this patch; the `friend_groups` and `group_members` tables were installed in the original v43B schema.
+
+## Daily puzzle variety audit
+
+The Daily selector was re-audited before this release because repeated broad scenario names can make different decisions feel similar.
+The underlying puzzles are varying well, so the locked v42.6 composition was **not changed**.
+
+- August 2026 31-day regression: **308 of 310 underlying decisions were unique**.
+- There were **0 exact underlying puzzle repeats on consecutive days** across that month.
+- Each Daily used **7–9 distinct strategy families** in the 10-question set.
+- A separate 60-day spot audit produced **586 unique underlying decisions out of 600** (97.7%).
+- Only **4 of 600** decisions repeated an underlying puzzle seen in the previous seven days (0.7%).
+- Every Daily still preserves the locked **5 Roll 1 / 5 Roll 2** and **2 Opening / 3 Midgame / 3 Late Game / 2 True Endgame** structure.
+
+The repeated feeling is mostly from intentionally reusable scenario labels such as “Matching Dice Pressure,” “Straight Structure,” and “Full House Puzzle.” The actual dice + scorecard + game-state decisions underneath those labels are overwhelmingly different.
+
+## What is intentionally NOT changed yet
+
+- Participation streak calculations exist in the persistence layer but are not yet surfaced prominently in the player UI.
+- There is not yet a player/group deletion or group-admin screen.
+- PIN recovery is not available yet.
+- Exact solver behavior is unchanged.
+- Daily puzzle composition/version remains `43A-bank42.6`.
+- Practice behavior is unchanged and still works without signing in.
+
+## Phase 2D live-test goal
+
+1. Sign in to the player that already completed today's persistent Daily.
+2. Create a friend group and confirm an invite code appears.
+3. Confirm your already-completed Daily immediately appears as the group's first real leaderboard row.
+4. Sign out and create/sign in as another test player (or use a friend's player).
+5. Join the group with the invite code and confirm the member count increases.
+6. If that second player completes today's Daily, return to the first player and confirm both real rows are ranked together.
+
+Once this passes live, the remaining v43B social polish can focus on streak display, richer return-home/status information, and group/player management rather than core persistence.
+
+---
+
+## Previous checkpoint: v43B Phase 2C — Persistent Daily Attempts
 
 This checkpoint turns the permanent-player system into a true saved Daily Challenge.
 The exact strategy engine, exact policy, Daily puzzle composition, and Practice behavior remain locked.

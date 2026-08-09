@@ -397,6 +397,24 @@ class SupabaseDailyStore:
                 groups.append(_group_from_row(row))
         return sorted(groups, key=lambda group: (group.group_name.casefold(), group.group_id))
 
+    def list_group_members(self, group_id: str) -> list[dict]:
+        self._require_group_row(group_id)
+        memberships = _row_list(
+            self.client.table("group_members")
+            .select("player_id")
+            .eq("group_id", str(group_id))
+            .execute()
+        )
+        rows: list[dict] = []
+        for membership in memberships:
+            player_id = str(membership["player_id"])
+            player = _player_from_row(self._require_player_row(player_id))
+            rows.append({
+                "player_id": player.player_id,
+                "display_name": player.display_name,
+            })
+        return sorted(rows, key=lambda row: (row["display_name"].casefold(), row["player_id"]))
+
     # ---------- Challenge registration ----------
 
     def ensure_challenge(

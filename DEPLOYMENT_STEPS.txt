@@ -1,4 +1,4 @@
-Yahtzee Coach v43B Phase 2C — FULL CURRENT APP deployment
+Yahtzee Coach v43B Phase 2D — FULL CURRENT APP deployment
 
 This release contains the complete current Yahtzee Coach repository.
 No line-by-line code editing and no new Supabase SQL are needed.
@@ -8,35 +8,33 @@ No line-by-line code editing and no new Supabase SQL are needed.
 3. In GitHub, open the yahtzee-coach repository root.
 4. Choose Add file -> Upload files.
 5. Select ALL files inside UPLOAD_TO_GITHUB and upload them together.
-   - Same-name files will be updated.
-   - New v43B test files will be added.
-   - File order/alphabetical display does not matter.
 6. Commit directly to main.
 
 COPY/PASTE COMMIT MESSAGE:
-v43B Phase 2C - save Daily attempts and resume progress
+v43B Phase 2D - add real friend groups and live leaderboards
 
 7. Wait for Streamlit Community Cloud to redeploy.
 8. Open the normal app and sign in to Daily Challenge.
 
-EXPECTED PHASE 2C BEHAVIOR
-- Start today's challenge: an official Supabase attempt is created.
-- Lock 2-3 answers: each should say it was locked and saved.
-- Sign out / refresh / close the app.
-- Return and sign in with the same display name + PIN.
-- The Daily should resume at the next unanswered question.
-- Finish Question 10: result/review screen appears.
-- Return later and sign in again: the completed result should restore; there is no reset or second attempt.
+EXPECTED PHASE 2D BEHAVIOR
+- Existing permanent players and saved Daily attempts still restore normally.
+- Before starting or on the completed-results screen, players can create or join a friend group.
+- Creating a group produces a short invite code.
+- Joining with that code adds the player to the same real group.
+- Completed official Daily attempts appear on the group's real leaderboard.
+- Incomplete members do not expose partial scores.
+- Returning later refreshes standings as friends complete the Daily.
+- Group question callouts use real completed answers.
 - Practice remains available without signing in.
 
 OPTIONAL DATABASE PREFLIGHT
 https://teals-yahtzee-coach.streamlit.app/?dbcheck=1
-Expected: v43B Phase 2C database preflight + green connection message.
+Expected: v43B Phase 2D database preflight + green connection message.
 
 IMPORTANT
 - Do NOT put SUPABASE_SECRET_KEY into GitHub or this ZIP.
 - Streamlit Secrets remain the only location for the private key.
 - Player PINs remain salted scrypt hashes, never plaintext.
 - The exact solver, exact policy, Daily puzzle bank, and Practice strategy behavior are unchanged.
-- The friend leaderboard is still simulated in Phase 2C.
+- No new Supabase SQL is required for Phase 2D.
 - __pycache__ and .pyc files are intentionally excluded from the release.

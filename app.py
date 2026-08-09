@@ -13,14 +13,13 @@ from session_learning import build_session_learning_summary
 from practice_progress import build_practice_progress, newly_unlocked_badges
 from puzzle_bank import generate_practice_challenge as generate_expanded_practice_challenge
 from daily_challenge import (
-    DAILY_CHALLENGE_VERSION, DAILY_TIMEZONE, build_leaderboard, challenge_set_id,
-    current_daily_date_key, daily_challenges as get_daily_challenges, group_story,
-    summarize_attempt, user_rank,
+    DAILY_CHALLENGE_VERSION, DAILY_TIMEZONE, challenge_set_id,
+    current_daily_date_key, daily_challenges as get_daily_challenges, summarize_attempt,
 )
 from supabase_daily_store import SupabaseDailyStore
 from daily_store import (
     AttemptAlreadyComplete, ChallengeMismatch, DailyStoreError, DuplicateAnswer,
-    InvalidOfficialAnswer, InvalidPin, OutOfOrderAnswer, PlayerNameTaken,
+    GroupNotFound, InvalidOfficialAnswer, InvalidPin, OutOfOrderAnswer, PlayerNameTaken,
 )
 
 st.set_page_config(
@@ -49,7 +48,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2C database preflight is loaded.")
+    st.info("🔧 v43B Phase 2D database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -1636,7 +1635,7 @@ def render_result(report):
 
 
 # ---------------------------------------------------------------------------
-# v43B Phase 2C — persistent Daily attempts + player identity
+# v43B Phase 2D — friend groups + real Daily leaderboards
 # ---------------------------------------------------------------------------
 
 st.markdown(
@@ -1741,6 +1740,10 @@ def initialize_player_identity_state():
         st.session_state.active_player_name = None
     if "player_auth_flash" not in st.session_state:
         st.session_state.player_auth_flash = ""
+    if "active_group_id" not in st.session_state:
+        st.session_state.active_group_id = None
+    if "group_flash" not in st.session_state:
+        st.session_state.group_flash = ""
 
 
 def _activate_player(player, *, created: bool = False):
@@ -1748,6 +1751,9 @@ def _activate_player(player, *, created: bool = False):
     previous_id = st.session_state.get("active_player_id")
     if previous_id != player.player_id:
         _reset_daily_local_attempt(current_daily_date_key())
+        st.session_state.active_group_id = None
+        st.session_state.group_flash = ""
+        st.session_state.pop("friend_group_selector", None)
     st.session_state.active_player_id = player.player_id
     st.session_state.active_player_name = player.display_name
     st.session_state.daily_display_name = player.display_name
@@ -1762,6 +1768,9 @@ def _sign_out_player():
     st.session_state.active_player_id = None
     st.session_state.active_player_name = None
     st.session_state.player_auth_flash = ""
+    st.session_state.active_group_id = None
+    st.session_state.group_flash = ""
+    st.session_state.pop("friend_group_selector", None)
     _reset_daily_local_attempt(current_daily_date_key())
     st.session_state.daily_display_name = "You"
 
@@ -1905,12 +1914,12 @@ def render_player_identity_gate():
         "<div class='daily-kicker'>👤 v43B Player Identity</div>"
         "<div class='daily-title'>Your Daily Challenge player</div>"
         "<div class='daily-rule'><b>Create a player once, then return with your display name and PIN.</b><br>"
-        "Your display name is public on future group leaderboards. Your PIN stays private and is stored only as a secure hash.</div>"
+        "Your display name is public on friend-group leaderboards. Your PIN stays private and is stored only as a secure hash.</div>"
         "</div>",
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<div class='identity-note'><b>Phase 2C:</b> permanent player identity and Daily attempt saving are live. "
+        "<div class='identity-note'><b>Phase 2D:</b> permanent player identity, saved Daily attempts, and real friend groups are live. "
         "Sign back in after a refresh or on another device to resume the same official attempt.</div>",
         unsafe_allow_html=True,
     )
@@ -2008,6 +2017,162 @@ def render_player_status_bar():
         st.session_state.player_auth_flash = ""
 
 
+
+def _select_active_group(groups):
+    """Keep a stable selected group for this signed-in player."""
+    if not groups:
+        st.session_state.active_group_id = None
+        return None
+    group_by_id = {group.group_id: group for group in groups}
+    if st.session_state.get("active_group_id") not in group_by_id:
+        st.session_state.active_group_id = groups[0].group_id
+    return group_by_id.get(st.session_state.active_group_id)
+
+
+def _load_player_groups():
+    if not st.session_state.get("active_player_id"):
+        return []
+    try:
+        return load_daily_store().list_groups(st.session_state.active_player_id)
+    except Exception as exc:
+        st.warning("Your friend groups could not be loaded right now. Your Daily attempt is unaffected.")
+        if database_check_enabled():
+            st.caption(f"Group load detail: {type(exc).__name__}: {exc}")
+        return []
+
+
+def render_friend_group_hub(*, expanded: bool = False):
+    """Create/join/select real v43B friend groups without affecting Daily scoring."""
+    groups = _load_player_groups()
+    active = _select_active_group(groups)
+
+    if groups:
+        if len(groups) > 1:
+            ids = [group.group_id for group in groups]
+            labels = {group.group_id: group.group_name for group in groups}
+            chosen_id = st.selectbox(
+                "Friend group",
+                options=ids,
+                index=ids.index(active.group_id) if active else 0,
+                format_func=lambda group_id: labels[group_id],
+                key="friend_group_selector",
+            )
+            if chosen_id != st.session_state.get("active_group_id"):
+                st.session_state.active_group_id = chosen_id
+                active = next(group for group in groups if group.group_id == chosen_id)
+        else:
+            active = groups[0]
+            st.session_state.active_group_id = active.group_id
+
+        try:
+            members = load_daily_store().list_group_members(active.group_id)
+        except Exception:
+            members = []
+        member_count = len(members)
+        st.markdown(
+            f"**👥 {html.escape(active.group_name)}** · {member_count} member{'s' if member_count != 1 else ''}"
+        )
+        st.caption(f"Invite code: **{active.join_code}** · Share this code with friends so they can join your leaderboard.")
+        if members:
+            with st.expander("Group members", expanded=False):
+                st.write(" · ".join(member["display_name"] for member in members))
+    else:
+        st.info("You are not in a friend group yet. Create one or join a friend's group to unlock a real Daily leaderboard.")
+
+    with st.expander("Create or join a friend group", expanded=expanded or not groups):
+        create_tab, join_tab = st.tabs(["Create group", "Join with code"])
+        with create_tab:
+            with st.form("create_friend_group_form", clear_on_submit=True):
+                group_name = st.text_input(
+                    "Group name",
+                    max_chars=40,
+                    placeholder="Example: Sunday Rollers",
+                    key="create_friend_group_name",
+                )
+                create_group_submitted = st.form_submit_button(
+                    "Create friend group", type="primary", use_container_width=True
+                )
+            if create_group_submitted:
+                try:
+                    group = load_daily_store().create_group(
+                        st.session_state.active_player_id,
+                        group_name,
+                    )
+                except ValueError as exc:
+                    st.error(str(exc))
+                except Exception as exc:
+                    st.error("The friend group could not be created. Please try again.")
+                    if database_check_enabled():
+                        st.caption(f"Group create detail: {type(exc).__name__}: {exc}")
+                else:
+                    st.session_state.active_group_id = group.group_id
+                    st.session_state.group_flash = f"Friend group {group.group_name} created. Invite code: {group.join_code}"
+                    st.rerun()
+
+        with join_tab:
+            with st.form("join_friend_group_form", clear_on_submit=True):
+                join_code = st.text_input(
+                    "Invite code",
+                    max_chars=12,
+                    placeholder="Example: TEAL42",
+                    key="join_friend_group_code",
+                )
+                join_group_submitted = st.form_submit_button(
+                    "Join friend group", type="primary", use_container_width=True
+                )
+            if join_group_submitted:
+                try:
+                    group = load_daily_store().join_group(
+                        st.session_state.active_player_id,
+                        join_code,
+                    )
+                except GroupNotFound:
+                    st.error("No friend group matched that invite code.")
+                except Exception as exc:
+                    st.error("The friend group could not be joined. Please try again.")
+                    if database_check_enabled():
+                        st.caption(f"Group join detail: {type(exc).__name__}: {exc}")
+                else:
+                    st.session_state.active_group_id = group.group_id
+                    st.session_state.group_flash = f"Joined {group.group_name}."
+                    st.rerun()
+
+    flash = st.session_state.get("group_flash", "")
+    if flash:
+        st.success(flash)
+        st.session_state.group_flash = ""
+    return active
+
+
+def _real_group_context():
+    """Return active group, members, completed leaderboard, and per-question stats."""
+    groups = _load_player_groups()
+    active = _select_active_group(groups)
+    if active is None:
+        return None, [], [], []
+    store = load_daily_store()
+    members = store.list_group_members(active.group_id)
+    board = store.leaderboard(active.group_id, st.session_state.daily_set_id)
+    for row in board:
+        row["is_user"] = row.get("player_id") == st.session_state.get("active_player_id")
+    stats = store.group_question_stats(active.group_id, st.session_state.daily_set_id)
+    return active, members, board, stats
+
+
+def _user_real_rank(board):
+    for row in board:
+        if row.get("is_user"):
+            return int(row.get("rank", 0)) or None
+    return None
+
+
+def _story_from_group_stats(stats):
+    if not stats:
+        return {"toughest": None, "easiest": None}
+    toughest = min(stats, key=lambda row: (row["exact_rate"], -row["avg_loss"], row["question_number"]))
+    easiest = max(stats, key=lambda row: (row["exact_rate"], -row["avg_loss"], -row["question_number"]))
+    return {"toughest": toughest, "easiest": easiest}
+
 def _daily_date_label(date_key: str) -> str:
     try:
         value = datetime.strptime(date_key, "%Y-%m-%d")
@@ -2057,7 +2222,7 @@ def render_daily_intro():
     date_key = st.session_state.daily_date_key
     st.markdown(
         "<div class='daily-hero'>"
-        "<div class='daily-kicker'>🎲 Daily Challenge <span class='prototype-badge'>v43B persistence live</span></div>"
+        "<div class='daily-kicker'>🎲 Daily Challenge <span class='prototype-badge'>v43B social live</span></div>"
         f"<div class='daily-title'>{_daily_date_label(date_key)}</div>"
         "<div class='daily-rule'><b>10 hold decisions. Same challenge for everyone.</b><br>"
         "Lose as few expected game points as possible. Your answers lock as you go; exact coaching unlocks after Question 10.<br>"
@@ -2066,6 +2231,7 @@ def render_daily_intro():
         unsafe_allow_html=True,
     )
     st.caption(f"Playing today's challenge as {st.session_state.get('active_player_name') or 'Player'}.")
+    render_friend_group_hub(expanded=False)
 
     if st.button("Start today's Daily Challenge", type="primary", use_container_width=True):
         st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
@@ -2083,7 +2249,7 @@ def render_daily_intro():
             "- **Resume anywhere:** refresh, close the app, or sign in on another device and continue at the next unanswered question.\n"
             "- **Coaching stays hidden:** grades, exact answers, and EV loss remain hidden until all 10 decisions are locked.\n"
             "- **Reset:** a new challenge begins at midnight Eastern.\n"
-            "- **Still in preview:** the friend leaderboard remains simulated until real friend groups are connected."
+            "- **Real friend groups:** create or join a group with a code; completed members appear on the live leaderboard."
         )
 
 
@@ -2259,14 +2425,18 @@ def render_daily_results():
     records = [answer["solver_record"] for answer in answers]
     challenges = st.session_state.daily_challenges
     summary = summarize_attempt(records)
-    board = build_leaderboard(
-        st.session_state.daily_date_key,
-        challenges,
-        records,
-        user_name=st.session_state.get("daily_display_name", "You") or "You",
-    )
-    rank = user_rank(board)
-    story = group_story(board, challenges)
+
+    # Real group data is read fresh so returning later shows friends who finished after you.
+    try:
+        active_group, members, board, stats = _real_group_context()
+    except Exception as exc:
+        active_group, members, board, stats = None, [], [], []
+        st.warning("Your Daily result is safe, but the friend leaderboard could not be refreshed right now.")
+        if database_check_enabled():
+            st.caption(f"Leaderboard detail: {type(exc).__name__}: {exc}")
+    rank = _user_real_rank(board)
+    story = _story_from_group_stats(stats)
+    rank_value = f"#{rank} of {len(board)}" if rank is not None else "—"
 
     render_daily_progress(10, 10)
     st.markdown(
@@ -2282,46 +2452,73 @@ def render_daily_results():
         f"<div class='daily-result-box'><div class='daily-result-label'>EV Lost</div><div class='daily-result-value'>{summary['total_ev_loss']:.2f}</div></div>"
         f"<div class='daily-result-box'><div class='daily-result-label'>Exact Holds</div><div class='daily-result-value'>{summary['exact_count']}/10</div></div>"
         f"<div class='daily-result-box'><div class='daily-result-label'>Best Streak</div><div class='daily-result-value'>🔥 {summary['best_exact_streak']}</div></div>"
-        f"<div class='daily-result-box'><div class='daily-result-label'>Friend Rank</div><div class='daily-result-value'>#{rank} of {len(board)}</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Group Rank</div><div class='daily-result-value'>{rank_value}</div></div>"
         "</div>",
         unsafe_allow_html=True,
     )
-    if summary["perfect"]:
-        rank_copy = "Perfect challenge: 0.00 expected game points lost."
-    elif rank == 1:
-        rank_copy = "You lead today's preview group."
+
+    if active_group is None:
+        rank_copy = "Your official result is locked. Create or join a friend group to compare it on a real leaderboard."
+    elif len(board) == 1 and len(members) > 1:
+        rank_copy = f"You are the first finisher in {active_group.group_name}. Your friends will appear here when they complete today's Daily."
+    elif rank == 1 and len(board) > 1:
+        rank_copy = f"You lead {active_group.group_name} right now. Lowest total expected-point loss wins."
+    elif rank is not None:
+        rank_copy = f"You are #{rank} in {active_group.group_name} among {len(board)} completed player{'s' if len(board) != 1 else ''}."
     else:
-        rank_copy = f"You finished #{rank} in today's preview group. Lowest total expected-point loss wins."
-    st.markdown(f"<div class='daily-rank-banner'><b>🏆 Daily result</b><br>{rank_copy}</div>", unsafe_allow_html=True)
+        rank_copy = "Your official result is locked; group standings are still loading."
+    st.markdown(f"<div class='daily-rank-banner'><b>🏆 Daily result</b><br>{html.escape(rank_copy)}</div>", unsafe_allow_html=True)
 
-    st.markdown("### Friend leaderboard")
-    st.caption("v43B Phase 2C: your player and official Daily result are now persistent. The seven friend rows are still deterministic simulated players until real friend groups are connected.")
-    st.dataframe(_leaderboard_frame(board), hide_index=True, use_container_width=True)
+    st.markdown("### Friend groups")
+    render_friend_group_hub(expanded=active_group is None)
 
-    toughest = story.get("toughest")
-    easiest = story.get("easiest")
-    story_cards = []
-    if toughest:
-        q = toughest["question_number"]
-        challenge = challenges[q - 1]
-        story_cards.append(
-            "<div class='group-story-card'><div class='story-kicker'>Today's killer</div>"
-            f"<div class='story-title'>Question {q} · {challenge.get('scenario_name', '')}</div>"
-            f"<div class='story-copy'>{toughest['exact_count']} of {toughest['players']} players found an exact hold. "
-            f"Group average loss: {toughest['avg_loss']:.2f} pts.</div></div>"
+    # Refresh after group controls in case the selected group changed this rerun.
+    try:
+        active_group, members, board, stats = _real_group_context()
+    except Exception as exc:
+        active_group, members, board, stats = None, [], [], []
+        if database_check_enabled():
+            st.caption(f"Leaderboard refresh detail: {type(exc).__name__}: {exc}")
+    rank = _user_real_rank(board)
+    story = _story_from_group_stats(stats)
+
+    if active_group is not None:
+        completed = len(board)
+        total_members = len(members)
+        st.markdown(f"### {active_group.group_name} leaderboard")
+        st.caption(
+            f"Real v43B results · {completed} of {total_members} member{'s' if total_members != 1 else ''} finished today. "
+            "Only completed official attempts appear; standings refresh whenever you return."
         )
-    if easiest:
-        q = easiest["question_number"]
-        challenge = challenges[q - 1]
-        headline = "Unanimous" if easiest["exact_count"] == easiest["players"] else "Most solved"
-        story_cards.append(
-            f"<div class='group-story-card'><div class='story-kicker'>{headline}</div>"
-            f"<div class='story-title'>Question {q} · {challenge.get('scenario_name', '')}</div>"
-            f"<div class='story-copy'>{easiest['exact_count']} of {easiest['players']} players found an exact hold. "
-            f"Group average loss: {easiest['avg_loss']:.2f} pts.</div></div>"
-        )
-    if story_cards:
-        st.markdown("<div class='group-story-grid'>" + "".join(story_cards) + "</div>", unsafe_allow_html=True)
+        if board:
+            st.dataframe(_leaderboard_frame(board), hide_index=True, use_container_width=True)
+        else:
+            st.info("No completed results are available in this group yet.")
+
+        toughest = story.get("toughest")
+        easiest = story.get("easiest")
+        story_cards = []
+        if toughest:
+            q = toughest["question_number"]
+            challenge = challenges[q - 1]
+            story_cards.append(
+                "<div class='group-story-card'><div class='story-kicker'>Today's killer</div>"
+                f"<div class='story-title'>Question {q} · {challenge.get('scenario_name', '')}</div>"
+                f"<div class='story-copy'>{toughest['exact_count']} of {toughest['players']} completed players found an exact hold. "
+                f"Group average loss: {toughest['avg_loss']:.2f} pts.</div></div>"
+            )
+        if easiest:
+            q = easiest["question_number"]
+            challenge = challenges[q - 1]
+            headline = "Unanimous" if easiest["exact_count"] == easiest["players"] else "Most solved"
+            story_cards.append(
+                f"<div class='group-story-card'><div class='story-kicker'>{headline}</div>"
+                f"<div class='story-title'>Question {q} · {challenge.get('scenario_name', '')}</div>"
+                f"<div class='story-copy'>{easiest['exact_count']} of {easiest['players']} completed players found an exact hold. "
+                f"Group average loss: {easiest['avg_loss']:.2f} pts.</div></div>"
+            )
+        if story_cards:
+            st.markdown("<div class='group-story-grid'>" + "".join(story_cards) + "</div>", unsafe_allow_html=True)
 
     practice_col, stay_col = st.columns([1, 1])
     with practice_col:
@@ -2329,7 +2526,7 @@ def render_daily_results():
             st.session_state.app_mode = "Practice"
             st.rerun()
     with stay_col:
-        st.caption("Your completed attempt is saved. Sign back in later to restore today's result and review.")
+        st.caption("Your completed attempt is saved. Return later and the real group standings will refresh as friends finish.")
 
     st.markdown("### Review your 10")
     st.caption("Now that the competitive run is over, every exact answer and teaching explanation is unlocked.")
@@ -2339,7 +2536,6 @@ def render_daily_results():
     st.caption("🔒 This is your one official attempt for today. Its 10 locked answers and final result are stored with your v43B player and cannot be reset.")
 
     render_solver_panel(records)
-
 
 def render_daily_mode():
     if not st.session_state.get("active_player_id"):
