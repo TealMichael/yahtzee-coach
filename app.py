@@ -25,6 +25,8 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
+APP_RELEASE = "v43B Phase 2K"
+APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 APP_ICON_192_PATH = Path(__file__).with_name("home_icon_192.png")
 APP_ICON_512_PATH = Path(__file__).with_name("home_icon_512.png")
@@ -55,7 +57,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2J database preflight is loaded.")
+    st.info("🔧 v43B Phase 2K database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -2165,6 +2167,9 @@ def render_player_identity_gate():
                 "Sign in", type="primary", use_container_width=True
             )
         st.caption("Your PIN is private.")
+        with st.expander("Forgot your PIN?", expanded=False):
+            st.write("PIN recovery isn't available during this beta yet. If you get locked out, contact Mike or the person who invited you so we can help.")
+            st.caption("Never send anyone your PIN — just share your display name when asking for help.")
         if return_submitted:
             try:
                 player = load_daily_store().authenticate_player(return_name, return_pin)
@@ -2455,6 +2460,32 @@ def _daily_solver_record(challenge, solver_record, selected_hold, report):
     }
 
 
+def _participation_streak() -> int:
+    if not st.session_state.get("active_player_id"):
+        return 0
+    try:
+        return int(load_daily_store().current_participation_streak(
+            st.session_state.active_player_id,
+            st.session_state.daily_date_key,
+        ))
+    except Exception as exc:
+        if database_check_enabled():
+            st.caption(f"Streak detail: {type(exc).__name__}: {exc}")
+        return 0
+
+
+def _daily_streak_copy(streak: int, *, completed_today: bool) -> str:
+    streak = max(0, int(streak or 0))
+    if streak <= 0:
+        return ""
+    if completed_today and streak == 1:
+        return "🔥 First Daily complete — your streak has started!"
+    suffix = "day" if streak == 1 else "days"
+    if completed_today:
+        return f"🔥 {streak}-{suffix} Daily streak"
+    return f"🔥 {streak}-{suffix} streak alive — finish today's Daily to keep it going"
+
+
 def render_daily_intro():
     date_key = st.session_state.daily_date_key
     st.markdown(
@@ -2468,14 +2499,32 @@ def render_daily_intro():
         unsafe_allow_html=True,
     )
 
+    streak = _participation_streak()
+    streak_copy = _daily_streak_copy(streak, completed_today=False)
+    if streak_copy:
+        st.caption(streak_copy)
+
     groups = _load_player_groups()
     if groups:
         active = render_group_selector(groups, key="daily_intro_group_selector")
         try:
-            member_count = len(load_daily_store().list_group_members(active.group_id))
+            store = load_daily_store()
+            member_count = len(store.list_group_members(active.group_id))
+            finished_count = len(store.leaderboard(active.group_id, st.session_state.daily_set_id))
         except Exception:
             member_count = 0
-        st.caption(f"👥 Competing in **{active.group_name}**" + (f" · {member_count} members" if member_count else ""))
+            finished_count = 0
+        group_line = f"👥 Competing in **{active.group_name}**"
+        if member_count:
+            group_line += f" · {member_count} member{'s' if member_count != 1 else ''}"
+        if member_count > 1:
+            if finished_count == 0:
+                group_line += " · nobody has finished yet"
+            elif finished_count < member_count:
+                group_line += f" · {finished_count} finished"
+            else:
+                group_line += " · everyone has finished"
+        st.caption(group_line)
 
     if st.button("Start today's Daily Challenge", type="primary", use_container_width=True):
         st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
@@ -2974,10 +3023,15 @@ def render_daily_results():
         f"<div class='daily-result-box'><div class='daily-result-label'>EV Lost</div><div class='daily-result-value'>{summary['total_ev_loss']:.2f}</div><div class='daily-result-sub'>lower is better</div></div>"
         f"<div class='daily-result-box'><div class='daily-result-label'>Exact</div><div class='daily-result-value'>{summary['exact_count']}/10</div></div>"
         f"<div class='daily-result-box'><div class='daily-result-label'>Group Rank</div><div class='daily-result-value'>{rank_value}</div></div>"
-        f"<div class='daily-result-box'><div class='daily-result-label'>Best Streak</div><div class='daily-result-value'>🔥 {summary['best_exact_streak']}</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Best Exact Run</div><div class='daily-result-value'>🔥 {summary['best_exact_streak']}</div></div>"
         "</div>",
         unsafe_allow_html=True,
     )
+
+    participation_streak = _participation_streak()
+    streak_copy = _daily_streak_copy(participation_streak, completed_today=True)
+    if streak_copy:
+        st.caption(streak_copy)
 
     render_daily_share_result(records, summary, rank=rank, completed_count=len(board))
 
@@ -2986,9 +3040,15 @@ def render_daily_results():
         completed = len(board)
         total_members = len(members)
         st.markdown(f"### 🏆 {active_group.group_name}")
-        if rank == 1 and completed > 1:
+        if total_members <= 1:
             st.markdown(
-                f"<div class='daily-rank-banner'><b>You're #1 of {completed} today.</b><br>Lowest total EV lost leads the group.</div>",
+                "<div class='daily-rank-banner'><b>You're the only member so far.</b><br>Invite a friend to turn this into a real leaderboard.</div>",
+                unsafe_allow_html=True,
+            )
+        elif completed == 1 and rank == 1:
+            waiting = max(0, total_members - completed)
+            st.markdown(
+                f"<div class='daily-rank-banner'><b>You're the first to finish today!</b><br>Waiting for {waiting} friend{'s' if waiting != 1 else ''}.</div>",
                 unsafe_allow_html=True,
             )
         elif rank is not None:
@@ -2996,7 +3056,11 @@ def render_daily_results():
                 f"<div class='daily-rank-banner'><b>You're #{rank} of {completed} today.</b><br>Lowest total EV lost leads the group.</div>",
                 unsafe_allow_html=True,
             )
-        st.caption(f"{completed} of {total_members} member{'s' if total_members != 1 else ''} finished today")
+        if total_members > 1 and completed < total_members:
+            waiting = total_members - completed
+            st.caption(f"{completed} of {total_members} finished · waiting for {waiting} more")
+        elif total_members > 1 and completed >= total_members:
+            st.caption("Everyone's in — final standings for today.")
         if board:
             st.dataframe(_leaderboard_frame(board), hide_index=True, use_container_width=True)
 
@@ -3189,6 +3253,51 @@ def render_practice_mode():
     render_solver_panel(st.session_state.solver_history)
 
 
+def render_help_feedback_footer():
+    """Low-profile beta help and feedback inbox."""
+    st.markdown("<div style='height:.55rem'></div>", unsafe_allow_html=True)
+    with st.expander("❓ Help & feedback", expanded=False):
+        st.caption(APP_PUBLIC_VERSION)
+        st.markdown(
+            "**Something confusing, broken, or worth adding?** Send a quick note here. "
+            "Your current app section and beta version are attached automatically."
+        )
+        with st.form("beta_feedback_form", clear_on_submit=True):
+            feedback_type = st.selectbox(
+                "Feedback type",
+                ["Something confusing", "Bug / something broke", "Idea / suggestion", "Account / PIN help"],
+                key="beta_feedback_type",
+            )
+            feedback_message = st.text_area(
+                "What happened?",
+                max_chars=1200,
+                placeholder="A sentence or two is plenty.",
+                key="beta_feedback_message",
+            )
+            submitted = st.form_submit_button("Send feedback", use_container_width=True)
+        st.caption("Please don't include your PIN or other private information.")
+        if submitted:
+            try:
+                load_daily_store().submit_feedback(
+                    player_id=st.session_state.get("active_player_id"),
+                    feedback_type=feedback_type,
+                    message=feedback_message,
+                    app_version=APP_RELEASE,
+                    page_mode=str(st.session_state.get("app_mode") or "Unknown"),
+                )
+            except ValueError as exc:
+                st.error(str(exc))
+            except Exception as exc:
+                st.error("Feedback couldn't be sent right now. Please try again later.")
+                if database_check_enabled():
+                    st.caption(f"Feedback detail: {type(exc).__name__}: {exc}")
+            else:
+                st.success("Thanks — feedback sent!")
+
+        st.markdown("**Forgot your PIN?**")
+        st.write("PIN recovery isn't available during the beta yet. Contact Mike or the person who invited you for help, and only share your display name — never your PIN.")
+
+
 initialize_state()
 initialize_daily_state()
 initialize_player_identity_state()
@@ -3226,3 +3335,5 @@ elif mode == "Practice":
     render_practice_mode()
 else:
     render_install_mode()
+
+render_help_feedback_footer()

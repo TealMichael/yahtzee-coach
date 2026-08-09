@@ -32,6 +32,7 @@ from daily_store import (
     DuplicateAnswer,
     GroupNotFound,
     GroupRecord,
+    FeedbackRecord,
     InvalidOfficialAnswer,
     OutOfOrderAnswer,
     PlayerNameTaken,
@@ -901,3 +902,36 @@ class SupabaseDailyStore:
             streak += 1
             cursor -= timedelta(days=1)
         return streak
+
+
+    def submit_feedback(self, *, player_id: str | None, feedback_type: str, message: str,
+                        app_version: str, page_mode: str) -> FeedbackRecord:
+        if player_id is not None:
+            self._require_player_row(str(player_id))
+        kind = re.sub(r"\s+", " ", str(feedback_type or "").strip())[:40]
+        text = str(message or "").strip()
+        version = re.sub(r"\s+", " ", str(app_version or "").strip())[:80]
+        mode = re.sub(r"\s+", " ", str(page_mode or "").strip())[:80]
+        if not kind:
+            raise ValueError("Choose a feedback type.")
+        if not (3 <= len(text) <= 1200):
+            raise ValueError("Feedback must be 3-1200 characters.")
+        payload = {
+            "player_id": (None if player_id is None else str(player_id)),
+            "feedback_type": kind,
+            "message": text,
+            "app_version": version,
+            "page_mode": mode,
+        }
+        row = _first_row(self.client.table("beta_feedback").insert(payload).execute())
+        if row is None:
+            raise DailyStoreError("Feedback could not be saved.")
+        return FeedbackRecord(
+            feedback_id=str(row["feedback_id"]),
+            player_id=(None if row.get("player_id") is None else str(row["player_id"])),
+            feedback_type=str(row["feedback_type"]),
+            message=str(row["message"]),
+            app_version=str(row.get("app_version") or ""),
+            page_mode=str(row.get("page_mode") or ""),
+            created_at=_as_datetime(row.get("created_at")) or utc_now(),
+        )

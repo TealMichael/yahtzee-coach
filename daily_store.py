@@ -191,6 +191,17 @@ class AnswerRecord:
 
 
 @dataclass(frozen=True)
+class FeedbackRecord:
+    feedback_id: str
+    player_id: str | None
+    feedback_type: str
+    message: str
+    app_version: str
+    page_mode: str
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class ResumeState:
     attempt: AttemptRecord
     answers: tuple[AnswerRecord, ...]
@@ -220,6 +231,8 @@ class DailyStore(Protocol):
     def leaderboard(self, group_id: str, challenge_id: str) -> list[dict]: ...
     def group_question_stats(self, group_id: str, challenge_id: str) -> list[dict]: ...
     def current_participation_streak(self, player_id: str, current_date: str) -> int: ...
+    def submit_feedback(self, *, player_id: str | None, feedback_type: str, message: str,
+                        app_version: str, page_mode: str) -> FeedbackRecord: ...
 
 
 class InMemoryDailyStore:
@@ -238,6 +251,7 @@ class InMemoryDailyStore:
         self.attempts: dict[str, AttemptRecord] = {}
         self.attempt_id_by_player_challenge: dict[tuple[str, str], str] = {}
         self.answers: dict[tuple[str, int], AnswerRecord] = {}
+        self.feedback: list[FeedbackRecord] = []
 
     def _require_player(self, player_id: str) -> _StoredPlayer:
         player = self.players.get(str(player_id))
@@ -567,3 +581,28 @@ class InMemoryDailyStore:
             streak += 1
             cursor -= timedelta(days=1)
         return streak
+
+
+    def submit_feedback(self, *, player_id: str | None, feedback_type: str, message: str,
+                        app_version: str, page_mode: str) -> FeedbackRecord:
+        if player_id is not None:
+            self._require_player(str(player_id))
+        kind = re.sub(r"\s+", " ", str(feedback_type or "").strip())[:40]
+        text = str(message or "").strip()
+        version = re.sub(r"\s+", " ", str(app_version or "").strip())[:80]
+        mode = re.sub(r"\s+", " ", str(page_mode or "").strip())[:80]
+        if not kind:
+            raise ValueError("Choose a feedback type.")
+        if not (3 <= len(text) <= 1200):
+            raise ValueError("Feedback must be 3-1200 characters.")
+        record = FeedbackRecord(
+            feedback_id=str(uuid4()),
+            player_id=(None if player_id is None else str(player_id)),
+            feedback_type=kind,
+            message=text,
+            app_version=version,
+            page_mode=mode,
+            created_at=self._now(),
+        )
+        self.feedback.append(record)
+        return record

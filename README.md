@@ -1,52 +1,45 @@
-# Yahtzee Coach v43B Phase 2J — Player-Facing UI Cleanup + Native Icon Fix
+# Yahtzee Coach v43B Phase 2K — Beta Readiness Pass
 
-This checkpoint cleans the successful v43B feature set into a much more finished player experience.
-No competitive rules, exact-strategy behavior, persistence logic, puzzle composition, sharing logic, or friend-group scoring changed.
+This checkpoint is intentionally small and player-facing. The core Daily, exact strategy, friend groups, saved attempts, sharing, and Practice systems remain unchanged; Phase 2K focuses on making the app easier to hand to a small group of outside testers.
 
-## v43B Phase 2J changes
+## v43B Phase 2K changes
 
-- **Returning Player** is now the first/default sign-in tab; **Create Player** is secondary.
-- The sign-in screen removes version numbers, database/storage language, and implementation notes. It now simply explains the Daily and keeps the reassurance that the player's PIN is private.
-- The signed-in status is reduced to a compact **👤 Player Name · Sign out** treatment instead of repeating identity information several times.
-- The Daily intro removes the prototype/version badge and technical “official attempt” language while keeping the important player rules: same 10 for everyone, automatic saving, review before submission, hidden coaching until the end, and midnight Eastern reset.
-- The completed Daily screen has been reorganized around the order players actually care about:
-  1. **Result** — EV Lost, Exact, Group Rank, Best Streak
-  2. **Spoiler-free share blocks** and Share/Copy controls
-  3. **Friend leaderboard** and compact group insights
-  4. **Review Your 10**
-  5. **Invite & manage friends**
-- The full share-text preview is now collapsed under **Preview shared result** instead of taking over the result page.
-- The completed page removes Challenge ID, 10/10-submitted, 100%-saved, “real v43B results,” database/storage explanations, and similar developer-facing copy.
-- Group insights use friendlier labels such as **Today's Killer** and **Everyone Nailed It**.
-- The final lock message is now simply: **Today's Daily is complete. Come back tomorrow for a new set.**
-- **Review Your 10 is intentionally above Invite & manage friends.**
+- Adds a low-profile **Help & feedback** section at the bottom of the app rather than another prominent home-screen feature.
+- Beta testers can submit **Something confusing**, **Bug / something broke**, **Idea / suggestion**, or **Account / PIN help** feedback directly into the Yahtzee Coach Supabase project.
+- Feedback automatically records the app release and current app section; signed-in feedback is associated with the player's existing ID without asking them to enter private information.
+- The feedback form explicitly warns players **not to include their PIN or other private information**.
+- Returning-player login now includes a small **Forgot your PIN?** explanation. Full PIN recovery is intentionally not implemented yet; testers are told to contact Mike/their inviter without sharing the PIN itself.
+- The existing participation-streak calculation is now surfaced as a lightweight **Daily streak** message before and after the Daily.
+- The within-the-10 exact streak metric is renamed **Best Exact Run** so players do not confuse it with the multi-day Daily streak.
+- Friend leaderboards now have intentional asynchronous states: **first to finish**, **waiting for friends**, **everyone's in / final standings**, and **only member so far**.
+- Before starting the Daily, a group member can see at a glance whether nobody, some friends, or everyone has finished yet without seeing any scores or strategy spoilers.
+- The beta/version label remains tucked inside **Help & feedback** rather than appearing in normal play.
 
-## Home Screen icon fix attempt
+## One-time database migration required
 
-Live testing showed that iPhone successfully added the web app but used the Streamlit logo instead of the chosen teacher-die mascot.
-Phase 2J changes the icon path in two important ways:
+Existing Supabase projects should run `v43b_phase2k_beta_feedback_migration.sql` once before testers use the new feedback form. It creates only the beta feedback inbox and does not alter players, Daily attempts, answers, groups, scoring, or leaderboards.
 
-- The mascot PNG is now set as Streamlit's **native `page_icon` at page startup**, replacing the old dice/Streamlit fallback path.
-- The Apple touch icon metadata now points to the app's **real public GitHub-hosted PNG URL** instead of a temporary data/blob URL that Safari ignored during the previous live test.
-
-The dedicated **📲 Add to Home Screen** navigation page remains secondary to Daily Challenge and Practice.
+The migration is safe to run more than once. A fresh install can use the updated `v43b_schema.sql` directly.
 
 ## What is intentionally NOT changed
 
+- Exact strategy recommendations and scoring are unchanged.
 - Daily puzzle composition/version remains `43A-bank42.6`.
-- Exact strategy and scoring are unchanged.
-- Permanent players, one Daily per player/day, automatic resume, Back/edit-before-submit, friend groups, invite links, live leaderboards, and spoiler-free sharing are unchanged.
-- Practice remains open and account-free.
-- The final Add to Home Screen action is still controlled by the user's browser/operating system.
+- One attempt per player/day and pre-submit Back/edit rules are unchanged.
+- Real friend groups, invite links, leaderboards, and spoiler-free sharing are unchanged.
+- Practice remains account-free.
+- Full self-service PIN reset/recovery is not part of this beta pass.
+- The iPhone Home Screen icon issue remains on the backburner; the browser favicon/custom icon assets remain in place, but Phase 2K does not spend more development time fighting the Streamlit/iOS Web Clip limitation.
 
-## Phase 2J live-test goal
+## Phase 2K live-test goal
 
-1. Confirm the sign-in page opens on **Returning Player** with Create Player on the right.
-2. Confirm normal screens no longer show v43B/Phase/database/storage implementation language.
-3. Open an already-completed Daily and verify the new order: **Result → Share → Friends → Review Your 10 → Invite & manage friends**.
-4. Confirm the full share text is collapsed by default but Share result still sends the correct score.
-5. Remove the existing Streamlit-logo Home Screen shortcut from the phone before testing the icon again.
-6. Open Yahtzee Coach in Safari, use **Share → Add to Home Screen**, and confirm whether the new teacher-die mascot appears in the Add preview and on the Home Screen.
+1. Run the one-time Phase 2K Supabase migration.
+2. Upload the full current app to GitHub.
+3. Confirm **Help & feedback** appears quietly at the bottom rather than competing with Daily/Practice.
+4. Send one test feedback message and confirm it appears in Supabase's `beta_feedback` table.
+5. Complete/return to a Daily and confirm the multi-day **Daily streak** message appears without cluttering the result hero.
+6. Test a group where only one or some members have finished and confirm the waiting language feels natural.
+7. Invite a few friends and let their behavior—not more speculative features—drive the next priorities.
 
 ---
 
