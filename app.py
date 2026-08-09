@@ -16,6 +16,7 @@ from daily_challenge import (
     current_daily_date_key, daily_challenges as get_daily_challenges, group_story,
     summarize_attempt, user_rank,
 )
+from supabase_daily_store import SupabaseDailyStore
 
 st.set_page_config(
     page_title="Yahtzee Coach",
@@ -23,6 +24,31 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="collapsed",
 )
+
+
+@st.cache_resource(show_spinner=False)
+def load_daily_store():
+    """Create the v43B Supabase store from private Streamlit secrets."""
+    return SupabaseDailyStore.from_secrets(st.secrets)
+
+
+def database_check_enabled():
+    """Enable the temporary v43B database smoke-test banner with ?dbcheck=1."""
+    try:
+        value = st.query_params.get("dbcheck", "0")
+    except Exception:
+        return False
+    if isinstance(value, list):
+        value = value[0] if value else "0"
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+if database_check_enabled():
+    try:
+        load_daily_store().health_check()
+        st.success("✅ v43B database connection is working.")
+    except Exception:
+        st.error("❌ v43B database connection failed.")
 
 DICE_FACE = {
     1: "⚀",
