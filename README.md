@@ -1,4 +1,38 @@
-# Yahtzee Coach v43A.1 — Daily Challenge UI Refinement
+# Yahtzee Coach v43B Phase 2A2 — Supabase Connection Preflight
+
+This checkpoint begins the live v43B persistence rollout while preserving the locked
+v43A.1 Daily Challenge and v42.6 Practice strategy behavior.
+
+## v43B Phase 2A2 changes
+
+- Adds the v43B persistence contract in `daily_store.py`.
+- Adds the production Supabase backend in `supabase_daily_store.py`.
+- Adds `supabase` to `requirements.txt`.
+- Includes the Supabase/Postgres schema in `v43b_schema.sql`.
+- Includes the v43B persistence regression suite in `v43b_persistence_tests.py`.
+- Adds a hidden database preflight at `?dbcheck=1`.
+- The preflight now shows an explicit **v43B Phase 2A2 loaded** banner before checking Supabase,
+  making it easy to confirm that Streamlit actually deployed this version.
+- If the database check fails, the developer-only preflight shows the exception type/detail so
+  setup problems can be diagnosed without changing normal player-facing UI.
+
+## What is intentionally NOT changed yet
+
+- No player login/create-player UI is active yet.
+- Daily Challenge still uses the v43A.1 session-local attempt flow and demo leaderboard.
+- Exact solver behavior is unchanged.
+- Daily puzzle composition/version is unchanged.
+- Practice behavior is unchanged.
+
+## v43B deployment status
+
+Supabase tables have been created and Streamlit secrets are expected to contain
+`SUPABASE_URL` and `SUPABASE_SECRET_KEY`. The current checkpoint exists only to verify the
+Streamlit-to-Supabase connection safely before persistent player identity is enabled.
+
+---
+
+## Previous checkpoint: v43A.1
 
 v43A.1 keeps the complete v42.6 Practice experience intact and refines the first
 playable version of **Daily Challenge** after live desktop/mobile feedback.

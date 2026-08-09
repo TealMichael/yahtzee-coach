@@ -44,11 +44,13 @@ def database_check_enabled():
 
 
 if database_check_enabled():
+    st.info("🔧 v43B Phase 2A2 database preflight is loaded.")
     try:
         load_daily_store().health_check()
         st.success("✅ v43B database connection is working.")
-    except Exception:
+    except Exception as exc:
         st.error("❌ v43B database connection failed.")
+        st.caption(f"Database check detail: {type(exc).__name__}: {exc}")
 
 DICE_FACE = {
     1: "⚀",
