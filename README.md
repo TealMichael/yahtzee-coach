@@ -1,3 +1,33 @@
+# Yahtzee Coach v43B Phase 2K.1 — Roll Clarity Quick Fix
+
+This is a deliberately small next-day usability patch based on live beta feedback. The Daily puzzle screen was already working well; the only problem was that some players were overlooking whether a decision came after Roll 1 or Roll 2.
+
+## v43B Phase 2K.1 changes
+
+- Adds a large, consistent roll-stage card **immediately above the Daily dice**.
+- Roll 1 is shown as **🔵 ROLL 1 · First roll** with **2 rerolls remaining**.
+- Roll 2 is shown as **🟢 ROLL 2 · Second roll** with **1 reroll remaining**.
+- Uses distinct blue/green treatments so the stage can be recognized at a glance without redesigning the puzzle screen.
+- Removes the old smaller Daily roll line from the question header so the same information is not duplicated in two places.
+- Back/edit, saved answers, final review, scoring, friend groups, sharing, feedback, streaks, and Practice are unchanged.
+- No new Supabase migration is required for this patch.
+
+## Why this stays intentionally small
+
+The beta group is already successfully using the app. This patch fixes the specific live usability issue without moving the scorecard, dice, progress bar, buttons, or any other established Daily controls.
+
+## Phase 2K.1 live-test goal
+
+1. Upload the full current app to GitHub.
+2. Open tomorrow's Daily Challenge.
+3. Confirm every Roll 1 question shows **ROLL 1 · First roll / 2 rerolls remaining** directly above the dice.
+4. Confirm every Roll 2 question shows **ROLL 2 · Second roll / 1 reroll remaining** in the same location.
+5. Confirm the rest of the Daily flow feels unchanged.
+
+---
+
+## Previous checkpoint
+
 # Yahtzee Coach v43B Phase 2K — Beta Readiness Pass
 
 This checkpoint is intentionally small and player-facing. The core Daily, exact strategy, friend groups, saved attempts, sharing, and Practice systems remain unchanged; Phase 2K focuses on making the app easier to hand to a small group of outside testers.

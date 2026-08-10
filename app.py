@@ -25,7 +25,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K"
+APP_RELEASE = "v43B Phase 2K.1"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 APP_ICON_192_PATH = Path(__file__).with_name("home_icon_192.png")
@@ -57,7 +57,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2K database preflight is loaded.")
+    st.info("🔧 v43B Phase 2K.1 database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -1688,6 +1688,18 @@ st.markdown(
     .daily-progress-percent { color:#6b7280; font-size:0.72rem; text-align:right; margin-bottom:0.58rem; }
     .daily-lock-note { color:#6b7280; font-size:0.78rem; text-align:center; margin:0.3rem 0 0.15rem 0; }
     .daily-flash { border:1px solid #bbf7d0; background:#f0fdf4; color:#166534 !important; border-radius:12px; padding:0.46rem 0.62rem; font-weight:800; font-size:0.82rem; margin:0.3rem 0; }
+    .daily-roll-stage {
+        border-radius:16px;
+        padding:0.68rem 0.78rem;
+        margin:0.38rem 0 0.52rem 0;
+        text-align:center;
+        border:2px solid transparent;
+        box-shadow:0 2px 8px rgba(0,0,0,0.04);
+    }
+    .daily-roll-stage.roll-1 { background:#eff6ff; border-color:#93c5fd; color:#1d4ed8 !important; }
+    .daily-roll-stage.roll-2 { background:#f0fdf4; border-color:#86efac; color:#15803d !important; }
+    .daily-roll-stage-title { font-size:1.08rem; font-weight:950; letter-spacing:.015em; line-height:1.05; }
+    .daily-roll-stage-sub { font-size:.82rem; font-weight:800; margin-top:.18rem; opacity:.9; }
     .daily-result-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.4rem; margin:0.6rem 0; }
     .daily-result-box { border:1px solid rgba(127,127,127,.22); border-radius:15px; background:#f8fafc; padding:0.58rem 0.42rem; text-align:center; color:#111827 !important; }
     .daily-result-label { color:#6b7280 !important; font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.035em; }
@@ -2671,12 +2683,27 @@ def render_daily_question():
         "<div class='soft-card'>"
         f"<span class='scenario-pill'>Daily {index + 1}/10</span>"
         "<div class='muted'>No strategy label or difficulty hint is shown during the official run.</div>"
-        f"<div class='round-line'>Roll {challenge['roll_number']} of 3 · {challenge.get('rolls_remaining', 3 - challenge['roll_number'])} roll(s) remaining</div>"
         "</div>",
         unsafe_allow_html=True,
     )
 
     render_scorecard(challenge["scorecard"])
+    roll_number = int(challenge["roll_number"])
+    if roll_number == 1:
+        roll_stage_class = "roll-1"
+        roll_stage_title = "🔵 ROLL 1 · First roll"
+        roll_stage_sub = "2 rerolls remaining"
+    else:
+        roll_stage_class = "roll-2"
+        roll_stage_title = "🟢 ROLL 2 · Second roll"
+        roll_stage_sub = "1 reroll remaining"
+    st.markdown(
+        f"<div class='daily-roll-stage {roll_stage_class}'>"
+        f"<div class='daily-roll-stage-title'>{roll_stage_title}</div>"
+        f"<div class='daily-roll-stage-sub'>{roll_stage_sub}</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
     st.markdown("<div class='section-label'>Tap dice to hold</div>", unsafe_allow_html=True)
     st.markdown(
         "<div class='dice-help'>Your choice is saved when you move forward. You can use Back and revise any saved answer until final submission; no coaching is revealed.</div>",
