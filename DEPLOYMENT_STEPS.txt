@@ -1,6 +1,7 @@
-Yahtzee Coach v43B Phase 2K.1 — FULL CURRENT APP deployment
+Yahtzee Coach v43B Phase 2K.2 — FULL CURRENT APP deployment
 
-This is a quick Roll 1 / Roll 2 clarity patch. There is NO new Supabase step.
+This combined release replaces the need to upload Phase 2K.1.1 separately.
+There is NO new Supabase step.
 
 UPLOAD TO GITHUB
 1. Open the UPLOAD_TO_GITHUB folder from the release ZIP.
@@ -10,26 +11,22 @@ UPLOAD TO GITHUB
 5. Commit directly to main.
 
 COPY/PASTE COMMIT MESSAGE:
-v43B Phase 2K.1 - make Roll 1 and Roll 2 impossible to miss
+v43B Phase 2K.2 - clarify rolls and clean up Practice UI
 
 6. Wait for Streamlit Community Cloud to redeploy.
-7. Open the normal app and start / resume a Daily question.
+7. Test Open Practice without signing in, then submit one Practice puzzle.
 
-EXPECTED PHASE 2K.1 BEHAVIOR
-- Roll 1 Daily questions show a blue card directly above the dice:
-  ROLL 1 · First roll
-  2 rerolls remaining
-- Roll 2 Daily questions show a green card in the exact same location:
-  ROLL 2 · Second roll
-  1 reroll remaining
-- The scorecard, dice selection, Back button, Save/Next flow, and no-feedback rules are otherwise unchanged.
-
-OPTIONAL DATABASE PREFLIGHT
-https://teals-yahtzee-coach.streamlit.app/?dbcheck=1
-Expected: v43B Phase 2K.1 database preflight + green connection message.
+EXPECTED PHASE 2K.2 BEHAVIOR
+- Open Practice without signing in works without the Streamlit state error.
+- Practice begins with the current puzzle rather than a large session dashboard.
+- Roll 1 / Roll 2 is shown clearly with rerolls remaining.
+- Practice keeps scenario context, scorecard, dice selection, and immediate coaching.
+- Next Practice Puzzle is the main post-coaching action.
+- Session statistics, badges, Session Coach, and mastery remain available under See my practice progress.
+- Daily Roll 1 / Roll 2 clarity remains unchanged.
 
 IMPORTANT
-- No new Supabase SQL is required for this phase.
-- If Phase 2K beta feedback was already installed, do not run anything again for this quick patch.
-- The exact solver, exact policy, Daily puzzle bank, scoring, and Practice behavior are unchanged.
+- No new Supabase SQL is required.
+- Do not rerun old migrations for this release.
+- The exact solver, exact policy, Daily puzzle bank, Practice generator, scoring, persistence, social features, and sharing are unchanged.
 - __pycache__ and .pyc files are intentionally excluded from the release.

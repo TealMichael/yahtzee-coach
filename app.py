@@ -25,7 +25,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.1"
+APP_RELEASE = "v43B Phase 2K.2"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 APP_ICON_192_PATH = Path(__file__).with_name("home_icon_192.png")
@@ -57,7 +57,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2K.1 database preflight is loaded.")
+    st.info("🔧 v43B Phase 2K.2 database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -231,6 +231,29 @@ st.markdown(
         font-weight:800;
         margin:0.65rem 0 0.32rem 0;
     }
+    .practice-hero {
+        border:1px solid #dbeafe;
+        background:linear-gradient(135deg,#f8fbff 0%,#ffffff 78%);
+        border-radius:18px;
+        padding:0.72rem 0.82rem;
+        margin:0.42rem 0 0.55rem 0;
+        color:#111827 !important;
+    }
+    .practice-title { font-size:1.18rem; font-weight:950; line-height:1.1; }
+    .practice-subtitle { color:#64748b !important; font-size:0.84rem; margin-top:0.14rem; }
+    .practice-puzzle-card {
+        border:1px solid rgba(127,127,127,0.20);
+        border-radius:16px;
+        padding:0.7rem 0.78rem;
+        background:#fff;
+        margin:0.42rem 0 0.38rem 0;
+        color:#111827 !important;
+    }
+    .practice-scenario { font-size:1.03rem; font-weight:950; line-height:1.2; }
+    .practice-description { color:#64748b !important; font-size:0.84rem; line-height:1.35; margin-top:0.18rem; }
+    .practice-score-label { margin-top:0.7rem; }
+    .practice-question { font-size:1.02rem; font-weight:950; margin:0.72rem 0 0.12rem 0; color:#111827; }
+
     .scenario-pill {
         display:inline-flex;
         align-items:center;
@@ -2146,6 +2169,11 @@ def start_persistent_daily_attempt() -> bool:
         return False
 
 
+def _set_app_mode(mode: str):
+    """Widget callback: switch the top navigation safely before the next rerun renders it."""
+    st.session_state.app_mode = mode
+
+
 def render_player_identity_gate():
     """Create or restore the player used for Daily Challenge."""
     st.markdown(
@@ -2237,9 +2265,13 @@ def render_player_identity_gate():
                     _activate_player(player, created=True)
                     st.rerun()
 
-    if st.button("Open Practice without signing in", use_container_width=True, key="identity_to_practice"):
-        st.session_state.app_mode = "Practice"
-        st.rerun()
+    st.button(
+        "Open Practice without signing in",
+        use_container_width=True,
+        key="identity_to_practice",
+        on_click=_set_app_mode,
+        args=("Practice",),
+    )
 
 
 def render_player_status_bar():
@@ -2543,9 +2575,12 @@ def render_daily_intro():
         if start_persistent_daily_attempt():
             st.rerun()
 
-    if st.button("Open Practice", use_container_width=True):
-        st.session_state.app_mode = "Practice"
-        st.rerun()
+    st.button(
+        "Open Practice",
+        use_container_width=True,
+        on_click=_set_app_mode,
+        args=("Practice",),
+    )
 
     with st.expander("How the Daily Challenge works", expanded=False):
         st.markdown(
@@ -3135,9 +3170,14 @@ def render_daily_results():
 
     st.caption("🔒 Today's Daily is complete. Come back tomorrow for a new set.")
 
-    if st.button("🎯 Go to open Practice", type="primary", use_container_width=True, key="daily_to_practice"):
-        st.session_state.app_mode = "Practice"
-        st.rerun()
+    st.button(
+        "🎯 Go to open Practice",
+        type="primary",
+        use_container_width=True,
+        key="daily_to_practice",
+        on_click=_set_app_mode,
+        args=("Practice",),
+    )
 
     # Explicitly below Review Your 10, per the player-facing hierarchy.
     render_friend_group_hub(expanded=active_group is None)
@@ -3173,15 +3213,22 @@ def render_practice_mode():
     round_id = st.session_state.round_id
     history = st.session_state.history
 
+    st.markdown(
+        "<div class='practice-hero'>"
+        "<div class='practice-title'>🎯 Practice</div>"
+        "<div class='practice-subtitle'>Unlimited practice · instant coaching after every decision</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
     if st.session_state.get("daily_completed") and len(st.session_state.get("daily_answers", [])) >= 10:
-        st.markdown(
-            "<div class='daily-rank-banner'><b>🏆 Today's Daily Challenge is complete.</b><br>"
-            "Your result and leaderboard are still available.</div>",
-            unsafe_allow_html=True,
+        st.button(
+            "🏆 Daily complete · View leaderboard",
+            use_container_width=True,
+            key="practice_to_daily_results",
+            on_click=_set_app_mode,
+            args=("Daily Challenge",),
         )
-        if st.button("View today's Daily leaderboard", use_container_width=True, key="practice_to_daily_results"):
-            st.session_state.app_mode = "Daily Challenge"
-            st.rerun()
 
     if st.session_state.get("scroll_to_top", False):
         components.html("""
@@ -3198,27 +3245,42 @@ def render_practice_mode():
             """, height=0)
         st.session_state.scroll_to_top = False
 
-    render_session_progress(history, st.session_state.solver_history)
-
     roll_number = challenge["roll_number"]
     dice = challenge["dice"]
     scorecard = challenge["scorecard"]
     answer_submitted = st.session_state.report is not None
+    rolls_remaining = int(challenge.get("rolls_remaining", 3 - roll_number))
 
     st.markdown(
         f"""
-        <div class='soft-card'>
-            <span class='scenario-pill'>{challenge.get('scenario_name', 'Practice Round')}</span>
-            <div class='muted'>{challenge.get('scenario_description', '')}</div>
-            <div class='round-line'>Roll {roll_number} of 3 · {challenge.get('rolls_remaining', 3 - roll_number)} roll(s) remaining</div>
+        <div class='practice-puzzle-card'>
+            <div class='practice-scenario'>{challenge.get('scenario_name', 'Practice Round')}</div>
+            <div class='practice-description'>{challenge.get('scenario_description', '')}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
+    roll_class = "roll-1" if int(roll_number) == 1 else "roll-2"
+    roll_label = "First roll" if int(roll_number) == 1 else "Second roll"
+    reroll_word = "reroll" if rolls_remaining == 1 else "rerolls"
+    st.markdown(
+        f"""
+        <div class='daily-roll-stage {roll_class}'>
+            <div class='daily-roll-stage-title'>🎲 ROLL {roll_number} · {roll_label}</div>
+            <div class='daily-roll-stage-sub'>{rolls_remaining} {reroll_word} remaining</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<div class='section-label practice-score-label'>Your scorecard</div>", unsafe_allow_html=True)
     render_scorecard(scorecard)
-    st.markdown("<div class='section-label'>Tap dice to hold</div>", unsafe_allow_html=True)
-    st.markdown("<div class='dice-help'>Tap each die you want to keep. Red dice are held. Leave all unselected to reroll everything.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='practice-question'>Which dice would you keep?</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='dice-help'>Tap dice to keep them. Leave all five unselected to reroll everything.</div>",
+        unsafe_allow_html=True,
+    )
 
     held_key = f"held_indices_{round_id}"
     if held_key not in st.session_state:
@@ -3267,18 +3329,20 @@ def render_practice_mode():
 
     if st.session_state.report:
         render_result(st.session_state.report)
-        render_new_badges()
-        render_session_coach(st.session_state.solver_history)
-        render_practice_momentum(st.session_state.solver_history)
-        if st.button("Next round", type="primary", use_container_width=True):
+        if st.button("Next Practice Puzzle →", type="primary", use_container_width=True):
             new_round(scroll_to_top=True)
             st.rerun()
+
+        with st.expander("📈 See my practice progress", expanded=False):
+            render_session_progress(history, st.session_state.solver_history)
+            render_new_badges()
+            render_session_coach(st.session_state.solver_history)
+            render_practice_momentum(st.session_state.solver_history)
 
     if history:
         with st.expander("Session history", expanded=False):
             st.dataframe(pd.DataFrame(history), hide_index=True, use_container_width=True)
     render_solver_panel(st.session_state.solver_history)
-
 
 def render_help_feedback_footer():
     """Low-profile beta help and feedback inbox."""

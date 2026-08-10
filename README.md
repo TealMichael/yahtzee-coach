@@ -1,3 +1,62 @@
+# Yahtzee Coach v43B Phase 2K.2 — Practice UI Cleanup + Roll Clarity Bundle
+
+This release combines the already-approved **Roll 1 / Roll 2 clarity fix** and **Practice navigation hotfix** with a focused Practice-mode UI cleanup, so only one upload is needed.
+
+## v43B Phase 2K.2 changes
+
+- Keeps the Daily puzzle roll-stage card: **ROLL 1 · First roll / 2 rerolls remaining** and **ROLL 2 · Second roll / 1 reroll remaining**.
+- Keeps the Streamlit callback hotfix that prevents **Open Practice without signing in** from crashing.
+- Practice now opens with a clean **Practice** header and the simple promise: **Unlimited practice · instant coaching after every decision**.
+- If today's Daily is complete, the crossover is reduced to one compact **Daily complete · View leaderboard** button instead of a large banner.
+- The session dashboard no longer appears above the current puzzle.
+- Practice now prioritizes the learning loop: **scenario → roll stage → scorecard → choose dice → submit → coaching → next puzzle**.
+- The scenario name and short description remain visible because Practice is the teaching mode.
+- Practice uses the same prominent blue/green Roll 1 / Roll 2 indicator as Daily.
+- Dice instructions are shortened to one line: tap dice to keep them; leave all unselected to reroll everything.
+- After coaching, **Next Practice Puzzle →** is the primary action.
+- Session grade, exact-rate progress, badges, Session Coach, and strategy mastery move into a collapsed **See my practice progress** section below the primary next-puzzle action.
+- Session history remains collapsed at the bottom.
+- Exact solver behavior, Practice puzzle generation, grading, coaching content, Daily behavior, persistence, friend groups, streaks, feedback, and sharing are unchanged.
+- No Supabase migration is required.
+
+## Phase 2K.2 live-test goal
+
+1. Upload this one full package instead of installing Phase 2K.1.1 separately.
+2. While signed out, press **Open Practice without signing in** and confirm Practice opens normally.
+3. Confirm Practice feels cleaner and the current puzzle is the first thing that matters.
+4. Submit a hold and confirm coaching appears immediately.
+5. Confirm **Next Practice Puzzle →** appears before the optional Practice progress dashboard.
+6. Open **See my practice progress** and confirm the existing session stats, badges, Session Coach, and mastery tools are still available.
+7. On tomorrow's Daily, confirm Roll 1 / Roll 2 remains impossible to miss.
+
+---
+
+## Previous checkpoint
+
+# Yahtzee Coach v43B Phase 2K.1.1 — Practice Navigation Hotfix
+
+This is a small production hotfix on top of the Roll Clarity release. A live beta test exposed a Streamlit navigation-state crash when an unsigned player pressed **Open Practice without signing in**.
+
+## v43B Phase 2K.1.1 changes
+
+- Fixes **Open Practice without signing in** so it safely switches to Practice instead of raising a StreamlitAPIException.
+- Applies the same safe navigation pattern to every in-app Daily ↔ Practice shortcut so the same bug cannot appear from another button later.
+- Keeps the Phase 2K.1 Roll 1 / Roll 2 clarity card exactly as shipped.
+- No Daily, strategy, scoring, persistence, social, sharing, feedback, streak, or puzzle-generation behavior changed.
+- No Supabase migration is required.
+
+## Phase 2K.1.1 live-test goal
+
+1. Upload the full current app to GitHub.
+2. Open the app while signed out.
+3. Press **Open Practice without signing in** and confirm Practice opens normally.
+4. If today's Daily is already complete, test **Go to open Practice** and **View today's Daily leaderboard** as well.
+5. Confirm the Roll 1 / Roll 2 clarity card is still present on Daily puzzles.
+
+---
+
+## Previous checkpoint
+
 # Yahtzee Coach v43B Phase 2K.1 — Roll Clarity Quick Fix
 
 This is a deliberately small next-day usability patch based on live beta feedback. The Daily puzzle screen was already working well; the only problem was that some players were overlooking whether a decision came after Roll 1 or Roll 2.
