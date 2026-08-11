@@ -1,29 +1,28 @@
-Yahtzee Coach v43B Phase 2K.2 test summary
+Yahtzee Coach v43B Phase 2K.3 test summary
 
-All 26 automated test suites passed.
+All 27 automated test suites passed across the combined validation run.
 
-Key release checks:
+Highlights:
+- New coaching clarity regression: 12/12
 - Practice UI cleanup: 15/15
 - Practice navigation hotfix: 8/8
 - Roll clarity: 10/10
 - Beta readiness: 19/19
 - Daily integration: 17/17
-- Daily Challenge logic: 11/11
+- Daily logic: 11/11
 - UI/mobile protections: 14/14
 - Practice UI protections: 12/12
-- v43B persistence: 28/28
+- Persistence: 28/28
 - Player identity: 14/14
 - Persistent Daily UI: 19/19
 - Real friend groups/social: 14/14
 - Invite/back/edit usability: 18/18
 - Player-facing UI cleanup: 14/14
 - Spoiler-free sharing: 18/18
-- Home-screen/icon protections: 8/8
 - Strategy regressions/playtest protections: 26/26
 - Published strategy tests: 15/15
 - Expanded exact-policy audit: 3,669,120 legal hold values
 - Exact routing sample: 840/840
 - Expanded Practice sample: 20,000/20,000 exact
-- Puzzle-bank / Daily readiness tests: all pass
 
-No strategy, scoring, persistence, Daily composition, or Practice generation behavior changed in this release.
+No exact strategy value or recommendation was changed by this release.

@@ -691,6 +691,118 @@ def _personalized_comparison(
     )
     return user_idea, best_idea, adjustment
 
+def _simple_why(
+    scorecard: Mapping[str, int | None],
+    user_hold: Sequence[int],
+    optimal_hold: Sequence[int],
+    *,
+    roll_number: int,
+    is_optimal: bool,
+    visible_reason: str,
+) -> str:
+    """Give one short, concrete explanation of why the exact hold fits this board.
+
+    The exact table still proves the ranking.  This helper only translates the
+    visible scorecard/dice tradeoff into player-friendly language.
+    """
+    user = canonical(user_hold)
+    optimal = canonical(optimal_hold)
+
+    if is_optimal:
+        return f"Your hold is already the exact best play. {visible_reason}"
+
+    user_counts = {face: user.count(face) for face in range(1, 7)}
+    optimal_counts = {face: optimal.count(face) for face in range(1, 7)}
+    user_pair_faces = [face for face, count in user_counts.items() if count >= 2]
+    optimal_distinct = sorted(set(optimal))
+
+    # Common human trap: keep a closed-number pair even though the remaining
+    # board strongly rewards distinct straight anchors.  This is the exact
+    # pattern from the 1,1,3,3,5 / keep 3,3 playtest case.
+    if (
+        roll_number == 2
+        and len(user_pair_faces) == 1
+        and len(optimal) >= 2
+        and len(optimal_distinct) == len(optimal)
+        and (_is_open(scorecard, "small_straight") or _is_open(scorecard, "large_straight"))
+    ):
+        face = user_pair_faces[0]
+        upper = UPPER_BY_FACE[face]
+        pair_support_open = [
+            category for category in (upper, "three_of_a_kind", "full_house")
+            if _is_open(scorecard, category)
+        ]
+        straight_names = [
+            CATEGORY_LABELS[category]
+            for category in ("small_straight", "large_straight")
+            if _is_open(scorecard, category)
+        ]
+        matching_upside = [
+            CATEGORY_LABELS[category]
+            for category in ("four_of_a_kind", "yahtzee")
+            if _is_open(scorecard, category)
+        ]
+
+        if not pair_support_open and straight_names:
+            closed_bits = [CATEGORY_LABELS[upper], "Three of a Kind", "Full House"]
+            if not _is_open(scorecard, "chance"):
+                closed_bits.append("Chance")
+            closed_text = ", ".join(closed_bits[:-1]) + f", and {closed_bits[-1]}" if len(closed_bits) > 1 else closed_bits[0]
+            matching_text = _join_paths(matching_upside) if matching_upside else "a narrow matching-dice payoff"
+            straight_text = _join_paths(straight_names)
+            return (
+                f"Your pair of {face}s looks strong, but {closed_text} are already filled, so that pair mostly chases {matching_text}. "
+                f"Keeping {_format_faces(optimal_distinct)} instead gives you two different anchors for the open {straight_text} boxes with {5 - len(optimal)} fresh dice."
+            )
+
+    # If the exact answer is a clearly visible straight core, say so directly.
+    straight_name, straight_core = _straight_core(optimal, scorecard)
+    if straight_name and straight_core >= 3 and len(set(optimal)) >= 3:
+        if user_pair_faces:
+            return (
+                f"Your hold leans on matching dice, but the open {straight_name} box rewards distinct connected numbers. "
+                f"The exact hold keeps {straight_core} useful straight numbers and rerolls the pieces that do less for that path."
+            )
+        return (
+            f"The exact hold keeps {straight_core} distinct numbers that already fit the open {straight_name} path. "
+            f"That gives the remaining reroll more useful ways to finish the hand."
+        )
+
+    # When the exact answer is a pair that directly matches an open upper box,
+    # make that scorecard connection explicit.
+    optimal_pair_faces = [face for face, count in optimal_counts.items() if count >= 2]
+    if len(optimal_pair_faces) == 1:
+        face = optimal_pair_faces[0]
+        upper = UPPER_BY_FACE[face]
+        if _is_open(scorecard, upper):
+            extra_paths = [
+                CATEGORY_LABELS[c]
+                for c in ("three_of_a_kind", "four_of_a_kind", "yahtzee")
+                if _is_open(scorecard, c)
+            ]
+            extra = f" and can still grow toward {_join_paths(extra_paths[:2])}" if extra_paths else ""
+            return (
+                f"The pair of {face}s lines up directly with the open {CATEGORY_LABELS[upper]} box{extra}. "
+                "That makes the pair more useful on this scorecard than a prettier-looking loose pattern."
+            )
+
+    # A singleton exact hold is usually a scorecard/flexibility lesson.
+    if len(optimal) == 1:
+        face = optimal[0]
+        upper = UPPER_BY_FACE[face]
+        if _is_open(scorecard, upper):
+            return (
+                f"{CATEGORY_LABELS[upper]} is still open, so the {face} has a direct scoring job. "
+                "The other dice are more valuable as fresh rerolls than as a weak partial pattern."
+            )
+
+    # Generic fallback stays concrete by contrasting the player's visible plan
+    # with the exact hold rather than repeating solver jargon.
+    user_plan = _hold_intent(user, scorecard)
+    best_plan = _hold_intent(optimal, scorecard)
+    return f"{user_plan} The exact hold works better here because {best_plan[0].lower() + best_plan[1:]}"
+
+
 def _closeness_line(points_lost: float, is_optimal: bool) -> str:
     if is_optimal:
         return "Exact best play: no legal hold has a higher full-game expected score."
@@ -767,6 +879,14 @@ def build_exact_report(
         points_lost=points_lost,
         is_optimal=is_optimal,
     )
+    simple_why = _simple_why(
+        scorecard,
+        user_hold,
+        display_optimal,
+        roll_number=roll_number,
+        is_optimal=is_optimal,
+        visible_reason=visible_reason,
+    )
 
     if is_optimal:
         recommendation = f"Yes — {hold_text(display_optimal)}. {visible_reason}"
@@ -799,6 +919,9 @@ def build_exact_report(
         f"- Your idea: {user_idea}",
         f"- Best idea: {best_idea}",
         f"- Adjustment: {adjustment}",
+        "",
+        "Simple why:",
+        f"- {simple_why}",
         "",
         "How close was it?",
         f"- {closeness}",
@@ -859,6 +982,7 @@ def build_exact_report(
         "user_idea": user_idea,
         "best_idea": best_idea,
         "adjustment": adjustment,
+        "simple_why": simple_why,
         "lookup_ms": (perf_counter() - started) * 1000.0,
     }
     return "\n".join(report), metadata

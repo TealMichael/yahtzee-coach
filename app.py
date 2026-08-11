@@ -25,7 +25,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.2"
+APP_RELEASE = "v43B Phase 2K.3"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 APP_ICON_192_PATH = Path(__file__).with_name("home_icon_192.png")
@@ -57,7 +57,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2K.2 database preflight is loaded.")
+    st.info("🔧 v43B Phase 2K.3 database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -1600,6 +1600,7 @@ def render_result(report):
     closeness_items = extract_section(report, "How close was it?")
     idea_items = extract_section(report, "Your idea vs. best idea:")
     takeaway_items = extract_section(report, "Teaching takeaway:")
+    simple_why_items = extract_section(report, "Simple why:")
     note_items = extract_section(report, "Narrow upper-box note:")
     top_holds = extract_section(report, "Top exact holds:")
     grade_class = GRADE_BADGE_CLASS.get(grade, "grade-b")
@@ -1633,7 +1634,7 @@ def render_result(report):
 
     what_went_well = good_items[0] if good_items else (user_idea or "Your hold had a clear strategic target.")
     what_changes = adjustment or (why_items[0] if why_items else "Compare your hold with the exact best hold above.")
-    why_it_matters = why_items[0] if why_items else (best_idea or recommendation or "The exact solver compares every legal hold through the rest of the game.")
+    why_it_matters = simple_why_items[0] if simple_why_items else (why_items[0] if why_items else (best_idea or recommendation or "The exact solver compares every legal hold through the rest of the game."))
     if what_changes == why_it_matters and len(why_items) > 1:
         why_it_matters = why_items[1]
 
@@ -3039,11 +3040,15 @@ def _daily_review_item(answer):
             "</div>",
             unsafe_allow_html=True,
         )
+        simple_why_items = extract_section(report, "Simple why:")
+        simple_why = simple_why_items[0] if simple_why_items else record.get("simple_why", "")
+        if simple_why:
+            st.markdown(f"**💡 Why this wins:** {simple_why}")
         if lesson:
-            st.markdown(f"**🧠 Key lesson:** {lesson}")
+            st.markdown(f"**🧠 Remember:** {lesson}")
         idea = record.get("adjustment", "")
         if idea:
-            st.markdown(f"**Adjustment:** {idea}")
+            st.markdown(f"**Try this instead:** {idea}")
         top_holds = extract_section(report, "Top exact holds:")
         if top_holds:
             st.markdown("**Top exact holds**")

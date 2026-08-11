@@ -1,3 +1,31 @@
+# Yahtzee Coach v43B Phase 2K.3 — Clearer Coaching Explanations
+
+This is a focused teaching-language refinement on top of the successful Phase 2K.2 Practice cleanup. Strategy rankings, exact values, puzzle generation, Daily rules, and social/persistence behavior are unchanged.
+
+## v43B Phase 2K.3 changes
+
+- Adds a new **Simple why** coaching layer to exact-mode reports.
+- Coaching now directly connects the player's tempting hold to the **boxes that are still open or already filled** instead of relying on abstract phrases such as “preserve flexibility.”
+- Common pair-vs-straight traps now explain why the pair has lost value on that specific scorecard and why distinct straight anchors create more useful paths.
+- The exact playtest example `1,1,3,3,5` with the 3s / 3K / Full House / Chance already filled now explains that **keep 3,3 mostly chases Four of a Kind / Yahtzee, while keep 3,5 keeps both straight boxes alive with three fresh dice**.
+- Practice's **Why it matters** coaching box uses the new concrete explanation automatically.
+- Completed Daily review now shows **💡 Why this wins** before the broader takeaway.
+- Daily review labels are simplified to **🧠 Remember** and **Try this instead**.
+- Existing full exact math, Top exact holds, EV loss, and detailed report remain available.
+- No Supabase migration is required.
+
+## Phase 2K.3 live-test goal
+
+1. Upload the full current app to GitHub.
+2. In Practice, intentionally choose a reasonable-looking but non-optimal hold.
+3. Confirm **Why it matters** explains the scorecard tradeoff in plain language.
+4. Open a completed Daily question and confirm **💡 Why this wins** gives the same kind of concrete explanation.
+5. Confirm the exact hold, EV loss, grades, and Top exact holds are unchanged.
+
+---
+
+## Previous checkpoint
+
 # Yahtzee Coach v43B Phase 2K.2 — Practice UI Cleanup + Roll Clarity Bundle
 
 This release combines the already-approved **Roll 1 / Roll 2 clarity fix** and **Practice navigation hotfix** with a focused Practice-mode UI cleanup, so only one upload is needed.
