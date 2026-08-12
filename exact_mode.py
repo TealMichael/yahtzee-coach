@@ -472,15 +472,21 @@ def _visible_strategy_reason(
                 context = " and the 35-point upper bonus is still reachable"
             else:
                 context = "; the upper bonus is no longer reachable, so the pair has to justify itself without that 35-point incentive"
+            if bonus["earned"]:
+                takeaway = "The upper bonus is already safe. Keep upper dice only when their open box or the remaining matching boxes still make them valuable."
+            elif bonus["alive"]:
+                takeaway = "When the upper bonus is still reachable, a pair that matches an open upper box can do two jobs: build that box and support matching hands."
+            else:
+                takeaway = "A dead upper bonus does not make upper dice worthless; it only removes the 35-point incentive. Keep them only when the boxes that remain still reward that number."
             return (
                 f"Build the {CATEGORY_LABELS[upper]} box",
                 f"The exact hold protects a pair of {face}s while the {CATEGORY_LABELS[upper]} box is open{context}.",
-                "Pairs are worth more when they line up with an open upper box and the rest of the scorecard still rewards that number.",
+                takeaway,
             )
         return (
             "Keep the best matching base",
             f"The exact hold protects a pair of {face}s and rerolls the loose dice, preserving a clearer path to a stronger matching hand.",
-            "A clean pair often gives future rolls a better target than several unrelated single dice.",
+            "If the matching upper box is closed, judge a pair by the lower-section boxes it can still reach—not just by the fact that two dice match.",
         )
 
     if len(hold) == 1:
@@ -493,15 +499,21 @@ def _visible_strategy_reason(
                 upper_context = "the upper bonus is still reachable"
             else:
                 upper_context = "the upper bonus is out of reach, so this die must earn its keep from the remaining scorecard alone"
+            if bonus["earned"]:
+                takeaway = "Once the upper bonus is secured, an upper die has to earn its place through the boxes that remain. Read the open boxes, not just the dice."
+            elif bonus["alive"]:
+                takeaway = "When the upper bonus is still reachable, one useful upper die can be worth protecting if it also keeps enough fresh dice for the rest of the board. Read the open boxes, not just the dice."
+            else:
+                takeaway = "When the upper bonus is dead, do not keep an upper die for 63. Keep it only if that die still helps the remaining boxes. Read the open boxes, not just the dice."
             return (
                 "Let the scorecard choose the die",
                 f"The exact solver keeps the {face} because {CATEGORY_LABELS[upper]} is still open and {upper_context}; the other dice are worth more as fresh rerolls in this scorecard state.",
-                "Late or constrained scorecards can make one useful upper die better than a visually nicer pattern. Read the open boxes, not just the dice.",
+                takeaway,
             )
         return (
             "Keep flexibility",
             f"The exact solver keeps only the {face}, which means the rest of this roll is worth more as fresh dice than as a partial pattern in the current scorecard.",
-            "When no partial pattern is strong enough, keeping fewer dice can create more ways to improve.",
+            "A lone die can be correct when keeping extra dice would lock you into a weak route. More fresh dice means more chances to find the boxes the scorecard still needs.",
         )
 
     if not hold:
@@ -512,9 +524,9 @@ def _visible_strategy_reason(
         )
 
     return (
-        "Keep the most useful flexibility",
-        "The exact hold keeps the dice that fit the remaining scorecard best while releasing the weaker pieces for another chance to improve.",
-        "The best hold is about the interaction between the dice and the open boxes, not just the prettiest pattern on the table.",
+        "Match the hold to the open boxes",
+        "The exact hold keeps the dice that connect to the remaining scoring boxes and rerolls the pieces that do not add enough value.",
+        "When no obvious pair, triple, or straight decides the play, compare which open boxes each hold can actually reach and how many fresh dice it leaves you.",
     )
 
 
@@ -691,7 +703,74 @@ def _personalized_comparison(
     )
     return user_idea, best_idea, adjustment
 
-def _simple_why(
+def _open_category_keys(scorecard: Mapping[str, int | None]) -> list[str]:
+    return [category for category in CATEGORIES if _is_open(scorecard, category)]
+
+
+def _fresh_dice_text(count: int) -> str:
+    count = int(count)
+    return "1 fresh die" if count == 1 else f"{count} fresh dice"
+
+
+def _rerolls_text(count: int) -> str:
+    count = int(count)
+    return "1 reroll" if count == 1 else f"{count} rerolls"
+
+
+def _live_paths_for_hold(
+    hold: Sequence[int],
+    scorecard: Mapping[str, int | None],
+    *,
+    limit: int = 4,
+) -> list[str]:
+    """Name visible scoring destinations supported by a hold.
+
+    This is teaching language only.  The exact DP table still determines value.
+    We deliberately name only paths a player can see from the current dice and
+    scorecard so explanations stay concrete instead of sounding like solver jargon.
+    """
+    held = canonical(hold)
+    if not held:
+        return []
+
+    counts = {face: held.count(face) for face in range(1, 7)}
+    max_count = max(counts.values(), default=0)
+    paths: list[str] = []
+
+    # Open upper boxes directly supported by held faces.
+    for face in sorted(set(held), reverse=True):
+        upper = UPPER_BY_FACE[face]
+        if _is_open(scorecard, upper):
+            paths.append(CATEGORY_LABELS[upper])
+
+    # Matching-number destinations become meaningfully supported once a hold has
+    # at least a pair.  A triple/four-of-kind makes these paths even more obvious.
+    if max_count >= 2:
+        for category in ("three_of_a_kind", "four_of_a_kind", "yahtzee"):
+            if _is_open(scorecard, category):
+                paths.append(CATEGORY_LABELS[category])
+        pair_count = sum(1 for count in counts.values() if count >= 2)
+        if _is_open(scorecard, "full_house") and (pair_count >= 2 or max_count >= 3):
+            paths.append("Full House")
+
+    straight_name, straight_core = _straight_core(held, scorecard)
+    if straight_name and straight_core >= 3 and len(set(held)) >= 3:
+        paths.append(straight_name)
+
+    # Chance is most useful to name when the held dice are already a meaningful
+    # raw-total base rather than a low singleton.
+    if _is_open(scorecard, "chance") and (sum(held) >= 10 or max(held) >= 5 and len(held) >= 2):
+        paths.append("Chance")
+
+    # Preserve order while removing duplicates.
+    unique: list[str] = []
+    for item in paths:
+        if item not in unique:
+            unique.append(item)
+    return unique[:limit]
+
+
+def _simple_why_with_family(
     scorecard: Mapping[str, int | None],
     user_hold: Sequence[int],
     optimal_hold: Sequence[int],
@@ -699,26 +778,95 @@ def _simple_why(
     roll_number: int,
     is_optimal: bool,
     visible_reason: str,
-) -> str:
-    """Give one short, concrete explanation of why the exact hold fits this board.
+) -> tuple[str, str]:
+    """Return (family, explanation) for concise player-facing coaching.
 
-    The exact table still proves the ranking.  This helper only translates the
-    visible scorecard/dice tradeoff into player-friendly language.
+    Every explanation follows the same teaching idea:
+      1) acknowledge the visible plan,
+      2) connect the exact hold to the boxes that are actually live,
+      3) explain the reroll/flexibility tradeoff in plain language.
+
+    The family tag is diagnostic/test metadata only; it never changes the exact
+    strategy ranking.
     """
     user = canonical(user_hold)
     optimal = canonical(optimal_hold)
-
-    if is_optimal:
-        return f"Your hold is already the exact best play. {visible_reason}"
+    bonus = _upper_bonus_context(scorecard)
+    open_keys = _open_category_keys(scorecard)
+    open_labels = [CATEGORY_LABELS[c] for c in open_keys]
+    rerolls = 3 - roll_number
+    fresh = 5 - len(optimal)
 
     user_counts = {face: user.count(face) for face in range(1, 7)}
     optimal_counts = {face: optimal.count(face) for face in range(1, 7)}
     user_pair_faces = [face for face, count in user_counts.items() if count >= 2]
+    optimal_pair_faces = [face for face, count in optimal_counts.items() if count >= 2]
     optimal_distinct = sorted(set(optimal))
+    optimal_max_count = max(optimal_counts.values(), default=0)
+
+    if is_optimal:
+        return "optimal", f"You found the exact best hold. {visible_reason}"
+
+    # Special Yahtzee/Joker state: ordinary matching-dice rules change after a
+    # 50-point Yahtzee because another Yahtzee is worth a 100-point bonus.
+    if scorecard.get("yahtzee") == 50 and optimal_max_count >= 3:
+        face = max(optimal_counts, key=optimal_counts.get)
+        return (
+            "extra_yahtzee_joker",
+            f"Yahtzee is already scored for 50, so another Yahtzee can add a 100-point bonus and trigger Joker rules. "
+            f"Keeping the {face}s protects that special upside, which makes this matching core worth more than it would in a normal turn.",
+        )
+
+    user_made = _made_hand_name(user, scorecard)
+    optimal_made = _made_hand_name(optimal, scorecard)
+    if optimal_made:
+        return (
+            "protect_made_hand",
+            f"You already have a made {optimal_made}. Keeping all five protects guaranteed value; another reroll would risk breaking a scoring hand that the exact math says is worth banking here.",
+        )
+    if user_made and len(user) == 5:
+        paths = _live_paths_for_hold(optimal, scorecard, limit=3)
+        path_text = _join_paths(paths) if paths else "the remaining open boxes"
+        return (
+            "break_made_hand",
+            f"Keeping the made {user_made} is a reasonable safety play, but it is not automatically best. "
+            f"With {rerolls} reroll{'s' if rerolls != 1 else ''} left, the exact hold gives up that guaranteed hand because {path_text} offer more full-game value from this scorecard.",
+        )
+
+    # True endgame: name the only destinations left before discussing generic
+    # pattern rules.  This is where players most need the scorecard connection.
+    if len(open_keys) <= 2:
+        target_text = _join_paths(open_labels) if open_labels else "no remaining boxes"
+        paths = _live_paths_for_hold(optimal, scorecard, limit=2)
+        path_text = _join_paths(paths) if paths else target_text
+        return (
+            "true_endgame",
+            f"Only {target_text} remain open, so normal opening rules matter much less. "
+            f"The exact hold is built specifically for {path_text}; dice that do not help those last boxes are better rerolled.",
+        )
+
+    # Dead-bonus late-game trap: a lower pair can look like the natural 3K/4K
+    # chase, but a higher open upper die can serve every remaining matching box.
+    if len(optimal) == 1 and user_pair_faces and not bonus["earned"] and not bonus["alive"]:
+        face = optimal[0]
+        upper = UPPER_BY_FACE[face]
+        pair_face = max(user_pair_faces)
+        matching_paths = [
+            CATEGORY_LABELS[c]
+            for c in ("three_of_a_kind", "four_of_a_kind", "yahtzee")
+            if _is_open(scorecard, c)
+        ]
+        if _is_open(scorecard, upper) and face > pair_face and matching_paths:
+            path_text = _join_paths([CATEGORY_LABELS[upper], *matching_paths])
+            return (
+                "bonus_dead_high_die",
+                f"The 35-point upper bonus is already out of reach, so keeping the {face} is not a bonus chase. "
+                f"{path_text} are still live, and the {face} can help all of them while giving the matching-number boxes a higher scoring base than the pair of {pair_face}s. "
+                f"With {_rerolls_text(rerolls)} left, keeping one {face} and rolling {_fresh_dice_text(fresh)} is worth more than committing early to the lower pair.",
+            )
 
     # Common human trap: keep a closed-number pair even though the remaining
-    # board strongly rewards distinct straight anchors.  This is the exact
-    # pattern from the 1,1,3,3,5 / keep 3,3 playtest case.
+    # board strongly rewards distinct straight anchors.
     if (
         roll_number == 2
         and len(user_pair_faces) == 1
@@ -742,7 +890,6 @@ def _simple_why(
             for category in ("four_of_a_kind", "yahtzee")
             if _is_open(scorecard, category)
         ]
-
         if not pair_support_open and straight_names:
             closed_bits = [CATEGORY_LABELS[upper], "Three of a Kind", "Full House"]
             if not _is_open(scorecard, "chance"):
@@ -750,27 +897,76 @@ def _simple_why(
             closed_text = ", ".join(closed_bits[:-1]) + f", and {closed_bits[-1]}" if len(closed_bits) > 1 else closed_bits[0]
             matching_text = _join_paths(matching_upside) if matching_upside else "a narrow matching-dice payoff"
             straight_text = _join_paths(straight_names)
+            straight_core = max(
+                (_straight_core(optimal, scorecard)[1],),
+                default=0,
+            )
+            if straight_core >= 3:
+                exact_reason = (
+                    f"Keeping {_format_faces(optimal_distinct)} instead preserves a {straight_core}-number straight core for {straight_text} "
+                    f"with {_fresh_dice_text(fresh)}."
+                )
+            else:
+                exact_reason = (
+                    f"Keeping {_format_faces(optimal_distinct)} instead gives you useful anchors for {straight_text} "
+                    f"with {_fresh_dice_text(fresh)}."
+                )
             return (
+                "pair_vs_straight",
                 f"Your pair of {face}s looks strong, but {closed_text} are already filled, so that pair mostly chases {matching_text}. "
-                f"Keeping {_format_faces(optimal_distinct)} instead gives you two different anchors for the open {straight_text} boxes with {5 - len(optimal)} fresh dice."
+                f"{exact_reason}",
             )
 
-    # If the exact answer is a clearly visible straight core, say so directly.
+    # If the exact answer is a visible straight core, say exactly what the
+    # connected dice are doing instead of using generic "flexibility" language.
     straight_name, straight_core = _straight_core(optimal, scorecard)
     if straight_name and straight_core >= 3 and len(set(optimal)) >= 3:
         if user_pair_faces:
             return (
-                f"Your hold leans on matching dice, but the open {straight_name} box rewards distinct connected numbers. "
-                f"The exact hold keeps {straight_core} useful straight numbers and rerolls the pieces that do less for that path."
+                "straight_over_matching",
+                f"Your hold builds around matching dice, but the open {straight_name} box needs distinct connected numbers. "
+                f"The exact hold keeps {straight_core} useful straight numbers and rerolls the pieces that do less for that path.",
             )
         return (
+            "straight_structure",
             f"The exact hold keeps {straight_core} distinct numbers that already fit the open {straight_name} path. "
-            f"That gives the remaining reroll more useful ways to finish the hand."
+            f"That leaves {_fresh_dice_text(fresh)} to find the missing connection instead of restarting the straight from scratch.",
         )
 
-    # When the exact answer is a pair that directly matches an open upper box,
-    # make that scorecard connection explicit.
-    optimal_pair_faces = [face for face, count in optimal_counts.items() if count >= 2]
+    # Two pairs with Full House open are easy to teach concretely: both matching
+    # directions matter, not just the higher-looking pair.
+    if len(optimal_pair_faces) >= 2 and _is_open(scorecard, "full_house"):
+        faces = sorted(optimal_pair_faces)[:2]
+        return (
+            "two_pair_full_house",
+            f"Both pairs matter because Full House is still open. Keeping the {faces[0]}s and {faces[1]}s preserves two different ways for the last die to complete the hand instead of throwing away half of that structure.",
+        )
+
+    # Four matching dice are one die from Yahtzee and often already useful in
+    # upper/4K boxes.  Name those destinations directly.
+    if optimal_max_count >= 4:
+        face = max(optimal_counts, key=optimal_counts.get)
+        paths = _live_paths_for_hold(optimal, scorecard, limit=4)
+        path_text = _join_paths(paths) if paths else "the live matching boxes"
+        return (
+            "four_matching",
+            f"Four {face}s are already one matching die from Yahtzee and also support {path_text}. "
+            f"Breaking that four-die core would give up a much stronger structure than the loose dice can replace.",
+        )
+
+    # Triples deserve a similarly concrete explanation.
+    if optimal_max_count == 3:
+        face = max(optimal_counts, key=optimal_counts.get)
+        paths = _live_paths_for_hold(optimal, scorecard, limit=4)
+        path_text = _join_paths(paths) if paths else "the live matching boxes"
+        return (
+            "triple_matching",
+            f"Three {face}s already give you a strong matching base for {path_text}. "
+            f"Keeping the triple leaves {_fresh_dice_text(fresh)} to improve it instead of rebuilding that structure from the beginning.",
+        )
+
+    # A pair tied directly to an open upper box should explain the upper-bonus
+    # status explicitly so players know whether 63 is actually part of the value.
     if len(optimal_pair_faces) == 1:
         face = optimal_pair_faces[0]
         upper = UPPER_BY_FACE[face]
@@ -780,28 +976,128 @@ def _simple_why(
                 for c in ("three_of_a_kind", "four_of_a_kind", "yahtzee")
                 if _is_open(scorecard, c)
             ]
-            extra = f" and can still grow toward {_join_paths(extra_paths[:2])}" if extra_paths else ""
+            path_text = _join_paths([CATEGORY_LABELS[upper], *extra_paths[:2]])
+            if bonus["earned"]:
+                bonus_line = "The 35-point upper bonus is already secured, so this is not about protecting 63."
+                family = "bonus_secured_pair"
+            elif bonus["alive"]:
+                bonus_line = f"The 35-point upper bonus is still in play; you need {bonus['needed']} more points from the remaining upper boxes."
+                family = "bonus_alive_pair"
+            else:
+                bonus_line = "The 35-point upper bonus is out of reach, so the pair has to be valuable without any bonus help."
+                family = "bonus_dead_pair"
             return (
-                f"The pair of {face}s lines up directly with the open {CATEGORY_LABELS[upper]} box{extra}. "
-                "That makes the pair more useful on this scorecard than a prettier-looking loose pattern."
+                family,
+                f"{bonus_line} The pair of {face}s still supports {path_text}, which is why it beats the looser alternatives on this scorecard.",
             )
 
-    # A singleton exact hold is usually a scorecard/flexibility lesson.
+    # Chance timing: when the scorecard is cramped and Chance is one of very few
+    # escape valves, high dice can be worth holding for their raw point value.
+    if _is_open(scorecard, "chance") and len(open_keys) <= 4 and optimal and sum(optimal) >= 10:
+        paths = _live_paths_for_hold(optimal, scorecard, limit=3)
+        path_text = _join_paths(paths) if paths else "Chance"
+        return (
+            "chance_timing",
+            f"Chance is one of only {len(open_keys)} boxes left, so raw die total matters more than it does on an open board. "
+            f"Keeping {_format_faces(optimal)} starts with {sum(optimal)} points of useful dice while still supporting {path_text}.",
+        )
+
+    # A singleton exact hold is often a scorecard/bonus-state lesson.
     if len(optimal) == 1:
         face = optimal[0]
         upper = UPPER_BY_FACE[face]
         if _is_open(scorecard, upper):
+            paths = _live_paths_for_hold(optimal, scorecard, limit=3)
+            path_text = _join_paths(paths) if paths else CATEGORY_LABELS[upper]
+            if bonus["earned"]:
+                context = "The upper bonus is already secured, so this die is being kept for the boxes it can still score—not to protect 63."
+                family = "bonus_secured_singleton"
+            elif bonus["alive"]:
+                context = f"The upper bonus is still in play, and you need {bonus['needed']} more points from the remaining upper boxes, so {CATEGORY_LABELS[upper]} still matters."
+                family = "bonus_alive_singleton"
+            else:
+                context = "The upper bonus is already out of reach, so this die must justify itself through the boxes that remain."
+                family = "bonus_dead_singleton"
             return (
-                f"{CATEGORY_LABELS[upper]} is still open, so the {face} has a direct scoring job. "
-                "The other dice are more valuable as fresh rerolls than as a weak partial pattern."
+                family,
+                f"{context} Keeping the {face} supports {path_text} while giving you {_fresh_dice_text(fresh)} to search for a stronger finish.",
             )
 
-    # Generic fallback stays concrete by contrasting the player's visible plan
-    # with the exact hold rather than repeating solver jargon.
-    user_plan = _hold_intent(user, scorecard)
-    best_plan = _hold_intent(optimal, scorecard)
-    return f"{user_plan} The exact hold works better here because {best_plan[0].lower() + best_plan[1:]}"
+    # Early/open-board flexibility: explain why *not* locking weak fragments is
+    # valuable when many categories are still available.
+    if len(open_keys) >= 8 and len(optimal) <= 1:
+        keep_text = hold_text(optimal)
+        return (
+            "open_board_flexibility",
+            f"The board is still wide open, so a weak partial pattern is not worth locking in yet. "
+            f"The exact play is {keep_text}, leaving {_fresh_dice_text(fresh)} and more ways to grow into the many categories that are still available.",
+        )
 
+    if not optimal:
+        return (
+            "reroll_all",
+            f"None of the current dice creates enough value for the boxes that remain. Rerolling all five gives you the maximum number of fresh dice instead of spending a reroll protecting a weak fragment.",
+        )
+
+    # Generic fallback: still name the player's visible route and the exact hold's
+    # visible destinations.  Avoid abstract phrases like "useful flexibility."
+    user_paths = _live_paths_for_hold(user, scorecard, limit=3)
+    best_paths = _live_paths_for_hold(optimal, scorecard, limit=3)
+    user_text = _join_paths(user_paths) if user_paths else "a narrower partial pattern"
+    best_text = _join_paths(best_paths) if best_paths else "more of the boxes that are still open"
+    return (
+        "scorecard_fit",
+        f"Your hold is mainly aiming at {user_text}. The exact hold, {hold_text(optimal)}, supports {best_text} while leaving {_fresh_dice_text(fresh)} to reroll. "
+        "On this scorecard, those remaining routes are worth more than the pattern you chose.",
+    )
+
+
+def _simple_why(
+    scorecard: Mapping[str, int | None],
+    user_hold: Sequence[int],
+    optimal_hold: Sequence[int],
+    *,
+    roll_number: int,
+    is_optimal: bool,
+    visible_reason: str,
+) -> str:
+    """Give one short, concrete explanation of why the exact hold fits this board."""
+    _, explanation = _simple_why_with_family(
+        scorecard,
+        user_hold,
+        optimal_hold,
+        roll_number=roll_number,
+        is_optimal=is_optimal,
+        visible_reason=visible_reason,
+    )
+    return explanation
+
+def _clear_takeaway_for_family(family: str, fallback: str) -> str:
+    """Keep the reusable 'Remember' line short, concrete, and consistent."""
+    lessons = {
+        "extra_yahtzee_joker": "After a 50-point Yahtzee, matching dice get extra value because another Yahtzee can add 100 points and unlock Joker scoring.",
+        "protect_made_hand": "A made hand gives guaranteed value. Protect it unless the remaining scorecard gives a clear reason to gamble for more.",
+        "break_made_hand": "Made does not always mean keep. With rerolls left, compare guaranteed points with the upside in the boxes that are still open.",
+        "true_endgame": "Near the end, forget generic opening rules and optimize the boxes that are actually left.",
+        "bonus_dead_high_die": "When the upper bonus is dead, stop paying for 63—but an upper die can still be right if it also helps the remaining boxes. Read the open boxes, not just the dice.",
+        "bonus_dead_pair": "When the upper bonus is dead, a pair must earn its value from the boxes that remain; the lost 35-point bonus should not influence the hold.",
+        "bonus_dead_singleton": "When the upper bonus is dead, do not keep an upper die for 63. Keep it only if that die still helps the remaining boxes. Read the open boxes, not just the dice.",
+        "bonus_alive_pair": "When the upper bonus is still in play, a pair that matches an open upper box can do two jobs: build the bonus and support matching hands.",
+        "bonus_alive_singleton": "When the upper bonus is still in play, one useful upper die can matter—but only if keeping it still leaves enough reroll flexibility. Read the open boxes, not just the dice.",
+        "bonus_secured_pair": "Once the upper bonus is secured, judge an upper pair only by the boxes that remain; there is no extra need to protect 63.",
+        "bonus_secured_singleton": "Once the upper bonus is secured, an upper die has to earn its place through the boxes that remain. Read the open boxes, not just the dice.",
+        "pair_vs_straight": "Straights need distinct connected numbers. A pair is only worth protecting when the remaining matching boxes reward it more.",
+        "straight_over_matching": "When a straight box is live, distinct connected numbers can be worth more than a pair or triple that looks stronger at first glance.",
+        "straight_structure": "A connected straight core is a premium structure. Protect it and reroll the dice that do not help complete it.",
+        "two_pair_full_house": "With Full House open, two pairs create a direct one-die finish. Do not throw away one pair without a strong scorecard reason.",
+        "four_matching": "Four matching dice are one die from Yahtzee and usually already support several matching boxes. Breaking them should require a very strong reason.",
+        "triple_matching": "A triple already has scoring strength and still has room to grow. Keep it when the remaining matching boxes reward that number.",
+        "chance_timing": "When Chance is one of only a few boxes left, raw die total matters more than it does on an open scorecard.",
+        "open_board_flexibility": "Early on, do not lock weak fragments just because they look like a pattern. Fresh dice keep more scoring routes alive.",
+        "reroll_all": "Rerolling everything is correct when none of the current dice earns its place on the remaining scorecard.",
+        "scorecard_fit": "When no obvious pattern decides the play, compare which open boxes each hold actually supports and how many fresh dice it leaves.",
+    }
+    return lessons.get(family, fallback)
 
 def _closeness_line(points_lost: float, is_optimal: bool) -> str:
     if is_optimal:
@@ -879,7 +1175,7 @@ def build_exact_report(
         points_lost=points_lost,
         is_optimal=is_optimal,
     )
-    simple_why = _simple_why(
+    coaching_family, simple_why = _simple_why_with_family(
         scorecard,
         user_hold,
         display_optimal,
@@ -887,6 +1183,7 @@ def build_exact_report(
         is_optimal=is_optimal,
         visible_reason=visible_reason,
     )
+    takeaway = _clear_takeaway_for_family(coaching_family, takeaway)
 
     if is_optimal:
         recommendation = f"Yes — {hold_text(display_optimal)}. {visible_reason}"
@@ -983,6 +1280,7 @@ def build_exact_report(
         "best_idea": best_idea,
         "adjustment": adjustment,
         "simple_why": simple_why,
+        "coaching_family": coaching_family,
         "lookup_ms": (perf_counter() - started) * 1000.0,
     }
     return "\n".join(report), metadata

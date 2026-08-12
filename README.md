@@ -1,3 +1,66 @@
+# Yahtzee Coach v43B Phase 2K.3.2 — Coaching Language Audit + Dark-Mode Hotfix
+
+This release replaces the not-yet-deployed Phase 2K.3.1 package. It keeps the dark-mode review fix and dead-bonus protection, then audits the rest of the exact-coaching language so surprising holds are explained with the same kind of concrete scorecard logic.
+
+## v43B Phase 2K.3.2 changes
+
+- Keeps the completed Daily dark-mode fix so **You Kept / Exact Best / Hold Rank / EV Lost** remain readable on phone dark mode.
+- Keeps the exact dead-bonus regression for `1,1,3,3,6` on Roll 1: **keep 6** remains best and **keep 3,3** remains about **1.94 EV** behind.
+- Adds a structured coaching-language audit across the main explanation families instead of relying on one-off wording.
+- **Why this wins** now explicitly connects the player's visible idea to the scorecard destinations the exact hold actually supports.
+- **Remember** lines are now family-specific and shorter, so they teach a reusable rule without falling back to vague phrases like “useful flexibility.”
+- Clear explanation families now cover: upper bonus alive, secured, and dead; pair-vs-straight; straight cores; triples; four matching dice; two-pair Full House; made-hand keep/break decisions; Chance timing; true endgame; open-board flexibility; extra Yahtzee/Joker situations; and generic scorecard-fit decisions.
+- Adds a diagnostic `coaching_family` tag to exact report metadata for testing only; it does not affect ranking or player scoring.
+- Adds a new **840-position real exact-policy language audit**. Across that sample, explanations covered 18 naturally occurring coaching families, avoided the old vague phrases, avoided singular/plural errors like “1 fresh dice,” and stayed under 280 characters.
+- Adds direct regression cases for Chance timing and open-board flexibility, which are less common in the deterministic 840-position sample.
+- No Supabase migration is required.
+
+## What is intentionally unchanged
+
+- Exact strategy rankings and policy values.
+- Daily puzzle composition/version.
+- Practice generator and scoring.
+- Player identity, saved Daily attempts, friend groups, leaderboards, streaks, sharing, and feedback.
+- Roll 1 / Roll 2 clarity and Practice UI cleanup.
+
+## Phase 2K.3.2 live-test goal
+
+1. Upload this full current-app package instead of the earlier Phase 2K.3.1 ZIP.
+2. Open a completed Daily review in dark mode and confirm the four summary values are readable.
+3. In Practice, intentionally choose several reasonable-looking non-optimal holds from different strategy types.
+4. Confirm **Why it matters / Why this wins** answers the practical question: *Why is the exact hold better on this particular scorecard?*
+5. Confirm **Remember** gives one short reusable lesson rather than repeating solver jargon.
+6. Confirm exact holds, EV losses, grades, Daily results, and social features remain unchanged.
+
+---
+
+## Previous checkpoint
+
+# Yahtzee Coach v43B Phase 2K.3.1 — Dark-Mode Review Hotfix + Dead-Bonus Explanation Guard
+
+This is a very small display/teaching hotfix on top of Phase 2K.3. Strategy values, Daily puzzles, persistence, friend groups, Practice flow, and scoring are unchanged.
+
+## v43B Phase 2K.3.1 changes
+
+- Fixes the completed Daily review cards in phone dark mode so **You Kept / Exact Best / Hold Rank / EV Lost** always render with readable dark value text on the light cards.
+- Adds an explicit regression for the late-game dead-bonus position `1,1,3,3,6` on Roll 1 with only Sixes / 3K / 4K open.
+- Protects the exact ranking for that state: **keep 6** remains best; **keep 3,3** remains about **1.94 EV** behind.
+- Improves the coaching for that situation so it explicitly says the **35-point upper bonus is already out of reach** and that keeping the 6 is **not a bonus chase**.
+- The explanation now connects the 6 to every remaining live matching destination and explains why four fresh dice with two rerolls beat committing early to the lower pair.
+- No Supabase migration is required.
+
+## Phase 2K.3.1 live-test goal
+
+1. Upload the full current app to GitHub.
+2. Open a completed Daily review in iPhone dark mode.
+3. Confirm **You Kept / Exact Best / Hold Rank / EV Lost** are readable.
+4. If the `1,1,3,3,6` dead-bonus example appears again, confirm the coaching explicitly says the 6 is not being kept to chase an impossible bonus.
+5. Confirm all existing Roll clarity, Practice cleanup, sharing, friend-group, and Daily behavior remains unchanged.
+
+---
+
+## Previous checkpoint
+
 # Yahtzee Coach v43B Phase 2K.3 — Clearer Coaching Explanations
 
 This is a focused teaching-language refinement on top of the successful Phase 2K.2 Practice cleanup. Strategy rankings, exact values, puzzle generation, Daily rules, and social/persistence behavior are unchanged.

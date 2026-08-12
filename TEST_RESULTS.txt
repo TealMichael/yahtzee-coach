@@ -1,28 +1,35 @@
-Yahtzee Coach v43B Phase 2K.3 test summary
+Yahtzee Coach v43B Phase 2K.3.2 test summary
 
-All 27 automated test suites passed across the combined validation run.
+All 29 automated test suites passed across the Phase 2K.3.2 build.
 
-Highlights:
-- New coaching clarity regression: 12/12
+Focused coaching-language coverage:
+- New coaching-language family audit: all direct family checks passed
+- Real exact-policy wording audit: 840 sampled positions
+- Naturally occurring families in 840-position audit: 18
+- Maximum player-facing explanation length in audit: 279 characters
+- Old vague wording checks: pass
+- Singular/plural fresh-dice wording checks: pass
+- Dark-mode + dead-bonus hotfix: 11/11
+- Coaching clarity: 12/12
+
+Core regression coverage:
+- Roll clarity: 10/10
 - Practice UI cleanup: 15/15
 - Practice navigation hotfix: 8/8
-- Roll clarity: 10/10
 - Beta readiness: 19/19
 - Daily integration: 17/17
 - Daily logic: 11/11
-- UI/mobile protections: 14/14
-- Practice UI protections: 12/12
 - Persistence: 28/28
 - Player identity: 14/14
 - Persistent Daily UI: 19/19
-- Real friend groups/social: 14/14
+- Real social groups: 14/14
 - Invite/back/edit usability: 18/18
 - Player-facing UI cleanup: 14/14
 - Spoiler-free sharing: 18/18
-- Strategy regressions/playtest protections: 26/26
+- Strategy regressions / playtest protections: 26/26
 - Published strategy tests: 15/15
 - Expanded exact-policy audit: 3,669,120 legal hold values
 - Exact routing sample: 840/840
 - Expanded Practice sample: 20,000/20,000 exact
 
-No exact strategy value or recommendation was changed by this release.
+No exact-strategy value changed in this release.

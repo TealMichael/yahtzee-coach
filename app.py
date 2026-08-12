@@ -25,7 +25,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.3"
+APP_RELEASE = "v43B Phase 2K.3.2"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 APP_ICON_192_PATH = Path(__file__).with_name("home_icon_192.png")
@@ -57,7 +57,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2K.3 database preflight is loaded.")
+    st.info("🔧 v43B Phase 2K.3.2 database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -1737,9 +1737,10 @@ st.markdown(
     .group-story-card .story-title { font-weight:950; margin:0.12rem 0; }
     .group-story-card .story-copy { color:#5f6b7a !important; font-size:0.79rem; }
     .review-summary { display:grid; grid-template-columns:1fr 1fr; gap:0.35rem; margin:0.3rem 0 0.45rem 0; }
-    .review-box { border:1px solid rgba(127,127,127,.18); border-radius:13px; padding:0.5rem 0.58rem; background:#fafafa; }
-    .review-label { color:#6b7280; font-size:0.68rem; text-transform:uppercase; font-weight:850; }
-    .review-value { font-weight:900; font-size:0.88rem; margin-top:.08rem; }
+    .review-box { border:1px solid rgba(127,127,127,.18); border-radius:13px; padding:0.5rem 0.58rem; background:#fafafa; color:#111827 !important; }
+    .review-box * { color:inherit; }
+    .review-label { color:#6b7280 !important; font-size:0.68rem; text-transform:uppercase; font-weight:850; }
+    .review-value { color:#111827 !important; font-weight:900; font-size:0.88rem; margin-top:.08rem; }
     .daily-dice-line { font-size:1.9rem; letter-spacing:.12rem; margin:.15rem 0 .42rem 0; }
     .prototype-badge { display:inline-block; border-radius:999px; background:#f3e8ff; color:#6b21a8 !important; border:1px solid #e9d5ff; font-size:.69rem; font-weight:900; padding:.18rem .45rem; }
     .identity-note { border:1px solid #bfdbfe; background:#eff6ff; color:#1e3a8a !important; border-radius:14px; padding:.62rem .7rem; margin:.42rem 0 .62rem 0; font-size:.82rem; line-height:1.35; }

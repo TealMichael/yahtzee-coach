@@ -1,6 +1,6 @@
-Yahtzee Coach v43B Phase 2K.3 — FULL CURRENT APP deployment
+Yahtzee Coach v43B Phase 2K.3.2 — FULL CURRENT APP deployment
 
-There is NO new Supabase step.
+This package REPLACES the Phase 2K.3.1 ZIP. There is NO new Supabase step.
 
 UPLOAD TO GITHUB
 1. Open the UPLOAD_TO_GITHUB folder from the release ZIP.
@@ -10,17 +10,18 @@ UPLOAD TO GITHUB
 5. Commit directly to main.
 
 COPY/PASTE COMMIT MESSAGE:
-v43B Phase 2K.3 - make coaching explanations clearer and more concrete
+v43B Phase 2K.3.2 - audit coaching language and fix dark-mode Daily review
 
 6. Wait for Streamlit Community Cloud to redeploy.
-7. Test one non-optimal Practice hold and one completed Daily review item.
+7. Open a completed Daily review in dark mode and confirm the four summary values are visible.
+8. Try a few Practice decisions and confirm the coaching is concrete and scorecard-specific.
 
-EXPECTED PHASE 2K.3 BEHAVIOR
-- Practice coaching uses a concrete Why it matters explanation tied to the scorecard.
-- Completed Daily review shows Why this wins before the broader teaching takeaway.
-- Pair-vs-straight decisions explain why filled boxes reduce pair value and why straight anchors help.
-- Existing EV loss, grades, Top exact holds, and exact recommendations remain unchanged.
-- Phase 2K.2 Practice UI cleanup, navigation hotfix, and Roll 1 / Roll 2 clarity remain intact.
+EXPECTED PHASE 2K.3.2 BEHAVIOR
+- You Kept / Exact Best / Hold Rank / EV Lost remain readable in dark mode.
+- The exact dead-bonus example [1,1,3,3,6] still ranks keep 6 above keep 3,3 by about 1.94 EV.
+- Coaching explicitly distinguishes upper-bonus alive / secured / dead states.
+- Pair-vs-straight, matching-dice, Full House, Chance, endgame, made-hand, and Joker explanations use short concrete language.
+- Roll clarity, Practice cleanup, sharing, friend groups, persistence, and Daily behavior remain intact.
 
 IMPORTANT
 - No new Supabase SQL is required.

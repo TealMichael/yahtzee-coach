@@ -11,7 +11,7 @@ def run():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
 
     checks = [
-        ("release label advanced", 'APP_RELEASE = "v43B Phase 2K.3"' in app),
+        ("release label advanced", 'APP_RELEASE = "v43B Phase 2K.3.2"' in app),
         ("Roll 1 has high-visibility label", '🔵 ROLL 1 · First roll' in app),
         ("Roll 1 states two rerolls remaining", '2 rerolls remaining' in app),
         ("Roll 2 has high-visibility label", '🟢 ROLL 2 · Second roll' in app),
