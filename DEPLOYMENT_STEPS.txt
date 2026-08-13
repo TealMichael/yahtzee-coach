@@ -1,26 +1,25 @@
-YAHTZEE COACH v43B PHASE 2K.4.1
-Remember Login Reliability Hotfix
+YAHTZEE COACH v43B PHASE 2K.4.2
+Returning Player Autofill Hotfix
 
-NO NEW SUPABASE STEP if Phase 2K.4 is already installed.
-The existing Phase 2K.4 player_sessions migration is still the only required database change.
+NO SUPABASE STEP.
+The Phase 2K.4 player_sessions migration is unchanged.
 
 UPLOAD:
 1. Upload ALL files in this folder to the root of the GitHub repo.
 2. Commit with:
-   v43B Phase 2K.4.1 - fix remembered login after app reopen
+   v43B Phase 2K.4.2 - fix iPhone password suggestion on returning login
 3. Wait for Streamlit to redeploy.
 
 LIVE TEST:
-1. Sign in with “Keep me signed in on this device for 30 days” checked.
-2. Fully close the tab/Home Screen app.
-3. Reopen it. You should be signed in automatically.
-4. Press Sign out.
-5. Fully close/reopen again. You should remain signed out.
-6. Confirm the Phase 2K.4 speed improvement is still present.
+1. If the app auto-signs you in, press Sign out once.
+2. Open Returning Player and tap the PIN field on iPhone/Safari.
+3. Confirm the phone no longer treats this as a new-password field / offers to create a strong new password.
+4. Sign in normally.
+5. Fully close/reopen and confirm 30-day remembered login still works.
+6. Confirm the Phase 2K.4 speed improvement remains.
 
 WHAT CHANGED:
-- Remembered login now uses browser localStorage through a Streamlit Components v2 bridge.
-- The original first-party cookie remains as a fallback.
-- Sign out clears both browser persistence paths and revokes the server token.
-- PINs are never stored in the browser.
-- No strategy, puzzle, scoring, Practice, Daily, social, or coaching behavior changed.
+- Returning Player name is marked as username.
+- Returning Player PIN is marked as current-password instead of Streamlit's default new-password.
+- Create Player PIN fields remain marked new-password.
+- No authentication security, remembered-login, database, strategy, puzzle, scoring, Practice, Daily, social, or coaching logic changed.

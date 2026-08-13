@@ -25,7 +25,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.4.1"
+APP_RELEASE = "v43B Phase 2K.4.2"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
@@ -2436,12 +2436,14 @@ def render_player_identity_gate():
                 "Display name",
                 max_chars=24,
                 key="returning_player_name",
+                autocomplete="username",
             )
             return_pin = st.text_input(
                 "PIN",
                 type="password",
                 max_chars=12,
                 key="returning_player_pin",
+                autocomplete="current-password",
             )
             return_remember = st.checkbox(
                 "Keep me signed in on this device for 30 days",
@@ -2477,6 +2479,7 @@ def render_player_identity_gate():
                 max_chars=24,
                 placeholder="2-24 characters",
                 key="create_player_name",
+                autocomplete="username",
             )
             new_pin = st.text_input(
                 "Choose a PIN",
@@ -2484,12 +2487,14 @@ def render_player_identity_gate():
                 max_chars=12,
                 placeholder="4-12 digits",
                 key="create_player_pin",
+                autocomplete="new-password",
             )
             confirm_pin = st.text_input(
                 "Confirm PIN",
                 type="password",
                 max_chars=12,
                 key="create_player_pin_confirm",
+                autocomplete="new-password",
             )
             create_remember = st.checkbox(
                 "Keep me signed in on this device for 30 days",

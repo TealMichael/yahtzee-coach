@@ -1,3 +1,30 @@
+# Yahtzee Coach v43B Phase 2K.4.2 — Returning Player Autofill Hotfix
+
+This small hotfix corrects the browser autofill semantics on the Returning Player form. Streamlit defaults password-type text inputs to `autocomplete="new-password"` when no value is specified, which can make iPhone/Safari offer to create a new strong password even though the player is signing in to an existing account.
+
+## v43B Phase 2K.4.2 changes
+
+- Returning Player **Display name** now explicitly uses `autocomplete="username"`.
+- Returning Player **PIN** now explicitly uses `autocomplete="current-password"`, so browsers recognize it as an existing-login credential instead of a new-account password.
+- Create Player keeps explicit `autocomplete="new-password"` on both PIN fields, where new-password behavior is appropriate.
+- The 30-day remembered-login system, localStorage bridge, server-side device sessions, and Phase 2K.4 performance improvements are unchanged.
+- Exact solver, exact policy, puzzle bank, Daily generation, Practice generation, EV rankings, coaching, persistence, and social behavior are unchanged.
+
+## Supabase
+
+**No Supabase step is required.** This is a player-facing browser/autofill metadata fix only.
+
+## Phase 2K.4.2 live-test goal
+
+1. Upload the full current app.
+2. If you are already remembered, use **Sign out** once so the Returning Player form appears.
+3. Tap the PIN field on iPhone/Safari. It should no longer treat the field as a new-password creation field or offer to generate a new strong password.
+4. Sign in normally with **Keep me signed in on this device for 30 days** checked.
+5. Fully close/reopen the app and confirm remembered login still works.
+6. Confirm the faster Phase 2K.4 loading behavior remains.
+
+---
+
 # Yahtzee Coach v43B Phase 2K.4.1 — Remembered Login Reliability Hotfix
 
 This hotfix keeps the Phase 2K.4 performance improvements and replaces the fragile cookie-only remembered-login handoff with a first-party browser `localStorage` bridge using Streamlit Components v2. The secure server-side device-session design is unchanged: the browser stores only the high-entropy device token, never the player's PIN, and Supabase stores only the hashed token secret.
