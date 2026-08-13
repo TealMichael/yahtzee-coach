@@ -1,6 +1,12 @@
-Yahtzee Coach v43B Phase 2K.3.2 — FULL CURRENT APP deployment
+Yahtzee Coach v43B Phase 2K.4 — FULL CURRENT APP deployment
 
-This package REPLACES the Phase 2K.3.1 ZIP. There is NO new Supabase step.
+This package REPLACES the Phase 2K.3.2 ZIP.
+
+ONE-TIME SUPABASE STEP — DO THIS FIRST
+1. Open Supabase -> SQL Editor.
+2. Start a NEW query. Do not overwrite your earlier migration queries.
+3. Copy/paste and run: RUN_THIS_ONCE_IN_SUPABASE_Phase2K4.sql
+4. Confirm the query succeeds. This only adds the remembered-device session table/indexes/security.
 
 UPLOAD TO GITHUB
 1. Open the UPLOAD_TO_GITHUB folder from the release ZIP.
@@ -10,21 +16,28 @@ UPLOAD TO GITHUB
 5. Commit directly to main.
 
 COPY/PASTE COMMIT MESSAGE:
-v43B Phase 2K.3.2 - audit coaching language and fix dark-mode Daily review
+v43B Phase 2K.4 - add 30-day remembered login and speed up Supabase reads
 
 6. Wait for Streamlit Community Cloud to redeploy.
-7. Open a completed Daily review in dark mode and confirm the four summary values are visible.
-8. Try a few Practice decisions and confirm the coaching is concrete and scorecard-specific.
 
-EXPECTED PHASE 2K.3.2 BEHAVIOR
-- You Kept / Exact Best / Hold Rank / EV Lost remain readable in dark mode.
-- The exact dead-bonus example [1,1,3,3,6] still ranks keep 6 above keep 3,3 by about 1.94 EV.
-- Coaching explicitly distinguishes upper-bonus alive / secured / dead states.
-- Pair-vs-straight, matching-dice, Full House, Chance, endgame, made-hand, and Joker explanations use short concrete language.
-- Roll clarity, Practice cleanup, sharing, friend groups, persistence, and Daily behavior remain intact.
+MORNING LIVE TEST
+1. Sign in normally with Keep me signed in on this device for 30 days checked.
+2. Fully close the browser tab/Home Screen app.
+3. Reopen Yahtzee Coach. You should be signed in automatically.
+4. Press Sign out, fully close, and reopen. You should remain signed out.
+5. Open the Daily home and completed leaderboard and see whether the warm-app load feels faster.
+
+EXPECTED PHASE 2K.4 BEHAVIOR
+- Existing display name + PIN accounts continue to work unchanged.
+- The PIN is never stored in the browser cookie.
+- Remembered login lasts up to 30 days on that device.
+- Sign out revokes the token and clears the cookie.
+- Friend groups / leaderboards / question stats / Daily streak use batched Supabase reads.
+- Short read-only caches reduce duplicate Supabase traffic during Streamlit reruns.
+- Phase 2K.3.2 coaching language and dark-mode review fixes remain intact.
 
 IMPORTANT
-- No new Supabase SQL is required.
-- The exact solver and exact policy values are unchanged.
-- Daily puzzle composition and Practice generation are unchanged.
+- Run the Phase 2K.4 SQL migration before expecting Remember Me to work.
+- This patch does not change exact strategy, EV values, Daily puzzles, Practice generation, or scoring.
+- Free-host cold starts can still happen; this patch targets avoidable app/database latency and repeated manual login.
 - __pycache__ and .pyc files are intentionally excluded from the release.

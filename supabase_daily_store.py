@@ -15,7 +15,9 @@ The secret key must only be used from the trusted Streamlit server.
 """
 
 from datetime import date, datetime, timedelta, timezone
+import hmac
 import re
+import secrets
 from typing import Mapping, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
@@ -40,8 +42,10 @@ from daily_store import (
     PublicPlayer,
     ResumeState,
     generate_join_code,
+    hash_device_token_secret,
     hash_pin,
     normalize_display_name,
+    split_device_token,
     utc_now,
     verify_pin,
 )
@@ -306,6 +310,67 @@ class SupabaseDailyStore:
             return None
         return _player_from_row(row)
 
+    def create_device_session(self, player_id: str, days: int = 30) -> str:
+        """Create a revocable 30-day browser credential without storing the player's PIN."""
+        self._require_player_row(player_id)
+        ttl_days = max(1, min(int(days), 90))
+        secret = secrets.token_urlsafe(32)
+        now = utc_now()
+        payload = {
+            "player_id": str(player_id),
+            "token_hash": hash_device_token_secret(secret),
+            "expires_at": (now + timedelta(days=ttl_days)).isoformat(),
+            "last_used_at": now.isoformat(),
+        }
+        response = (
+            self.client.table("player_sessions")
+            .insert(payload)
+            .select("session_id")
+            .execute()
+        )
+        row = _first_row(response)
+        if row is None:
+            raise DailyStoreError("Supabase did not return the remembered-device session.")
+        return f"{row['session_id']}.{secret}"
+
+    def authenticate_device_session(self, token: str) -> PublicPlayer | None:
+        """Restore a player from a high-entropy browser token if it is live and unrevoked."""
+        session_id, secret = split_device_token(token)
+        if not session_id or not secret:
+            return None
+        response = (
+            self.client.table("player_sessions")
+            .select("session_id,player_id,token_hash,expires_at,revoked_at")
+            .eq("session_id", str(session_id))
+            .limit(1)
+            .execute()
+        )
+        row = _first_row(response)
+        if row is None or row.get("revoked_at") is not None:
+            return None
+        expires_at = _as_datetime(row.get("expires_at"))
+        if expires_at is None or expires_at <= utc_now():
+            return None
+        actual_hash = hash_device_token_secret(secret)
+        if not hmac.compare_digest(actual_hash, str(row.get("token_hash") or "")):
+            return None
+        player_row = self._require_player_row(str(row["player_id"]))
+        return _player_from_row(player_row)
+
+    def revoke_device_session(self, token: str) -> None:
+        """Revoke the current browser credential; malformed/unknown tokens are harmless."""
+        session_id, secret = split_device_token(token)
+        if not session_id or not secret:
+            return
+        token_hash = hash_device_token_secret(secret)
+        (
+            self.client.table("player_sessions")
+            .update({"revoked_at": utc_now().isoformat()})
+            .eq("session_id", str(session_id))
+            .eq("token_hash", token_hash)
+            .execute()
+        )
+
     # ---------- Friend groups ----------
 
     def create_group(self, player_id: str, group_name: str) -> GroupRecord:
@@ -384,18 +449,16 @@ class SupabaseDailyStore:
             .eq("player_id", str(player_id))
             .execute()
         )
-        groups: list[GroupRecord] = []
-        for membership in memberships:
-            response = (
-                self.client.table("friend_groups")
-                .select("group_id,group_name,join_code,created_by_player_id,created_at")
-                .eq("group_id", str(membership["group_id"]))
-                .limit(1)
-                .execute()
-            )
-            row = _first_row(response)
-            if row is not None:
-                groups.append(_group_from_row(row))
+        group_ids = [str(row["group_id"]) for row in memberships]
+        if not group_ids:
+            return []
+        rows = _row_list(
+            self.client.table("friend_groups")
+            .select("group_id,group_name,join_code,created_by_player_id,created_at")
+            .in_("group_id", group_ids)
+            .execute()
+        )
+        groups = [_group_from_row(row) for row in rows]
         return sorted(groups, key=lambda group: (group.group_name.casefold(), group.group_id))
 
     def list_group_members(self, group_id: str) -> list[dict]:
@@ -406,14 +469,19 @@ class SupabaseDailyStore:
             .eq("group_id", str(group_id))
             .execute()
         )
-        rows: list[dict] = []
-        for membership in memberships:
-            player_id = str(membership["player_id"])
-            player = _player_from_row(self._require_player_row(player_id))
-            rows.append({
-                "player_id": player.player_id,
-                "display_name": player.display_name,
-            })
+        player_ids = [str(row["player_id"]) for row in memberships]
+        if not player_ids:
+            return []
+        player_rows = _row_list(
+            self.client.table("players")
+            .select("player_id,display_name,created_at")
+            .in_("player_id", player_ids)
+            .execute()
+        )
+        rows = [{
+            "player_id": str(row["player_id"]),
+            "display_name": str(row["display_name"]),
+        } for row in player_rows]
         return sorted(rows, key=lambda row: (row["display_name"].casefold(), row["player_id"]))
 
     # ---------- Challenge registration ----------
@@ -784,27 +852,37 @@ class SupabaseDailyStore:
             .eq("group_id", str(group_id))
             .execute()
         )
+        player_ids = [str(row["player_id"]) for row in memberships]
+        if not player_ids:
+            return []
+
+        attempt_rows = _row_list(
+            self.client.table("daily_attempts")
+            .select("*")
+            .in_("player_id", player_ids)
+            .eq("challenge_id", str(challenge_id))
+            .execute()
+        )
+        completed = [_attempt_from_row(row) for row in attempt_rows if row.get("completed_at") is not None]
+        if not completed:
+            return []
+
+        completed_player_ids = [attempt.player_id for attempt in completed]
+        player_rows = _row_list(
+            self.client.table("players")
+            .select("player_id,display_name,created_at")
+            .in_("player_id", completed_player_ids)
+            .execute()
+        )
+        names = {str(row["player_id"]): str(row["display_name"]) for row in player_rows}
         rows: list[dict] = []
-        for membership in memberships:
-            player_id = str(membership["player_id"])
-            attempt_response = (
-                self.client.table("daily_attempts")
-                .select("*")
-                .eq("player_id", player_id)
-                .eq("challenge_id", str(challenge_id))
-                .limit(1)
-                .execute()
-            )
-            attempt_row = _first_row(attempt_response)
-            if attempt_row is None:
+        for attempt in completed:
+            display_name = names.get(attempt.player_id)
+            if not display_name:
                 continue
-            attempt = _attempt_from_row(attempt_row)
-            if not attempt.complete:
-                continue
-            player = _player_from_row(self._require_player_row(player_id))
             rows.append({
-                "player_id": player_id,
-                "display_name": player.display_name,
+                "player_id": attempt.player_id,
+                "display_name": display_name,
                 "total_ev_loss": float(attempt.total_ev_loss or 0.0),
                 "exact_count": int(attempt.exact_count or 0),
                 "worst_miss": float(attempt.worst_miss or 0.0),
@@ -824,33 +902,42 @@ class SupabaseDailyStore:
         return rows
 
     def group_question_stats(self, group_id: str, challenge_id: str) -> list[dict]:
-        completed_player_ids = {row["player_id"] for row in self.leaderboard(group_id, challenge_id)}
+        self._require_group_row(group_id)
+        memberships = _row_list(
+            self.client.table("group_members")
+            .select("player_id")
+            .eq("group_id", str(group_id))
+            .execute()
+        )
+        player_ids = [str(row["player_id"]) for row in memberships]
+        if not player_ids:
+            return []
+
+        attempt_rows = _row_list(
+            self.client.table("daily_attempts")
+            .select("attempt_id,player_id,completed_at")
+            .in_("player_id", player_ids)
+            .eq("challenge_id", str(challenge_id))
+            .execute()
+        )
+        attempt_ids = [str(row["attempt_id"]) for row in attempt_rows if row.get("completed_at") is not None]
+        if not attempt_ids:
+            return []
+
+        answer_rows = _row_list(
+            self.client.table("daily_answers")
+            .select("*")
+            .in_("attempt_id", attempt_ids)
+            .execute()
+        )
+        by_question: dict[int, list[AnswerRecord]] = {}
+        for row in answer_rows:
+            answer = _answer_from_row(row)
+            by_question.setdefault(answer.question_number, []).append(answer)
+
         stats: list[dict] = []
         for question_number in range(1, 11):
-            answers: list[AnswerRecord] = []
-            for player_id in completed_player_ids:
-                attempt_response = (
-                    self.client.table("daily_attempts")
-                    .select("attempt_id")
-                    .eq("player_id", player_id)
-                    .eq("challenge_id", str(challenge_id))
-                    .limit(1)
-                    .execute()
-                )
-                attempt_row = _first_row(attempt_response)
-                if attempt_row is None:
-                    continue
-                answer_response = (
-                    self.client.table("daily_answers")
-                    .select("*")
-                    .eq("attempt_id", str(attempt_row["attempt_id"]))
-                    .eq("question_number", question_number)
-                    .limit(1)
-                    .execute()
-                )
-                answer_row = _first_row(answer_response)
-                if answer_row is not None:
-                    answers.append(_answer_from_row(answer_row))
+            answers = by_question.get(question_number, [])
             if not answers:
                 continue
             exact_count = sum(answer.exact for answer in answers)
@@ -866,35 +953,26 @@ class SupabaseDailyStore:
     def current_participation_streak(self, player_id: str, current_date: str) -> int:
         self._require_player_row(player_id)
         today = date.fromisoformat(str(current_date))
-        completed_attempts = _row_list(
+        attempt_rows = _row_list(
             self.client.table("daily_attempts")
-            .select("challenge_id")
+            .select("challenge_id,completed_at")
             .eq("player_id", str(player_id))
             .execute()
         )
-        completed_dates: set[date] = set()
-        for row in completed_attempts:
-            attempt_response = (
-                self.client.table("daily_attempts")
-                .select("challenge_id,completed_at")
-                .eq("player_id", str(player_id))
-                .eq("challenge_id", str(row["challenge_id"]))
-                .limit(1)
-                .execute()
-            )
-            attempt_row = _first_row(attempt_response)
-            if attempt_row is None or attempt_row.get("completed_at") is None:
-                continue
-            challenge_response = (
-                self.client.table("daily_challenges")
-                .select("challenge_date")
-                .eq("challenge_id", str(attempt_row["challenge_id"]))
-                .limit(1)
-                .execute()
-            )
-            challenge_row = _first_row(challenge_response)
-            if challenge_row is not None:
-                completed_dates.add(date.fromisoformat(str(challenge_row["challenge_date"])))
+        challenge_ids = sorted({
+            str(row["challenge_id"])
+            for row in attempt_rows
+            if row.get("completed_at") is not None
+        })
+        if not challenge_ids:
+            return 0
+        challenge_rows = _row_list(
+            self.client.table("daily_challenges")
+            .select("challenge_id,challenge_date")
+            .in_("challenge_id", challenge_ids)
+            .execute()
+        )
+        completed_dates = {date.fromisoformat(str(row["challenge_date"])) for row in challenge_rows}
 
         cursor = today if today in completed_dates else today - timedelta(days=1)
         streak = 0

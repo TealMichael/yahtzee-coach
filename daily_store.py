@@ -23,6 +23,23 @@ from uuid import uuid4
 
 TIE_TOLERANCE = 1e-9
 JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+REMEMBER_DEVICE_DAYS = 30
+
+
+def hash_device_token_secret(secret: str) -> str:
+    """Hash a high-entropy remembered-device secret before database storage."""
+    return hashlib.sha256(str(secret or "").encode("utf-8")).hexdigest()
+
+
+def split_device_token(token: str) -> tuple[str, str] | tuple[None, None]:
+    """Split the browser token into lookup id + secret without accepting malformed values."""
+    raw = str(token or "").strip()
+    if "." not in raw:
+        return None, None
+    session_id, secret = raw.split(".", 1)
+    if not session_id or len(secret) < 32:
+        return None, None
+    return session_id, secret
 
 
 class DailyStoreError(RuntimeError):
@@ -213,6 +230,9 @@ class DailyStore(Protocol):
 
     def create_player(self, display_name: str, pin: str) -> PublicPlayer: ...
     def authenticate_player(self, display_name: str, pin: str) -> PublicPlayer | None: ...
+    def create_device_session(self, player_id: str, days: int = REMEMBER_DEVICE_DAYS) -> str: ...
+    def authenticate_device_session(self, token: str) -> PublicPlayer | None: ...
+    def revoke_device_session(self, token: str) -> None: ...
     def create_group(self, player_id: str, group_name: str) -> GroupRecord: ...
     def join_group(self, player_id: str, join_code: str) -> GroupRecord: ...
     def list_groups(self, player_id: str) -> list[GroupRecord]: ...
@@ -244,6 +264,7 @@ class InMemoryDailyStore:
         self._join_code_factory = join_code_factory
         self.players: dict[str, _StoredPlayer] = {}
         self.player_id_by_name_key: dict[str, str] = {}
+        self.device_sessions: dict[str, dict] = {}
         self.groups: dict[str, GroupRecord] = {}
         self.group_id_by_join_code: dict[str, str] = {}
         self.group_members: set[tuple[str, str]] = set()
@@ -290,6 +311,49 @@ class InMemoryDailyStore:
             return None
         player = self.players[player_id]
         return player.public() if verify_pin(pin, player.pin_hash) else None
+
+    def create_device_session(self, player_id: str, days: int = REMEMBER_DEVICE_DAYS) -> str:
+        self._require_player(player_id)
+        ttl_days = max(1, min(int(days), 90))
+        session_id = str(uuid4())
+        secret = secrets.token_urlsafe(32)
+        now = self._now()
+        self.device_sessions[session_id] = {
+            "player_id": str(player_id),
+            "token_hash": hash_device_token_secret(secret),
+            "created_at": now,
+            "expires_at": now + timedelta(days=ttl_days),
+            "last_used_at": now,
+            "revoked_at": None,
+        }
+        return f"{session_id}.{secret}"
+
+    def authenticate_device_session(self, token: str) -> PublicPlayer | None:
+        session_id, secret = split_device_token(token)
+        if not session_id or not secret:
+            return None
+        row = self.device_sessions.get(session_id)
+        if row is None or row.get("revoked_at") is not None:
+            return None
+        now = self._now()
+        if row.get("expires_at") is None or row["expires_at"] <= now:
+            return None
+        actual_hash = hash_device_token_secret(secret)
+        if not hmac.compare_digest(actual_hash, str(row.get("token_hash") or "")):
+            return None
+        row["last_used_at"] = now
+        return self._require_player(str(row["player_id"])).public()
+
+    def revoke_device_session(self, token: str) -> None:
+        session_id, secret = split_device_token(token)
+        if not session_id or not secret:
+            return
+        row = self.device_sessions.get(session_id)
+        if row is None:
+            return
+        actual_hash = hash_device_token_secret(secret)
+        if hmac.compare_digest(actual_hash, str(row.get("token_hash") or "")):
+            row["revoked_at"] = self._now()
 
     def create_group(self, player_id: str, group_name: str) -> GroupRecord:
         self._require_player(player_id)

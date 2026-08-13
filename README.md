@@ -1,3 +1,42 @@
+# Yahtzee Coach v43B Phase 2K.4 — Remember This Device + Performance Patch
+
+This release keeps every Phase 2K.3.2 coaching and dark-mode improvement, then removes the need to type a display name/PIN every time the app is reopened and cuts the biggest repeated Supabase round trips in the social/Daily loading path.
+
+## v43B Phase 2K.4 changes
+
+- Adds **Keep me signed in on this device for 30 days** to Returning Player and Create Player. It is checked by default.
+- After a successful PIN sign-in, the browser receives a high-entropy remembered-device token. **The PIN itself is never written to the browser.**
+- Supabase stores only a SHA-256 hash of the token secret, plus the player ID and expiration.
+- On a later browser/app session, Yahtzee Coach reads the first-party cookie and restores that player automatically.
+- **Sign out** revokes the server-side device session and deletes the browser cookie, so the next open remains signed out.
+- Remembered-device sessions expire after 30 days and can be revoked without changing the player's PIN.
+- Group member lookup, friend-group lookup, leaderboard loading, group question stats, and Daily streak loading now batch database reads instead of fetching one player/attempt/question at a time.
+- Adds short-lived Streamlit caches for read-only group/streak data so normal reruns do not repeatedly hit Supabase for the same information. Cache entries are cleared after group changes or Daily completion.
+- The exact solver, exact-policy files, Daily puzzle bank, challenge generator, Practice generator, scoring, and coaching values are unchanged.
+
+## One-time Supabase migration required
+
+For the existing live project, run **`RUN_THIS_ONCE_IN_SUPABASE_Phase2K4.sql`** in a **new SQL Editor query** before uploading this release. It creates only the `player_sessions` table and its indexes/security settings. It does not modify existing players, PIN hashes, Daily attempts, answers, friend groups, scores, or feedback.
+
+The migration is safe to run more than once. A brand-new database can use the updated `v43b_schema.sql`.
+
+## Why the performance patch matters
+
+The old social code used several N+1 query patterns. For an 8-player group, one leaderboard or question-stat view could require many sequential Supabase requests because players, attempts, and answers were fetched one at a time. Phase 2K.4 batches those rows with `IN (...)` queries and reuses recent read-only results for a few seconds. This does not eliminate Streamlit Community Cloud cold starts, but it removes a large amount of avoidable app-side database waiting.
+
+## Phase 2K.4 live-test goal
+
+1. Run the one-time Phase 2K.4 Supabase migration.
+2. Upload the full current app.
+3. Sign in with **Keep me signed in on this device for 30 days** checked.
+4. Fully close the tab/Home Screen app, reopen it, and confirm you land signed in without entering your PIN.
+5. Press **Sign out**, close/reopen, and confirm you stay signed out.
+6. Notice whether the Daily home/leaderboard feels faster; the biggest improvement should be on an already-awake app.
+
+---
+
+## Previous checkpoint
+
 # Yahtzee Coach v43B Phase 2K.3.2 — Coaching Language Audit + Dark-Mode Hotfix
 
 This release replaces the not-yet-deployed Phase 2K.3.1 package. It keeps the dark-mode review fix and dead-bonus protection, then audits the rest of the exact-coaching language so surprising holds are explained with the same kind of concrete scorecard logic.

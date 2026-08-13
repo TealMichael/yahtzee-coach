@@ -25,9 +25,12 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.3.2"
+APP_RELEASE = "v43B Phase 2K.4"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
+REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
+REMEMBER_DEVICE_DAYS = 30
+REMEMBER_COOKIE_MAX_AGE = REMEMBER_DEVICE_DAYS * 24 * 60 * 60
 APP_ICON_192_PATH = Path(__file__).with_name("home_icon_192.png")
 APP_ICON_512_PATH = Path(__file__).with_name("home_icon_512.png")
 
@@ -45,6 +48,40 @@ def load_daily_store():
     return SupabaseDailyStore.from_secrets(st.secrets)
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_player_groups(player_id: str):
+    return load_daily_store().list_groups(str(player_id))
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _cached_group_members(group_id: str):
+    return load_daily_store().list_group_members(str(group_id))
+
+
+@st.cache_data(ttl=12, show_spinner=False)
+def _cached_group_leaderboard(group_id: str, challenge_id: str):
+    return load_daily_store().leaderboard(str(group_id), str(challenge_id))
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _cached_group_question_stats(group_id: str, challenge_id: str):
+    return load_daily_store().group_question_stats(str(group_id), str(challenge_id))
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_participation_streak(player_id: str, current_date: str):
+    return load_daily_store().current_participation_streak(str(player_id), str(current_date))
+
+
+def _clear_social_caches():
+    """Clear small public-result caches after a write that changes social state."""
+    _cached_player_groups.clear()
+    _cached_group_members.clear()
+    _cached_group_leaderboard.clear()
+    _cached_group_question_stats.clear()
+    _cached_participation_streak.clear()
+
+
 def database_check_enabled():
     """Enable the temporary v43B database smoke-test banner with ?dbcheck=1."""
     try:
@@ -57,7 +94,7 @@ def database_check_enabled():
 
 
 if database_check_enabled():
-    st.info("🔧 v43B Phase 2K.3.2 database preflight is loaded.")
+    st.info("🔧 v43B Phase 2K.4 database preflight is loaded.")
     try:
         daily_store = load_daily_store()
         if getattr(daily_store, "url_was_normalized", False):
@@ -1808,6 +1845,92 @@ def initialize_player_identity_state():
         st.session_state.active_group_id = None
     if "group_flash" not in st.session_state:
         st.session_state.group_flash = ""
+    if "active_device_token" not in st.session_state:
+        st.session_state.active_device_token = None
+    if "remember_restore_checked" not in st.session_state:
+        st.session_state.remember_restore_checked = False
+    if "remember_cookie_command" not in st.session_state:
+        st.session_state.remember_cookie_command = None
+
+
+def _browser_remember_cookie() -> str:
+    try:
+        return str(st.context.cookies.get(REMEMBER_COOKIE_NAME, "") or "").strip()
+    except Exception:
+        return ""
+
+
+def _queue_remember_cookie_set(token: str):
+    st.session_state.remember_cookie_command = {"action": "set", "token": str(token)}
+
+
+def _queue_remember_cookie_delete():
+    st.session_state.remember_cookie_command = {"action": "delete", "token": ""}
+
+
+def render_pending_remember_cookie_command():
+    """Write/delete the first-party remembered-device cookie in the browser."""
+    command = st.session_state.get("remember_cookie_command")
+    if not command:
+        return
+    name_js = json.dumps(REMEMBER_COOKIE_NAME)
+    if command.get("action") == "set":
+        token_js = json.dumps(str(command.get("token") or ""))
+        script = f"""
+        <script>
+        (function() {{
+          const name = {name_js};
+          const token = {token_js};
+          document.cookie = `${{name}}=${{token}}; Path=/; Max-Age={REMEMBER_COOKIE_MAX_AGE}; SameSite=Lax; Secure`;
+        }})();
+        </script>
+        """
+    else:
+        script = f"""
+        <script>
+        (function() {{
+          const name = {name_js};
+          document.cookie = `${{name}}=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure`;
+        }})();
+        </script>
+        """
+    st.html(script, unsafe_allow_javascript=True)
+    st.session_state.remember_cookie_command = None
+
+
+def _restore_remembered_player():
+    """Restore a signed-in player at the start of a brand-new Streamlit session."""
+    if st.session_state.get("active_player_id") or st.session_state.get("remember_restore_checked"):
+        return
+    st.session_state.remember_restore_checked = True
+    token = _browser_remember_cookie()
+    if not token:
+        return
+    try:
+        player = load_daily_store().authenticate_device_session(token)
+    except Exception as exc:
+        if database_check_enabled():
+            st.caption(f"Remembered-login detail: {type(exc).__name__}: {exc}")
+        return
+    if player is None:
+        _queue_remember_cookie_delete()
+        return
+    _activate_player(player, created=False)
+    st.session_state.active_device_token = token
+
+
+def _remember_this_device(player_id: str) -> bool:
+    """Create a revocable browser login after a successful PIN authentication."""
+    try:
+        token = load_daily_store().create_device_session(str(player_id), REMEMBER_DEVICE_DAYS)
+    except Exception as exc:
+        st.session_state.player_auth_flash = "Signed in, but this device could not be remembered yet."
+        if database_check_enabled():
+            st.session_state.player_auth_flash += f" ({type(exc).__name__}: {exc})"
+        return False
+    st.session_state.active_device_token = token
+    _queue_remember_cookie_set(token)
+    return True
 
 
 def _activate_player(player, *, created: bool = False):
@@ -1825,6 +1948,16 @@ def _activate_player(player, *, created: bool = False):
 
 
 def _sign_out_player():
+    token = st.session_state.get("active_device_token") or _browser_remember_cookie()
+    if token:
+        try:
+            load_daily_store().revoke_device_session(token)
+        except Exception:
+            pass
+    _queue_remember_cookie_delete()
+    # Prevent the still-visible cookie snapshot from immediately restoring on the sign-out rerun.
+    st.session_state.remember_restore_checked = True
+    st.session_state.active_device_token = None
     st.session_state.active_player_id = None
     st.session_state.active_player_name = None
     st.session_state.player_auth_flash = ""
@@ -1878,6 +2011,7 @@ def process_pending_group_invite() -> bool:
         if database_check_enabled():
             st.caption(f"Invite join detail: {type(exc).__name__}: {exc}")
         return False
+    _clear_social_caches()
     st.session_state.active_group_id = group.group_id
     st.session_state.group_flash = f"Joined {group.group_name} from the invite link."
     st.session_state.app_mode = "Daily Challenge"
@@ -2205,6 +2339,12 @@ def render_player_identity_gate():
                 max_chars=12,
                 key="returning_player_pin",
             )
+            return_remember = st.checkbox(
+                "Keep me signed in on this device for 30 days",
+                value=True,
+                key="returning_player_remember",
+                help="Use this only on a device you trust. Your PIN is never stored in the browser.",
+            )
             return_submitted = st.form_submit_button(
                 "Sign in", type="primary", use_container_width=True
             )
@@ -2222,6 +2362,8 @@ def render_player_identity_gate():
                     st.error("Display name or PIN did not match.")
                 else:
                     _activate_player(player, created=False)
+                    if return_remember:
+                        _remember_this_device(player.player_id)
                     st.rerun()
 
     with create_tab:
@@ -2245,6 +2387,12 @@ def render_player_identity_gate():
                 max_chars=12,
                 key="create_player_pin_confirm",
             )
+            create_remember = st.checkbox(
+                "Keep me signed in on this device for 30 days",
+                value=True,
+                key="create_player_remember",
+                help="Use this only on a device you trust. Your PIN is never stored in the browser.",
+            )
             create_submitted = st.form_submit_button(
                 "Create player", type="primary", use_container_width=True
             )
@@ -2265,6 +2413,8 @@ def render_player_identity_gate():
                     st.error("Player creation isn't available right now. Please try again.")
                 else:
                     _activate_player(player, created=True)
+                    if create_remember:
+                        _remember_this_device(player.player_id)
                     st.rerun()
 
     st.button(
@@ -2277,6 +2427,10 @@ def render_player_identity_gate():
 
 
 def render_player_status_bar():
+    flash = st.session_state.get("player_auth_flash", "")
+    if flash:
+        st.info(flash)
+        st.session_state.player_auth_flash = ""
     name = st.session_state.get("active_player_name") or "Player"
     left, right = st.columns([5, 1])
     with left:
@@ -2304,7 +2458,7 @@ def _load_player_groups():
     if not st.session_state.get("active_player_id"):
         return []
     try:
-        return load_daily_store().list_groups(st.session_state.active_player_id)
+        return _cached_player_groups(st.session_state.active_player_id)
     except Exception as exc:
         st.warning("Your friend groups could not be loaded right now. Your Daily attempt is unaffected.")
         if database_check_enabled():
@@ -2343,7 +2497,7 @@ def render_friend_group_hub(*, expanded: bool = False):
         if groups:
             active = render_group_selector(groups, key="friend_group_manage_selector")
             try:
-                members = load_daily_store().list_group_members(active.group_id)
+                members = _cached_group_members(active.group_id)
             except Exception:
                 members = []
             member_count = len(members)
@@ -2386,6 +2540,7 @@ def render_friend_group_hub(*, expanded: bool = False):
                     if database_check_enabled():
                         st.caption(f"Group create detail: {type(exc).__name__}: {exc}")
                 else:
+                    _clear_social_caches()
                     st.session_state.active_group_id = group.group_id
                     st.session_state.group_flash = f"{group.group_name} created. Invite code: {group.join_code}"
                     st.rerun()
@@ -2414,6 +2569,7 @@ def render_friend_group_hub(*, expanded: bool = False):
                     if database_check_enabled():
                         st.caption(f"Group join detail: {type(exc).__name__}: {exc}")
                 else:
+                    _clear_social_caches()
                     st.session_state.active_group_id = group.group_id
                     st.session_state.group_flash = f"Joined {group.group_name}."
                     st.rerun()
@@ -2431,12 +2587,11 @@ def _real_group_context():
     active = _select_active_group(groups)
     if active is None:
         return None, [], [], []
-    store = load_daily_store()
-    members = store.list_group_members(active.group_id)
-    board = store.leaderboard(active.group_id, st.session_state.daily_set_id)
+    members = _cached_group_members(active.group_id)
+    board = _cached_group_leaderboard(active.group_id, st.session_state.daily_set_id)
     for row in board:
         row["is_user"] = row.get("player_id") == st.session_state.get("active_player_id")
-    stats = store.group_question_stats(active.group_id, st.session_state.daily_set_id)
+    stats = _cached_group_question_stats(active.group_id, st.session_state.daily_set_id)
     return active, members, board, stats
 
 
@@ -2510,7 +2665,7 @@ def _participation_streak() -> int:
     if not st.session_state.get("active_player_id"):
         return 0
     try:
-        return int(load_daily_store().current_participation_streak(
+        return int(_cached_participation_streak(
             st.session_state.active_player_id,
             st.session_state.daily_date_key,
         ))
@@ -2555,8 +2710,8 @@ def render_daily_intro():
         active = render_group_selector(groups, key="daily_intro_group_selector")
         try:
             store = load_daily_store()
-            member_count = len(store.list_group_members(active.group_id))
-            finished_count = len(store.leaderboard(active.group_id, st.session_state.daily_set_id))
+            member_count = len(_cached_group_members(active.group_id))
+            finished_count = len(_cached_group_leaderboard(active.group_id, st.session_state.daily_set_id))
         except Exception:
             member_count = 0
             finished_count = 0
@@ -2876,6 +3031,7 @@ def render_daily_submission_review():
             return
         try:
             load_daily_store().complete_attempt(attempt_id)
+            _clear_social_caches()
         except Exception as exc:
             st.error("Your Daily couldn't be submitted yet. Your 10 choices are still saved and editable.")
             if database_check_enabled():
@@ -3398,10 +3554,12 @@ def render_help_feedback_footer():
 initialize_state()
 initialize_daily_state()
 initialize_player_identity_state()
+_restore_remembered_player()
 if _pending_invite_code():
     st.session_state.app_mode = "Daily Challenge"
 if process_pending_group_invite():
     st.rerun()
+render_pending_remember_cookie_command()
 # Install near the top so dice taps stay visually anchored on mobile.
 install_dice_scroll_guard()
 install_app_shell_metadata()

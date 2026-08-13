@@ -17,6 +17,18 @@ create table if not exists public.players (
     created_at timestamptz not null default now()
 );
 
+
+create table if not exists public.player_sessions (
+    session_id uuid primary key default gen_random_uuid(),
+    player_id uuid not null references public.players(player_id) on delete cascade,
+    token_hash text not null check (char_length(token_hash) = 64),
+    created_at timestamptz not null default now(),
+    expires_at timestamptz not null,
+    last_used_at timestamptz not null default now(),
+    revoked_at timestamptz,
+    check (expires_at > created_at)
+);
+
 create table if not exists public.friend_groups (
     group_id uuid primary key default gen_random_uuid(),
     group_name text not null check (char_length(group_name) between 2 and 40),
@@ -88,6 +100,8 @@ create table if not exists public.beta_feedback (
 create index if not exists beta_feedback_created_idx on public.beta_feedback(created_at desc);
 create index if not exists beta_feedback_player_idx on public.beta_feedback(player_id);
 
+create index if not exists player_sessions_player_idx on public.player_sessions(player_id, expires_at desc);
+create index if not exists player_sessions_expiry_idx on public.player_sessions(expires_at) where revoked_at is null;
 create index if not exists group_members_player_idx on public.group_members(player_id);
 create index if not exists daily_attempts_challenge_idx on public.daily_attempts(challenge_id);
 create index if not exists daily_attempts_completed_idx on public.daily_attempts(player_id, completed_at);
@@ -230,6 +244,7 @@ for each row execute function public.prevent_daily_answer_delete();
 -- architecture.  The Streamlit server will perform authorization and use a
 -- secret backend key stored only in Streamlit Community Cloud secrets.
 alter table public.players enable row level security;
+alter table public.player_sessions enable row level security;
 alter table public.friend_groups enable row level security;
 alter table public.group_members enable row level security;
 alter table public.daily_challenges enable row level security;
@@ -238,6 +253,7 @@ alter table public.daily_answers enable row level security;
 alter table public.beta_feedback enable row level security;
 
 revoke all on table public.players from anon, authenticated;
+revoke all on table public.player_sessions from anon, authenticated;
 revoke all on table public.friend_groups from anon, authenticated;
 revoke all on table public.group_members from anon, authenticated;
 revoke all on table public.daily_challenges from anon, authenticated;

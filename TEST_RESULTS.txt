@@ -1,18 +1,29 @@
-Yahtzee Coach v43B Phase 2K.3.2 test summary
+Yahtzee Coach v43B Phase 2K.4 test summary
 
-All 29 automated test suites passed across the Phase 2K.3.2 build.
+All 30 automated test suites passed across the Phase 2K.4 build.
 
-Focused coaching-language coverage:
-- New coaching-language family audit: all direct family checks passed
-- Real exact-policy wording audit: 840 sampled positions
-- Naturally occurring families in 840-position audit: 18
-- Maximum player-facing explanation length in audit: 279 characters
-- Old vague wording checks: pass
-- Singular/plural fresh-dice wording checks: pass
-- Dark-mode + dead-bonus hotfix: 11/11
-- Coaching clarity: 12/12
+New persistent-login + performance coverage:
+- Persistent login / performance regression: 21/21
+- High-entropy device token restores correct player
+- Tampered token rejected
+- Revoked token rejected after Sign out
+- 30-day expiration enforced
+- PIN never written into the browser-cookie command
+- First-party cookie uses Secure + SameSite=Lax
+- Supabase stores only hashed token secret
+- player_sessions migration is server-only (anon/authenticated revoked)
+- Friend-group records batched
+- Group-member player records batched
+- Leaderboard attempts/player names batched
+- Group question answers batched
+- Participation streak challenge dates batched
+- Short-lived Streamlit read caches present and invalidated after writes
 
 Core regression coverage:
+- Coaching-language family audit: all checks passed
+- Real exact-policy wording audit: 840 sampled positions
+- Dark-mode + dead-bonus hotfix: 11/11
+- Coaching clarity: 12/12
 - Roll clarity: 10/10
 - Practice UI cleanup: 15/15
 - Practice navigation hotfix: 8/8
@@ -32,4 +43,11 @@ Core regression coverage:
 - Exact routing sample: 840/840
 - Expanded Practice sample: 20,000/20,000 exact
 
-No exact-strategy value changed in this release.
+Locked strategy assets verified byte-for-byte unchanged from Phase 2K.3.2:
+- yahtzee_engine.py
+- exact_mode.py
+- puzzle_bank.py
+- daily_challenge.py
+- exact_policy.npz
+- puzzle_bank.npz
+- challenge_catalog.npz
