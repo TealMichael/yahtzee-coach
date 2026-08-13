@@ -1,0 +1,1 @@
+v2.4 - add optional 30-day student sign-in

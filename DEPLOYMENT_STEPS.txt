@@ -1,26 +1,43 @@
-YAHTZEE COACH v43B PHASE 2K.4.1
-Remember Login Reliability Hotfix
+TEAL'S DAILY FACT CHALLENGE v2.4.0
+30-DAY REMEMBERED STUDENT LOGIN — EXISTING LIVE v2.3 APP
 
-NO NEW SUPABASE STEP if Phase 2K.4 is already installed.
-The existing Phase 2K.4 player_sessions migration is still the only required database change.
+IMPORTANT: This is a CODE-ONLY update.
+NO Supabase SQL step is required.
+NO new Streamlit Secret is required.
+Do NOT rerun v2, v2_1, v2_2, or SUPABASE_SCHEMA.sql.
 
-UPLOAD:
-1. Upload ALL files in this folder to the root of the GitHub repo.
-2. Commit with:
-   v43B Phase 2K.4.1 - fix remembered login after app reopen
-3. Wait for Streamlit to redeploy.
+YOUR UPDATE PATH
+1. Upload EVERY file/folder inside this package's UPLOAD_TO_GITHUB folder to the existing GitHub repo root.
+2. Replace matching files.
+3. Confirm BOTH component folders are present:
+   - daily_sprint_component/index.html
+   - persistent_login_component/index.html
+4. Commit the upload.
+5. Streamlit should redeploy automatically.
 
-LIVE TEST:
-1. Sign in with “Keep me signed in on this device for 30 days” checked.
-2. Fully close the tab/Home Screen app.
-3. Reopen it. You should be signed in automatically.
-4. Press Sign out.
-5. Fully close/reopen again. You should remain signed out.
-6. Confirm the Phase 2K.4 speed improvement is still present.
+Suggested commit:
+   v2.4 - add optional 30-day student sign-in
 
-WHAT CHANGED:
-- Remembered login now uses browser localStorage through a Streamlit Components v2 bridge.
-- The original first-party cookie remains as a fallback.
-- Sign out clears both browser persistence paths and revokes the server token.
-- PINs are never stored in the browser.
-- No strategy, puzzle, scoring, Practice, Daily, social, or coaching behavior changed.
+WHAT CHANGED
+- Student login now includes: Keep me signed in on this device for 30 days.
+- Designed for assigned Chromebooks/iPads; students should leave it unchecked on shared devices.
+- Browser stores a signed token, not the student's actual PIN.
+- Sign out clears the remembered login.
+- PIN reset, account deactivation/deletion, token expiry, or server-secret rotation invalidates the remembered login.
+
+PRESERVED
+- v2.3 Daily completion clarity and Teacher Mode organization
+- v2.2.5 classroom-load retries and batching
+- v2.2.6 Focus Practice speed improvements
+- rank + nickname only on student Top 10
+- adaptive mastery / no placement test
+- Fix Your Misses / 8 Focus Facts
+- Stars / school-day streaks
+- Weekly Mystery
+- full teacher roster/PIN/support tools
+
+UNCHANGED
+- Supabase schema
+- Streamlit Secrets
+- Daily fact generator
+- ranking logic

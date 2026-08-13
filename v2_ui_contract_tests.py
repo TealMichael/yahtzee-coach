@@ -8,20 +8,20 @@ def run():
 
     required_app = [
         "Daily 10 complete",
-        "Step 2 of 3 · Fix Your Misses",
-        "Step 3 of 3 · 🎯 Your Focus Practice",
-        "⭐ Day Complete!",
+        "Learning Step 2 of 3 · Fix Your Misses",
+        "Learning Step 3 of 3 · 🎯 Your Focus Practice",
+        "YOU'RE DONE FOR TODAY!",
         "Learning Streak",
         "total Daily Stars",
         "My Growth",
         "there is no placement test",
         "🎯 My Focus Facts",
         "Mastery & Focus",
-        "Full class fact heatmap",
+        "Full class fact map",
         "Personal Focus override",
         "runs quietly in the background",
         "count_for_mastery=False",
-        "count_for_mastery=True",
+        "record_mastery_evidence_batch",
     ]
     for phrase in required_app:
         assert phrase in app, phrase
