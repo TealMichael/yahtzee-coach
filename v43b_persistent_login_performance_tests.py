@@ -35,7 +35,7 @@ def run():
 
     checks.append(("returning players get a 30-day remember checkbox", 'Keep me signed in on this device for 30 days' in app and 'returning_player_remember' in app))
     checks.append(("new players can also remember the device", 'create_player_remember' in app))
-    checks.append(("new Streamlit sessions read the first-party cookie", 'st.context.cookies.get(REMEMBER_COOKIE_NAME' in app and '_restore_remembered_player()' in app))
+    checks.append(("new Streamlit sessions retain the first-party cookie fallback", 'st.context.cookies.get(REMEMBER_COOKIE_NAME' in app and '_restore_remembered_player(' in app))
     checks.append(("browser cookie is secure and same-site", 'SameSite=Lax; Secure' in app and 'Max-Age={REMEMBER_COOKIE_MAX_AGE}' in app))
     checks.append(("sign out revokes server token and clears browser cookie", 'revoke_device_session(token)' in app and '_queue_remember_cookie_delete()' in app))
     checks.append(("PIN is not written to browser cookie", 'return_pin' not in app[app.index('def render_pending_remember_cookie_command'):app.index('def _restore_remembered_player')]))

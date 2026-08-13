@@ -1,3 +1,33 @@
+# Yahtzee Coach v43B Phase 2K.4.1 — Remembered Login Reliability Hotfix
+
+This hotfix keeps the Phase 2K.4 performance improvements and replaces the fragile cookie-only remembered-login handoff with a first-party browser `localStorage` bridge using Streamlit Components v2. The secure server-side device-session design is unchanged: the browser stores only the high-entropy device token, never the player's PIN, and Supabase stores only the hashed token secret.
+
+## v43B Phase 2K.4.1 changes
+
+- Fixes the live bug where **Keep me signed in on this device for 30 days** worked during the current Streamlit session but did not reliably restore after fully closing/reopening the app.
+- Adds a hidden **Streamlit Components v2** bridge that can read/write the remembered device token from browser `localStorage` and send it back to Python on a brand-new Streamlit session.
+- Keeps the Phase 2K.4 first-party cookie as a compatibility fallback rather than relying on it as the only restore path.
+- A new session waits for the browser-storage read to finish before deciding that no remembered login exists.
+- **Sign out** now revokes the Supabase device session and clears both browser persistence mechanisms.
+- PINs are still never stored in the browser. Remembered sessions still expire server-side after 30 days.
+- All Phase 2K.4 batched Supabase queries and short-lived performance caches are unchanged.
+- Exact solver, exact policy, puzzle bank, Daily generation, Practice generation, EV rankings, and coaching strategy are unchanged.
+
+## Supabase
+
+**No new migration is required for this hotfix.** If Phase 2K.4 is already live and its `player_sessions` migration was run, simply upload this release. The Phase 2K.4 SQL files remain in the full package for clean installs.
+
+## Phase 2K.4.1 live-test goal
+
+1. Upload the full current app.
+2. Sign in with **Keep me signed in on this device for 30 days** checked.
+3. Fully close the browser tab or Home Screen app.
+4. Reopen Yahtzee Coach and confirm the player is restored automatically.
+5. Press **Sign out**, fully close/reopen again, and confirm the player stays signed out.
+6. Confirm the faster Phase 2K.4 loading behavior remains.
+
+---
+
 # Yahtzee Coach v43B Phase 2K.4 — Remember This Device + Performance Patch
 
 This release keeps every Phase 2K.3.2 coaching and dark-mode improvement, then removes the need to type a display name/PIN every time the app is reopened and cuts the biggest repeated Supabase round trips in the social/Daily loading path.

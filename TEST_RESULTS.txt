@@ -1,23 +1,24 @@
-Yahtzee Coach v43B Phase 2K.4 test summary
+Yahtzee Coach v43B Phase 2K.4.1 test summary
 
-All 30 automated test suites passed across the Phase 2K.4 build.
+All 31 automated test suites passed across the Phase 2K.4.1 build.
 
-New persistent-login + performance coverage:
-- Persistent login / performance regression: 21/21
+New remembered-login reliability coverage:
+- LocalStorage/browser bridge regression: 17/17
+- Components v2 browser bridge is present
+- Device token writes to localStorage after successful PIN authentication
+- Fresh sessions read localStorage back into Python
+- Restore waits for the browser read instead of prematurely deciding there is no saved login
+- Cookie restore remains available as a compatibility fallback
+- Sign out removes localStorage, clears the cookie, and revokes the server-side device token
+- PIN never enters the browser persistence bridge
+- Server-side 30-day expiration remains enforced
+
+Phase 2K.4 persistent-login/performance regression:
+- 21/21
 - High-entropy device token restores correct player
-- Tampered token rejected
-- Revoked token rejected after Sign out
-- 30-day expiration enforced
-- PIN never written into the browser-cookie command
-- First-party cookie uses Secure + SameSite=Lax
+- Tampered/revoked/expired tokens rejected
 - Supabase stores only hashed token secret
-- player_sessions migration is server-only (anon/authenticated revoked)
-- Friend-group records batched
-- Group-member player records batched
-- Leaderboard attempts/player names batched
-- Group question answers batched
-- Participation streak challenge dates batched
-- Short-lived Streamlit read caches present and invalidated after writes
+- Batched social/Daily reads and short-lived caches preserved
 
 Core regression coverage:
 - Coaching-language family audit: all checks passed
@@ -43,7 +44,7 @@ Core regression coverage:
 - Exact routing sample: 840/840
 - Expanded Practice sample: 20,000/20,000 exact
 
-Locked strategy assets verified byte-for-byte unchanged from Phase 2K.3.2:
+Locked strategy assets verified byte-for-byte unchanged from Phase 2K.4:
 - yahtzee_engine.py
 - exact_mode.py
 - puzzle_bank.py

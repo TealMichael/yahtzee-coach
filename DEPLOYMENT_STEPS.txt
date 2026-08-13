@@ -1,43 +1,26 @@
-Yahtzee Coach v43B Phase 2K.4 — FULL CURRENT APP deployment
+YAHTZEE COACH v43B PHASE 2K.4.1
+Remember Login Reliability Hotfix
 
-This package REPLACES the Phase 2K.3.2 ZIP.
+NO NEW SUPABASE STEP if Phase 2K.4 is already installed.
+The existing Phase 2K.4 player_sessions migration is still the only required database change.
 
-ONE-TIME SUPABASE STEP — DO THIS FIRST
-1. Open Supabase -> SQL Editor.
-2. Start a NEW query. Do not overwrite your earlier migration queries.
-3. Copy/paste and run: RUN_THIS_ONCE_IN_SUPABASE_Phase2K4.sql
-4. Confirm the query succeeds. This only adds the remembered-device session table/indexes/security.
+UPLOAD:
+1. Upload ALL files in this folder to the root of the GitHub repo.
+2. Commit with:
+   v43B Phase 2K.4.1 - fix remembered login after app reopen
+3. Wait for Streamlit to redeploy.
 
-UPLOAD TO GITHUB
-1. Open the UPLOAD_TO_GITHUB folder from the release ZIP.
-2. In GitHub, open the yahtzee-coach repository root.
-3. Choose Add file -> Upload files.
-4. Select ALL files inside UPLOAD_TO_GITHUB and upload them together.
-5. Commit directly to main.
+LIVE TEST:
+1. Sign in with “Keep me signed in on this device for 30 days” checked.
+2. Fully close the tab/Home Screen app.
+3. Reopen it. You should be signed in automatically.
+4. Press Sign out.
+5. Fully close/reopen again. You should remain signed out.
+6. Confirm the Phase 2K.4 speed improvement is still present.
 
-COPY/PASTE COMMIT MESSAGE:
-v43B Phase 2K.4 - add 30-day remembered login and speed up Supabase reads
-
-6. Wait for Streamlit Community Cloud to redeploy.
-
-MORNING LIVE TEST
-1. Sign in normally with Keep me signed in on this device for 30 days checked.
-2. Fully close the browser tab/Home Screen app.
-3. Reopen Yahtzee Coach. You should be signed in automatically.
-4. Press Sign out, fully close, and reopen. You should remain signed out.
-5. Open the Daily home and completed leaderboard and see whether the warm-app load feels faster.
-
-EXPECTED PHASE 2K.4 BEHAVIOR
-- Existing display name + PIN accounts continue to work unchanged.
-- The PIN is never stored in the browser cookie.
-- Remembered login lasts up to 30 days on that device.
-- Sign out revokes the token and clears the cookie.
-- Friend groups / leaderboards / question stats / Daily streak use batched Supabase reads.
-- Short read-only caches reduce duplicate Supabase traffic during Streamlit reruns.
-- Phase 2K.3.2 coaching language and dark-mode review fixes remain intact.
-
-IMPORTANT
-- Run the Phase 2K.4 SQL migration before expecting Remember Me to work.
-- This patch does not change exact strategy, EV values, Daily puzzles, Practice generation, or scoring.
-- Free-host cold starts can still happen; this patch targets avoidable app/database latency and repeated manual login.
-- __pycache__ and .pyc files are intentionally excluded from the release.
+WHAT CHANGED:
+- Remembered login now uses browser localStorage through a Streamlit Components v2 bridge.
+- The original first-party cookie remains as a fallback.
+- Sign out clears both browser persistence paths and revokes the server token.
+- PINs are never stored in the browser.
+- No strategy, puzzle, scoring, Practice, Daily, social, or coaching behavior changed.

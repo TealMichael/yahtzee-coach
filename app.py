@@ -25,10 +25,11 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.4"
+APP_RELEASE = "v43B Phase 2K.4.1"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
+REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
 REMEMBER_DEVICE_DAYS = 30
 REMEMBER_COOKIE_MAX_AGE = REMEMBER_DEVICE_DAYS * 24 * 60 * 60
 APP_ICON_192_PATH = Path(__file__).with_name("home_icon_192.png")
@@ -39,6 +40,41 @@ st.set_page_config(
     page_icon=APP_ICON_PATH,
     layout="centered",
     initial_sidebar_state="collapsed",
+)
+
+
+# Phase 2K.4.1: browser-local remembered-login bridge.
+# Unlike st.context.cookies (read-only on the Python side), Components v2 can
+# synchronously move a high-entropy device token between browser localStorage
+# and the Streamlit session. The PIN is never stored in the browser.
+_remember_storage_component = st.components.v2.component(
+    "yahtzee_remember_storage",
+    html="<span aria-hidden='true'></span>",
+    css=":host { display: none !important; height: 0 !important; }",
+    js=r"""
+    export default function({ data, setStateValue }) {
+      const key = data?.storage_key || "yc_remember_device_v2";
+      const action = data?.action || "read";
+      const token = data?.token || "";
+      const nonce = data?.nonce || "";
+      let stored = "";
+      try {
+        if (action === "set" && token) {
+          window.localStorage.setItem(key, token);
+        } else if (action === "delete") {
+          window.localStorage.removeItem(key);
+        }
+        stored = window.localStorage.getItem(key) || "";
+      } catch (err) {
+        stored = "";
+      }
+      setStateValue("payload", JSON.stringify({
+        token: stored,
+        ready: true,
+        ack: nonce
+      }));
+    }
+    """,
 )
 
 
@@ -1851,6 +1887,10 @@ def initialize_player_identity_state():
         st.session_state.remember_restore_checked = False
     if "remember_cookie_command" not in st.session_state:
         st.session_state.remember_cookie_command = None
+    if "remember_storage_command" not in st.session_state:
+        st.session_state.remember_storage_command = None
+    if "remember_storage_nonce" not in st.session_state:
+        st.session_state.remember_storage_nonce = 0
 
 
 def _browser_remember_cookie() -> str:
@@ -1860,12 +1900,65 @@ def _browser_remember_cookie() -> str:
         return ""
 
 
+def _next_remember_storage_nonce() -> str:
+    st.session_state.remember_storage_nonce = int(st.session_state.get("remember_storage_nonce", 0)) + 1
+    return str(st.session_state.remember_storage_nonce)
+
+
+def _queue_remember_storage_set(token: str):
+    st.session_state.remember_storage_command = {
+        "action": "set", "token": str(token), "nonce": _next_remember_storage_nonce()
+    }
+
+
+def _queue_remember_storage_delete():
+    st.session_state.remember_storage_command = {
+        "action": "delete", "token": "", "nonce": _next_remember_storage_nonce()
+    }
+
+
 def _queue_remember_cookie_set(token: str):
     st.session_state.remember_cookie_command = {"action": "set", "token": str(token)}
+    _queue_remember_storage_set(token)
 
 
 def _queue_remember_cookie_delete():
     st.session_state.remember_cookie_command = {"action": "delete", "token": ""}
+    _queue_remember_storage_delete()
+
+
+def render_remember_storage_bridge() -> dict:
+    """Read/write the 30-day device token through first-party browser localStorage."""
+    command = st.session_state.get("remember_storage_command") or {}
+    action = str(command.get("action") or "read")
+    token = str(command.get("token") or "")
+    nonce = str(command.get("nonce") or "")
+    default_payload = json.dumps({"token": "", "ready": False, "ack": ""})
+    try:
+        result = _remember_storage_component(
+            data={
+                "storage_key": REMEMBER_STORAGE_KEY,
+                "action": action,
+                "token": token,
+                "nonce": nonce,
+            },
+            default={"payload": default_payload},
+            on_payload_change=lambda: None,
+            key="remember_storage_bridge",
+        )
+        payload_raw = getattr(result, "payload", default_payload) or default_payload
+        payload = json.loads(str(payload_raw))
+        if nonce and str(payload.get("ack") or "") == nonce:
+            st.session_state.remember_storage_command = None
+        return {
+            "token": str(payload.get("token") or "").strip(),
+            "ready": bool(payload.get("ready")),
+        }
+    except Exception as exc:
+        if database_check_enabled():
+            st.caption(f"Remembered-login browser detail: {type(exc).__name__}: {exc}")
+        # Cookie restore remains as a compatibility fallback.
+        return {"token": "", "ready": True}
 
 
 def render_pending_remember_cookie_command():
@@ -1898,12 +1991,23 @@ def render_pending_remember_cookie_command():
     st.session_state.remember_cookie_command = None
 
 
-def _restore_remembered_player():
-    """Restore a signed-in player at the start of a brand-new Streamlit session."""
+def _restore_remembered_player(storage_state: dict | None = None):
+    """Restore a player from localStorage first, with the old cookie as a fallback."""
     if st.session_state.get("active_player_id") or st.session_state.get("remember_restore_checked"):
         return
+    storage_state = storage_state or {}
+    cookie_token = _browser_remember_cookie()
+    storage_token = str(storage_state.get("token") or "").strip()
+    storage_ready = bool(storage_state.get("ready"))
+
+    # A Components-v2 localStorage read arrives on the next rerun. Do not mark
+    # restore complete until that browser read has finished, unless the legacy
+    # first-party cookie already gives us a token immediately.
+    if not cookie_token and not storage_ready:
+        return
+
     st.session_state.remember_restore_checked = True
-    token = _browser_remember_cookie()
+    token = storage_token or cookie_token
     if not token:
         return
     try:
@@ -3554,7 +3658,8 @@ def render_help_feedback_footer():
 initialize_state()
 initialize_daily_state()
 initialize_player_identity_state()
-_restore_remembered_player()
+_remember_storage_state = render_remember_storage_bridge()
+_restore_remembered_player(_remember_storage_state)
 if _pending_invite_code():
     st.session_state.app_mode = "Daily Challenge"
 if process_pending_group_invite():
