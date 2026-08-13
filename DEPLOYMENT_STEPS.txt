@@ -1,26 +1,39 @@
-YAHTZEE COACH v43B PHASE 2K.4.1
-Remember Login Reliability Hotfix
+TEAL'S DAILY FACT CHALLENGE v2.2.3
+FAST ROSTER DELETE HOTFIX — EXISTING LIVE v2.2 APP
 
-NO NEW SUPABASE STEP if Phase 2K.4 is already installed.
-The existing Phase 2K.4 player_sessions migration is still the only required database change.
+IMPORTANT: This is a CODE-ONLY hotfix.
+NO Supabase SQL step is required.
+Do NOT rerun v2, v2_1, v2_2, or SUPABASE_SCHEMA.sql.
 
-UPLOAD:
-1. Upload ALL files in this folder to the root of the GitHub repo.
-2. Commit with:
-   v43B Phase 2K.4.1 - fix remembered login after app reopen
-3. Wait for Streamlit to redeploy.
+YOUR CURRENT PATH
+1. Upload EVERY file/folder inside this package's UPLOAD_TO_GITHUB folder to the existing GitHub repo root.
+2. Replace matching files.
+3. Confirm daily_sprint_component/index.html is still present.
+4. Commit the upload.
+5. Streamlit should redeploy automatically.
 
-LIVE TEST:
-1. Sign in with “Keep me signed in on this device for 30 days” checked.
-2. Fully close the tab/Home Screen app.
-3. Reopen it. You should be signed in automatically.
-4. Press Sign out.
-5. Fully close/reopen again. You should remain signed out.
-6. Confirm the Phase 2K.4 speed improvement is still present.
+Suggested commit:
+   v2.2.3 - make bulk student deletion fast
 
-WHAT CHANGED:
-- Remembered login now uses browser localStorage through a Streamlit Components v2 bridge.
-- The original first-party cookie remains as a fallback.
-- Sign out clears both browser persistence paths and revokes the server token.
-- PINs are never stored in the browser.
-- No strategy, puzzle, scoring, Practice, Daily, social, or coaching behavior changed.
+WHAT CHANGED
+Teacher -> Classes & Students -> Roster Management now uses a true bulk database delete:
+- Select one or many students and press Delete selected student(s).
+- All selected accounts are deleted in one database request instead of one student at a time.
+- Student-linked Daily, Practice, mastery, Focus, and Mystery rows are removed by existing database cascades.
+
+A new fast cleanup tool is also available:
+- Expand “Clear this entire roster (N students)” under Roster Management.
+- Type DELETE followed by the exact class name.
+- One action permanently clears every student currently in that class while keeping the class itself.
+
+For the current duplicate-roster cleanup, this is the fastest option if every student in that wrong roster should be removed.
+
+NO CHANGES
+- Daily 10
+- adaptive mastery / Focus Practice
+- Fix Your Misses
+- leaderboard ranking
+- Weekly Mystery
+- student PIN behavior
+- Supabase schema
+- Streamlit Secrets

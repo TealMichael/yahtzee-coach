@@ -1,852 +1,179 @@
-# Yahtzee Coach v43B Phase 2K.4.1 — Remembered Login Reliability Hotfix
+# Teal's Daily Fact Challenge
 
-This hotfix keeps the Phase 2K.4 performance improvements and replaces the fragile cookie-only remembered-login handoff with a first-party browser `localStorage` bridge using Streamlit Components v2. The secure server-side device-session design is unchanged: the browser stores only the high-entropy device token, never the player's PIN, and Supabase stores only the hashed token secret.
+A classroom-first multiplication fact fluency game built around one short shared competition, a private adaptive learning routine, and a just-for-fun weekly curiosity reward.
 
-## v43B Phase 2K.4.1 changes
+## The daily student routine
 
-- Fixes the live bug where **Keep me signed in on this device for 30 days** worked during the current Streamlit session but did not reliably restore after fully closing/reopening the app.
-- Adds a hidden **Streamlit Components v2** bridge that can read/write the remembered device token from browser `localStorage` and send it back to Python on a brand-new Streamlit session.
-- Keeps the Phase 2K.4 first-party cookie as a compatibility fallback rather than relying on it as the only restore path.
-- A new session waits for the browser-storage read to finish before deciding that no remembered login exists.
-- **Sign out** now revokes the Supabase device session and clears both browser persistence mechanisms.
-- PINs are still never stored in the browser. Remembered sessions still expire server-side after 30 days.
-- All Phase 2K.4 batched Supabase queries and short-lived performance caches are unchanged.
-- Exact solver, exact policy, puzzle bank, Daily generation, Practice generation, EV rankings, and coaching strategy are unchanged.
+Every signed-in student follows the same learning path:
 
-## Supabase
+**Daily 10 → Fix Your Misses → Your Focus Practice → ⭐ Day Complete → 🕵️ Weekly Mystery**
 
-**No new migration is required for this hotfix.** If Phase 2K.4 is already live and its `player_sessions` migration was run, simply upload this release. The Phase 2K.4 SQL files remain in the full package for clean installs.
+### 1. Daily 10
 
-## Phase 2K.4.1 live-test goal
+- Every class gets the **same balanced 10 facts in the same order** each day.
+- The core is **2s-10s**. Selected days include one 11/12 extension fact; never more than one.
+- Fact 1 counts for accuracy but is untimed. Submitting Fact 1 starts the timed sprint for Facts 2-10.
+- The timer runs **quietly in the background**. Students do not watch a ticking stopwatch.
+- Accuracy ranks first; time breaks ties.
+- No right/wrong feedback is shown until the Daily 10 is complete.
+- Students see only their own class **Top 10**. Lower exact ranks stay private.
 
-1. Upload the full current app.
-2. Sign in with **Keep me signed in on this device for 30 days** checked.
-3. Fully close the browser tab or Home Screen app.
-4. Reopen Yahtzee Coach and confirm the player is restored automatically.
-5. Press **Sign out**, fully close/reopen again, and confirm the player stays signed out.
-6. Confirm the faster Phase 2K.4 loading behavior remains.
+### 2. Fix Your Misses
 
----
+Every missed Daily fact is immediately taught with the correct equation, a multiplication array, repeated-addition meaning, a derived-fact strategy, and a required correct retry before moving on.
 
-# Yahtzee Coach v43B Phase 2K.4 — Remember This Device + Performance Patch
+A correction retry is teaching—not a new mastery observation—so it does not artificially raise the student's profile.
 
-This release keeps every Phase 2K.3.2 coaching and dark-mode improvement, then removes the need to type a display name/PIN every time the app is reopened and cuts the biggest repeated Supabase round trips in the social/Daily loading path.
+### 3. Your Focus Practice
 
-## v43B Phase 2K.4 changes
+Each student receives **8 personalized retrievals** chosen from the mastery profile attached to that student account.
 
-- Adds **Keep me signed in on this device for 30 days** to Returning Player and Create Player. It is checked by default.
-- After a successful PIN sign-in, the browser receives a high-entropy remembered-device token. **The PIN itself is never written to the browser.**
-- Supabase stores only a SHA-256 hash of the token secret, plus the player ID and expiration.
-- On a later browser/app session, Yahtzee Coach reads the first-party cookie and restores that player automatically.
-- **Sign out** revokes the server-side device session and deletes the browser cookie, so the next open remains signed out.
-- Remembered-device sessions expire after 30 days and can be revoked without changing the player's PIN.
-- Group member lookup, friend-group lookup, leaderboard loading, group question stats, and Daily streak loading now batch database reads instead of fetching one player/attempt/question at a time.
-- Adds short-lived Streamlit caches for read-only group/streak data so normal reruns do not repeatedly hit Supabase for the same information. Cache entries are cleared after group changes or Daily completion.
-- The exact solver, exact-policy files, Daily puzzle bank, challenge generator, Practice generator, scoring, and coaching values are unchanged.
+The app intentionally has **no placement test**. A new student begins with 45 core facts marked as `Learning`, with zero invented evidence. The profile gradually develops from normal Daily Challenge retrievals and first-try answers in assigned Focus Practice.
 
-## One-time Supabase migration required
+Focus Practice mixes facts currently needing support, facts still building, a small amount of new evidence gathering, stronger maintenance facts, and spaced repeats of priority facts rather than immediate drilling.
 
-For the existing live project, run **`RUN_THIS_ONCE_IN_SUPABASE_Phase2K4.sql`** in a **new SQL Editor query** before uploading this release. It creates only the `player_sessions` table and its indexes/security settings. It does not modify existing players, PIN hashes, Daily attempts, answers, friend groups, scores, or feedback.
+For new/mostly-unknown profiles, exploration is **relationship-aware**: 2s, 5s, and 10s are used as early anchor relationships, then derived facts move forward as their supporting anchors become Building/Fluent. There is still no placement test or giant opening assessment.
 
-The migration is safe to run more than once. A brand-new database can use the updated `v43b_schema.sql`.
+If a Focus answer is missed, the student sees visual/strategy teaching and must retry correctly. The retry teaches the fact but does not count as independent retrieval evidence.
 
-## Why the performance patch matters
+### 4. ⭐ Day Complete
 
-The old social code used several N+1 query patterns. For an 8-player group, one leaderboard or question-stat view could require many sequential Supabase requests because players, attempts, and answers were fetched one at a time. Phase 2K.4 batches those rows with `IN (...)` queries and reuses recent read-only results for a few seconds. This does not eliminate Streamlit Community Cloud cold starts, but it removes a large amount of avoidable app-side database waiting.
+Completing the full learning routine earns one **Daily Star**, progress toward a private **Learning Streak**, and milestone celebrations at 3, 5, 10, 20, 30, 50 days and later 50-day milestones.
 
-## Phase 2K.4 live-test goal
+The reward is for **finishing the learning routine**, not for being fast or being on the leaderboard.
 
-1. Run the one-time Phase 2K.4 Supabase migration.
-2. Upload the full current app.
-3. Sign in with **Keep me signed in on this device for 30 days** checked.
-4. Fully close the tab/Home Screen app, reopen it, and confirm you land signed in without entering your PIN.
-5. Press **Sign out**, close/reopen, and confirm you stay signed out.
-6. Notice whether the Daily home/leaderboard feels faster; the biggest improvement should be on an already-awake app.
+### 5. 🕵️ Weekly Mystery
 
----
+The Weekly Mystery is a curiosity reward that appears only after the full learning routine is complete.
 
-## Previous checkpoint
+- One shared mystery is used across every class for the school week.
+- Monday-Thursday: each completed routine earns the **next clue in order**.
+- Students have **one guess for the entire week**. They can use it early or save it.
+- A missed school day simply means the student has fewer early clues; clue numbering never has holes.
+- Friday: completing the routine shows the full four-clue set, gives an unused guess one final chance, and then reveals the answer.
+- Correct early guesses earn a private solve title such as **One-Clue Wonder** or **Sharp Detective**.
+- Mystery solves are private and never affect Daily rank, mastery, Stars, or streaks.
 
-# Yahtzee Coach v43B Phase 2K.3.2 — Coaching Language Audit + Dark-Mode Hotfix
+The built-in bank contains **80 curated mysteries** across Places, Animals, Foods, Sports, Science & Nature, History & People, Music & Entertainment, and Games/Toys/Objects. It is local to the app, so clue delivery never relies on a live web search.
 
-This release replaces the not-yet-deployed Phase 2K.3.1 package. It keeps the dark-mode review fix and dead-bonus protection, then audits the rest of the exact-coaching language so surprising holds are explained with the same kind of concrete scorecard logic.
+## Persistent mastery
 
-## v43B Phase 2K.3.2 changes
+The core mastery map contains the 45 commutative facts from 2×2 through 10×10. `6×7` and `7×6` are one underlying fact.
 
-- Keeps the completed Daily dark-mode fix so **You Kept / Exact Best / Hold Rank / EV Lost** remain readable on phone dark mode.
-- Keeps the exact dead-bonus regression for `1,1,3,3,6` on Roll 1: **keep 6** remains best and **keep 3,3** remains about **1.94 EV** behind.
-- Adds a structured coaching-language audit across the main explanation families instead of relying on one-off wording.
-- **Why this wins** now explicitly connects the player's visible idea to the scorecard destinations the exact hold actually supports.
-- **Remember** lines are now family-specific and shorter, so they teach a reusable rule without falling back to vague phrases like “useful flexibility.”
-- Clear explanation families now cover: upper bonus alive, secured, and dead; pair-vs-straight; straight cores; triples; four matching dice; two-pair Full House; made-hand keep/break decisions; Chance timing; true endgame; open-board flexibility; extra Yahtzee/Joker situations; and generic scorecard-fit decisions.
-- Adds a diagnostic `coaching_family` tag to exact report metadata for testing only; it does not affect ranking or player scoring.
-- Adds a new **840-position real exact-policy language audit**. Across that sample, explanations covered 18 naturally occurring coaching families, avoided the old vague phrases, avoided singular/plural errors like “1 fresh dice,” and stayed under 280 characters.
-- Adds direct regression cases for Chance timing and open-board flexibility, which are less common in the deterministic 840-position sample.
-- No Supabase migration is required.
+Student-facing statuses are intentionally simple:
 
-## What is intentionally unchanged
+- 🟢 **Fluent**
+- 🟡 **Building**
+- 🔴 **Focus**
+- ⚪ **Learning**
 
-- Exact strategy rankings and policy values.
-- Daily puzzle composition/version.
-- Practice generator and scoring.
-- Player identity, saved Daily attempts, friend groups, leaderboards, streaks, sharing, and feedback.
-- Roll 1 / Roll 2 clarity and Practice UI cleanup.
+Accuracy is primary. Response time is used only after accurate retrieval has been established; speed never rescues weak accuracy.
 
-## Phase 2K.3.2 live-test goal
+The map is stored in Supabase and follows the student's nickname/PIN account across devices and future logins.
 
-1. Upload this full current-app package instead of the earlier Phase 2K.3.1 ZIP.
-2. Open a completed Daily review in dark mode and confirm the four summary values are readable.
-3. In Practice, intentionally choose several reasonable-looking non-optimal holds from different strategy types.
-4. Confirm **Why it matters / Why this wins** answers the practical question: *Why is the exact hold better on this particular scorecard?*
-5. Confirm **Remember** gives one short reusable lesson rather than repeating solver jargon.
-6. Confirm exact holds, EV losses, grades, Daily results, and social features remain unchanged.
+## Extra Practice
 
----
+Practice remains unlimited and lets students choose **My Focus Facts**, Mixed Facts, or 2s through 12s.
 
-## Previous checkpoint
+Every Practice miss uses **teach → retry correctly → next**, with an array and derived-fact strategy. Extra/manual Practice is saved for history but does not currently change the formal mastery map; the formal profile is deliberately based on the common Daily Challenge and assigned Focus Practice.
 
-# Yahtzee Coach v43B Phase 2K.3.1 — Dark-Mode Review Hotfix + Dead-Bonus Explanation Guard
+## Teacher Dashboard
 
-This is a very small display/teaching hotfix on top of Phase 2K.3. Strategy values, Daily puzzles, persistence, friend groups, Practice flow, and scoring are unchanged.
+The private Teacher Dashboard supports roughly 90 students across multiple classes.
 
-## v43B Phase 2K.3.1 changes
+### Today
 
-- Fixes the completed Daily review cards in phone dark mode so **You Kept / Exact Best / Hold Rank / EV Lost** always render with readable dark value text on the light cards.
-- Adds an explicit regression for the late-game dead-bonus position `1,1,3,3,6` on Roll 1 with only Sixes / 3K / 4K open.
-- Protects the exact ranking for that state: **keep 6** remains best; **keep 3,3** remains about **1.94 EV** behind.
-- Improves the coaching for that situation so it explicitly says the **35-point upper bonus is already out of reach** and that keeping the 6 is **not a bonus chase**.
-- The explanation now connects the 6 to every remaining live matching destination and explains why four fresh dice with two rerolls beat committing early to the lower pair.
-- No Supabase migration is required.
+Teachers can see Daily completion, full learning-routine completion, accuracy/time, private streak and star information, each student's current routine step, visible classroom PINs, and the student-visible class Top 10.
 
-## Phase 2K.3.1 live-test goal
+### Mastery & Focus
 
-1. Upload the full current app to GitHub.
-2. Open a completed Daily review in iPhone dark mode.
-3. Confirm **You Kept / Exact Best / Hold Rank / EV Lost** are readable.
-4. If the `1,1,3,3,6` dead-bonus example appears again, confirm the coaching explicitly says the 6 is not being kept to chase an impossible bonus.
-5. Confirm all existing Roll clarity, Practice cleanup, sharing, friend-group, and Daily behavior remains unchanged.
+Teachers can see a full 45-fact class heatmap, facts showing the greatest observed need, an individual student's mastery map, and optional Focus overrides.
 
----
+Override priority is:
 
-## Previous checkpoint
+**Student override → Class override → All-student override → Automatic personalization**
 
-# Yahtzee Coach v43B Phase 2K.3 — Clearer Coaching Explanations
+### Weekly Mystery
 
-This is a focused teaching-language refinement on top of the successful Phase 2K.2 Practice cleanup. Strategy rankings, exact values, puzzle generation, Daily rules, and social/persistence behavior are unchanged.
+Teachers can preview the week's answer and all four clues, see unlock/guess/solve counts, and press **Pick Another Mystery** before any student earns a clue. Once the first clue is earned, the mystery locks for the week so students cannot receive a changed answer midstream.
 
-## v43B Phase 2K.3 changes
+### Student Tools
 
-- Adds a new **Simple why** coaching layer to exact-mode reports.
-- Coaching now directly connects the player's tempting hold to the **boxes that are still open or already filled** instead of relying on abstract phrases such as “preserve flexibility.”
-- Common pair-vs-straight traps now explain why the pair has lost value on that specific scorecard and why distinct straight anchors create more useful paths.
-- The exact playtest example `1,1,3,3,5` with the 3s / 3K / Full House / Chance already filled now explains that **keep 3,3 mostly chases Four of a Kind / Yahtzee, while keep 3,5 keeps both straight boxes alive with three fresh dice**.
-- Practice's **Why it matters** coaching box uses the new concrete explanation automatically.
-- Completed Daily review now shows **💡 Why this wins** before the broader takeaway.
-- Daily review labels are simplified to **🧠 Remember** and **Try this instead**.
-- Existing full exact math, Top exact holds, EV loss, and detailed report remain available.
-- No Supabase migration is required.
+Teachers can see each student's classroom PIN beside the nickname, rename nicknames, move one or many students between classes, permanently delete accidental/duplicate accounts with confirmation, reset/change PINs, deactivate/reactivate accounts, reset today's Daily after a legitimate technology problem, and temporarily override one student's Focus family.
 
-## Phase 2K.3 live-test goal
+## Daily fact generator
 
-1. Upload the full current app to GitHub.
-2. In Practice, intentionally choose a reasonable-looking but non-optimal hold.
-3. Confirm **Why it matters** explains the scorecard tradeoff in plain language.
-4. Open a completed Daily question and confirm **💡 Why this wins** gives the same kind of concrete explanation.
-5. Confirm the exact hold, EV loss, grades, and Top exact holds are unchanged.
+The shared Daily generator remains versioned as `TDFC-DAILY-v1`, so the previously audited Daily sequence does not change in v2.2.2.
 
----
+Each Daily contains 10 unique underlying multiplication facts. Commutative mirrors cannot both appear. Normal core days contain 3 easier, 4 medium, and 3 harder facts. On selected extension days, one harder slot becomes one 11/12 fact.
 
-## Previous checkpoint
+## Data and privacy
 
-# Yahtzee Coach v43B Phase 2K.2 — Practice UI Cleanup + Roll Clarity Bundle
+- Student accounts use teacher-assigned nicknames and 4-digit classroom PINs.
+- Teacher-only views retain a readable copy of classroom PINs while authentication still verifies the salted scrypt hash.
+- Student-facing pages never show classmates' PINs.
+- No student email, school ID, or legal name is required.
+- Supabase Row Level Security is enabled on all app tables with no public browser policies.
+- The Streamlit server uses the private `SUPABASE_SECRET_KEY`; students never receive database credentials.
+- Weekly guesses are private to the student and teacher data layer; there is no class guessing leaderboard.
+- There is intentionally **no social sharing feature**.
 
-This release combines the already-approved **Roll 1 / Roll 2 clarity fix** and **Practice navigation hotfix** with a focused Practice-mode UI cleanup, so only one upload is needed.
+## Streamlit Secrets
 
-## v43B Phase 2K.2 changes
+```toml
+SUPABASE_URL = "https://YOUR-PROJECT.supabase.co"
+SUPABASE_SECRET_KEY = "YOUR-SERVER-SECRET-KEY"
+TEACHER_PASSWORD = "CHOOSE-A-PRIVATE-TEACHER-PASSWORD"
+```
 
-- Keeps the Daily puzzle roll-stage card: **ROLL 1 · First roll / 2 rerolls remaining** and **ROLL 2 · Second roll / 1 reroll remaining**.
-- Keeps the Streamlit callback hotfix that prevents **Open Practice without signing in** from crashing.
-- Practice now opens with a clean **Practice** header and the simple promise: **Unlimited practice · instant coaching after every decision**.
-- If today's Daily is complete, the crossover is reduced to one compact **Daily complete · View leaderboard** button instead of a large banner.
-- The session dashboard no longer appears above the current puzzle.
-- Practice now prioritizes the learning loop: **scenario → roll stage → scorecard → choose dice → submit → coaching → next puzzle**.
-- The scenario name and short description remain visible because Practice is the teaching mode.
-- Practice uses the same prominent blue/green Roll 1 / Roll 2 indicator as Daily.
-- Dice instructions are shortened to one line: tap dice to keep them; leave all unselected to reroll everything.
-- After coaching, **Next Practice Puzzle →** is the primary action.
-- Session grade, exact-rate progress, badges, Session Coach, and strategy mastery move into a collapsed **See my practice progress** section below the primary next-puzzle action.
-- Session history remains collapsed at the bottom.
-- Exact solver behavior, Practice puzzle generation, grading, coaching content, Daily behavior, persistence, friend groups, streaks, feedback, and sharing are unchanged.
-- No Supabase migration is required.
+## Updating an existing installation
 
-## Phase 2K.2 live-test goal
+**Current live v2.2 installation:** v2.2.3 is a code-only fast roster-delete hotfix. **No Supabase SQL is required.** Upload every file/folder in `UPLOAD_TO_GITHUB` to the existing GitHub repo and let Streamlit redeploy.
 
-1. Upload this one full package instead of installing Phase 2K.1.1 separately.
-2. While signed out, press **Open Practice without signing in** and confirm Practice opens normally.
-3. Confirm Practice feels cleaner and the current puzzle is the first thing that matters.
-4. Submit a hold and confirm coaching appears immediately.
-5. Confirm **Next Practice Puzzle →** appears before the optional Practice progress dashboard.
-6. Open **See my practice progress** and confirm the existing session stats, badges, Session Coach, and mastery tools are still available.
-7. On tomorrow's Daily, confirm Roll 1 / Roll 2 remains impossible to miss.
+**If coming from v2.1:** run `RUN_THIS_ONCE_IN_SUPABASE_v2_2.sql` first, then upload the v2.2.3 app files.
 
----
+**If already on v2.0 but not v2.1:** run `RUN_THIS_ONCE_IN_SUPABASE_v2_1.sql`, then `RUN_THIS_ONCE_IN_SUPABASE_v2_2.sql`.
 
-## Previous checkpoint
+**If still on v1:** the packaged `RUN_THIS_ONCE_IN_SUPABASE_v2.sql` is the combined migration and includes adaptive learning, teacher-visible PINs, and Weekly Mystery.
 
-# Yahtzee Coach v43B Phase 2K.1.1 — Practice Navigation Hotfix
+Do not rerun `SUPABASE_SCHEMA.sql` on an existing project. It is the full schema for a brand-new installation.
 
-This is a small production hotfix on top of the Roll Clarity release. A live beta test exposed a Streamlit navigation-state crash when an unsigned player pressed **Open Practice without signing in**.
+Make sure `daily_sprint_component/index.html` remains present in GitHub.
 
-## v43B Phase 2K.1.1 changes
+## Version notes
 
-- Fixes **Open Practice without signing in** so it safely switches to Practice instead of raising a StreamlitAPIException.
-- Applies the same safe navigation pattern to every in-app Daily ↔ Practice shortcut so the same bug cannot appear from another button later.
-- Keeps the Phase 2K.1 Roll 1 / Roll 2 clarity card exactly as shipped.
-- No Daily, strategy, scoring, persistence, social, sharing, feedback, streak, or puzzle-generation behavior changed.
-- No Supabase migration is required.
+### v2.2.3 — Fast Roster Delete Hotfix
 
-## Phase 2K.1.1 live-test goal
+- **Delete selected student(s)** now sends one true bulk database delete instead of deleting each selected student one at a time.
+- Adds **Clear this entire roster** under each class for fast cleanup when a whole roster was entered by mistake.
+- Whole-roster clear keeps the class itself but permanently removes every student in it and their linked history.
+- Whole-roster clear requires typing `DELETE <class name>` before the button enables.
+- Single-student permanent delete was also reduced to one database request.
+- Code-only update: no database migration or new Streamlit secret.
 
-1. Upload the full current app to GitHub.
-2. Open the app while signed out.
-3. Press **Open Practice without signing in** and confirm Practice opens normally.
-4. If today's Daily is already complete, test **Go to open Practice** and **View today's Daily leaderboard** as well.
-5. Confirm the Roll 1 / Roll 2 clarity card is still present on Daily puzzles.
+### v2.2.2 — Visible Roster Management Hotfix
 
----
+- Adds an obvious **Roster Management** section directly under each class roster in **Classes & Students**.
+- Select one or many students at once.
+- **Move selected student(s)** preserves PIN, mastery, Stars, streak, Daily history, Focus work, and Mystery history.
+- **Delete selected student(s)** supports permanent bulk cleanup with an explicit confirmation checkbox.
+- Existing individual Student Tools remain available.
+- Code-only update: no database migration or new Streamlit secret.
 
-## Previous checkpoint
+### v2.2.0 — Weekly Mystery
 
-# Yahtzee Coach v43B Phase 2K.1 — Roll Clarity Quick Fix
+Adds the post-routine **Weekly Mystery** motivation loop. Monday-Thursday full completion unlocks clues, each student has one guess for the entire week, and Friday provides the final guess/reveal. Includes an 80-mystery local bank, private solve stats, and a Teacher Dashboard preview/replacement control that locks after the first clue is earned.
 
-This is a deliberately small next-day usability patch based on live beta feedback. The Daily puzzle screen was already working well; the only problem was that some players were overlooking whether a decision came after Roll 1 or Roll 2.
+The multiplication learning model, Daily generator, accuracy-first Top 10, Focus personalization, mastery evidence, Stars, streaks, and visible teacher PIN system are unchanged.
 
-## v43B Phase 2K.1 changes
+### v2.1.0 — Research Alignment + Teacher PIN Visibility
 
-- Adds a large, consistent roll-stage card **immediately above the Daily dice**.
-- Roll 1 is shown as **🔵 ROLL 1 · First roll** with **2 rerolls remaining**.
-- Roll 2 is shown as **🟢 ROLL 2 · Second roll** with **1 reroll remaining**.
-- Uses distinct blue/green treatments so the stage can be recognized at a glance without redesigning the puzzle screen.
-- Removes the old smaller Daily roll line from the question header so the same information is not duplicated in two places.
-- Back/edit, saved answers, final review, scoring, friend groups, sharing, feedback, streaks, and Practice are unchanged.
-- No new Supabase migration is required for this patch.
+Tightened early adaptive exploration around 2s/5s/10s anchor relationships and retained teacher-readable classroom PINs in teacher-only views.
 
-## Why this stays intentionally small
+### v2.0.0 — Adaptive Learning Routine
 
-The beta group is already successfully using the app. This patch fixes the specific live usability issue without moving the scorecard, dice, progress bar, buttons, or any other established Daily controls.
+Added **Daily 10 → Fix Your Misses → Your Focus Practice → Done**, persistent individualized mastery with no placement test, eight-fact adaptive Focus sessions, required correction retries, hidden competition timing, Daily Stars and school-day Learning Streaks, private growth views, teacher heatmaps, and Focus overrides.
 
-## Phase 2K.1 live-test goal
+### v1.0.0 — Full classroom beta
 
-1. Upload the full current app to GitHub.
-2. Open tomorrow's Daily Challenge.
-3. Confirm every Roll 1 question shows **ROLL 1 · First roll / 2 rerolls remaining** directly above the dice.
-4. Confirm every Roll 2 question shows **ROLL 2 · Second roll / 1 reroll remaining** in the same location.
-5. Confirm the rest of the Daily flow feels unchanged.
-
----
-
-## Previous checkpoint
-
-# Yahtzee Coach v43B Phase 2K — Beta Readiness Pass
-
-This checkpoint is intentionally small and player-facing. The core Daily, exact strategy, friend groups, saved attempts, sharing, and Practice systems remain unchanged; Phase 2K focuses on making the app easier to hand to a small group of outside testers.
-
-## v43B Phase 2K changes
-
-- Adds a low-profile **Help & feedback** section at the bottom of the app rather than another prominent home-screen feature.
-- Beta testers can submit **Something confusing**, **Bug / something broke**, **Idea / suggestion**, or **Account / PIN help** feedback directly into the Yahtzee Coach Supabase project.
-- Feedback automatically records the app release and current app section; signed-in feedback is associated with the player's existing ID without asking them to enter private information.
-- The feedback form explicitly warns players **not to include their PIN or other private information**.
-- Returning-player login now includes a small **Forgot your PIN?** explanation. Full PIN recovery is intentionally not implemented yet; testers are told to contact Mike/their inviter without sharing the PIN itself.
-- The existing participation-streak calculation is now surfaced as a lightweight **Daily streak** message before and after the Daily.
-- The within-the-10 exact streak metric is renamed **Best Exact Run** so players do not confuse it with the multi-day Daily streak.
-- Friend leaderboards now have intentional asynchronous states: **first to finish**, **waiting for friends**, **everyone's in / final standings**, and **only member so far**.
-- Before starting the Daily, a group member can see at a glance whether nobody, some friends, or everyone has finished yet without seeing any scores or strategy spoilers.
-- The beta/version label remains tucked inside **Help & feedback** rather than appearing in normal play.
-
-## One-time database migration required
-
-Existing Supabase projects should run `v43b_phase2k_beta_feedback_migration.sql` once before testers use the new feedback form. It creates only the beta feedback inbox and does not alter players, Daily attempts, answers, groups, scoring, or leaderboards.
-
-The migration is safe to run more than once. A fresh install can use the updated `v43b_schema.sql` directly.
-
-## What is intentionally NOT changed
-
-- Exact strategy recommendations and scoring are unchanged.
-- Daily puzzle composition/version remains `43A-bank42.6`.
-- One attempt per player/day and pre-submit Back/edit rules are unchanged.
-- Real friend groups, invite links, leaderboards, and spoiler-free sharing are unchanged.
-- Practice remains account-free.
-- Full self-service PIN reset/recovery is not part of this beta pass.
-- The iPhone Home Screen icon issue remains on the backburner; the browser favicon/custom icon assets remain in place, but Phase 2K does not spend more development time fighting the Streamlit/iOS Web Clip limitation.
-
-## Phase 2K live-test goal
-
-1. Run the one-time Phase 2K Supabase migration.
-2. Upload the full current app to GitHub.
-3. Confirm **Help & feedback** appears quietly at the bottom rather than competing with Daily/Practice.
-4. Send one test feedback message and confirm it appears in Supabase's `beta_feedback` table.
-5. Complete/return to a Daily and confirm the multi-day **Daily streak** message appears without cluttering the result hero.
-6. Test a group where only one or some members have finished and confirm the waiting language feels natural.
-7. Invite a few friends and let their behavior—not more speculative features—drive the next priorities.
-
----
-
-## Previous checkpoint
-
-# Yahtzee Coach v43B Phase 2I — Home Navigation + Full-Text Share Fix
-
-This checkpoint fixes two live usability issues from the Phase 2H/2G polish pass without changing any competitive or strategy behavior.
-
-## v43B Phase 2I changes
-
-- **Add to Home Screen is no longer a prominent card/button on the Daily or Practice page.**
-- The main navigation now reads, in order: **Daily Challenge · Practice · 📲 Add to Home Screen**.
-- Selecting the third option opens a dedicated Home Screen page with the custom teacher-die icon and simple tabs for **iPhone/iPad, Android, and Computer**.
-- The dead-looking custom install action button has been removed entirely. The dedicated page gives the real browser/OS steps instead of pretending the site can force the system installer.
-- The web-app icon/title metadata is still injected automatically, but that JavaScript now runs through top-level `st.html(...)` instead of an iframe component.
-- **Share result now hands the native share sheet one complete text payload.**
-- The Yahtzee Coach URL remains the final line of that text, but is no longer sent as a separate `url` field that some Messages/share targets were prioritizing over the score.
-- The Daily share controls also run through top-level `st.html(...)` rather than an iframe, which keeps the browser share/clipboard call in the page context.
-- **Copy score** still copies the same full spoiler-free result and now has an additional legacy clipboard fallback if the modern clipboard API is blocked.
-- No Supabase schema changes are required for this phase.
-
-## What is intentionally NOT changed
-
-- Daily puzzle composition/version remains `43A-bank42.6`.
-- Exact strategy and scoring are unchanged.
-- Permanent players, one official Daily attempt, back/edit-before-submit, friend groups, invite links, and live leaderboards are unchanged.
-- The Wordle-style square thresholds are unchanged.
-- The final Home Screen install/add action is still controlled by the user's browser and operating system.
-
-## Phase 2I live-test goal
-
-1. Upload the full current app to GitHub.
-2. Confirm the top navigation shows **Daily Challenge**, **Practice**, then **📲 Add to Home Screen**.
-3. Confirm no large install card appears underneath Daily Challenge or Practice anymore.
-4. Open **📲 Add to Home Screen** and confirm the teacher-die icon plus device tabs appear.
-5. Open an already-completed Daily and press **Share result**.
-6. Choose Messages/text and confirm the message contains the **entire score block and colored squares**, with the Yahtzee Coach URL only as the final line.
-7. Try **Copy score** and paste it into a text to confirm the same full result is copied.
-
----
-
-## Previous checkpoint — v43B Phase 2H
-
-Phase 2H attempted to keep a custom Install/Add button and show device instructions when a direct browser install prompt was unavailable. Live testing showed that this control was still unreliable inside Streamlit's embedded component environment. Phase 2I supersedes that approach: installation is now a native third navigation destination with no fake action button to fail.
-
----
-
-## Previous checkpoint
-
-# Yahtzee Coach v43B Phase 2G — Spoiler-Free Daily Result Sharing
-
-This checkpoint adds the Wordle-style social payoff to the completed Daily Challenge.
-The exact strategy engine, Daily puzzle composition, permanent players, saved Daily attempts, friend groups, invite links, editable pre-submit review, and home-screen icon/install polish remain intact.
-
-## v43B Phase 2G changes
-
-- Completed Daily results now include a **Share your Daily** card.
-- The card creates a compact **two-row, 10-square result grid**, one square for each decision.
-- Result colors are spoiler-free and describe decision quality rather than the dice/hold itself:
-  - 🟩 exact
-  - 🟨 essentially optimal (within 0.10 EV)
-  - 🟧 close (within 1.00 EV)
-  - 🟥 meaningful miss (more than 1.00 EV)
-- Shared text also includes **total EV lost**, **exact holds**, and **best exact streak**.
-- If the player is in a friend group, the share can include the player's **current group rank among completed players**.
-- **Share result** opens the device's native share sheet when supported.
-- **Copy score** copies the full formatted result for pasting into Messages, group chats, email, etc.
-- If native sharing is unavailable, Share result falls back to copying the score.
-- Shared results intentionally contain **no dice, chosen holds, exact answers, scenario names, or coaching**, so friends can safely share before others play.
-- The Yahtzee Coach app link is included at the bottom of the copied/shared result.
-- No Supabase schema changes are required for this phase.
-
-## Example share
-
-🎲 Yahtzee Coach Daily — Aug 9, 2026  
-0.42 EV lost · 8/10 exact  
-🟩🟩🟨🟩🟩  
-🟩🟧🟩🟩🟩  
-🔥 Best exact streak: 5  
-🏆 Group rank right now: #1 of 3  
-🟩 exact · 🟨 essentially optimal · 🟧 close · 🟥 miss
-
-## What is intentionally NOT changed
-
-- Daily puzzle composition/version remains `43A-bank42.6`.
-- The exact policy and strategy recommendations are unchanged.
-- One official Daily attempt per player per day remains enforced.
-- Back/edit remains available only before final submission; sharing appears only after the result is locked.
-- Friend-group rank in a shared result is explicitly labeled **right now** because standings can change as more friends finish.
-- Practice remains open and account-free.
-
-## Phase 2G live-test goal
-
-1. Upload the full current app to GitHub.
-2. Complete / reopen today's already-completed Daily result.
-3. Confirm the new **Share your Daily** card appears.
-4. Confirm the 10 colored squares match the quality of the 10 completed decisions without revealing answers.
-5. Tap **Copy score**, paste it into a text message, and confirm the formatting survives.
-6. Tap **Share result** on a phone and confirm the native share sheet opens when supported.
-7. If you are in a friend group, confirm the copied text shows the current group rank.
-
----
-
-## Previous checkpoint
-
-# Yahtzee Coach v43B Phase 2F — Custom App Icon + Smarter Home-Screen Install
-
-This checkpoint upgrades the phone/home-screen experience around the working Phase 2E app.
-The exact strategy engine, Daily puzzle composition, persistent players, saved Daily attempts, real friend groups, and invite links all remain intact.
-
-## v43B Phase 2F changes
-
-- The Home Screen flow now uses the chosen **cartoon teacher-die mascot icon**.
-- The app injects **Apple touch icon** and **web app metadata** automatically so iPhone/iPad Home Screen saves can use the branded icon and launch title.
-- The install/help card now detects when Yahtzee Coach is already running in **standalone / installed mode** and changes its message accordingly.
-- On browsers that expose the standard **beforeinstallprompt** event, the card can now open the browser's install prompt directly.
-- When a direct install prompt is not available, the card gives concise platform-specific guidance for **iPhone / iPad (Safari)**, **Android (Chrome)**, and **desktop Chrome/Edge**.
-- Adds a **Copy app link** control so players can text the app to themselves or a friend.
-- No Supabase schema changes are required for this phase.
-- Friend groups, real leaderboards, Practice, Daily back/edit review, and one-attempt-per-day protections are unchanged.
-
-## What is intentionally NOT changed
-
-- Daily puzzle composition/version remains `43A-bank42.6`.
-- The exact policy and strategy recommendations are unchanged.
-- Phones still require the user to confirm the final operating-system **Add to Home Screen / Install** step.
-- Practice remains open and account-free.
-- PIN recovery and group-admin/delete tools are still future polish items.
-- Participation streak calculations exist in the persistence layer but are not yet surfaced prominently.
-
-## Phase 2F live-test goal
-
-1. Upload the full current app to GitHub.
-2. Open Yahtzee Coach on a phone.
-3. Confirm the **Add Yahtzee Coach to your Home Screen** card shows the new mascot icon.
-4. On iPhone/iPad, use the guided **Share → Add to Home Screen** path and confirm the saved icon is the custom teacher-die.
-5. On a device/browser that already treats Yahtzee Coach like an installed app, confirm the card switches to **Already added** messaging.
-6. Optional: try the **Copy app link** button and text the app to yourself or a friend.
-
----
-
-## Previous checkpoint
-
-# Yahtzee Coach v43B Phase 2E — Invite Links + Editable Daily Review + Home-Screen Polish
-
-This checkpoint turns the successful Phase 2D social system into a much smoother friend-facing experience.
-The exact strategy engine, Daily puzzle composition, real friend groups, permanent player identity, and one-attempt-per-day rule remain intact.
-
-## v43B Phase 2E changes
-
-- Every friend group now has a **shareable invite URL** in addition to its short join code.
-- Group members get both **Share invite** and **Copy invite link** controls.
-- Opening an invite URL sends a new friend directly into the Daily/player flow with the group invite already queued.
-- A new player can create a display name + PIN, or a returning player can sign in, and then Yahtzee Coach **automatically joins that invited group**.
-- The invite query parameter is cleared after a successful join so normal app navigation resumes cleanly.
-- Daily Challenge now has a visible **Back** button.
-- Saved Daily choices can be revised before the player final-submits the ten-question set.
-- Back/edit does **not** reveal grades, EV loss, optimal holds, strategy labels, or coaching.
-- After Question 10, the player sees a **final no-feedback review** of all ten chosen holds.
-- The review screen can jump directly back to any question for correction.
-- **Submit final Daily Challenge** is now the permanent lock point. After final submission, the ten answers are immutable and the normal result/leaderboard/coaching screen unlocks.
-- Refresh/cross-device resume is preserved: saved draft choices still restore from Supabase before final submission.
-- The app home area now includes **Add Yahtzee Coach to your Home Screen** guidance for iPhone/iPad, Android, and desktop browsers.
-- Friend groups, live leaderboards, real group question stats, Practice, and exact strategy remain unchanged.
-
-## One-time database migration required
-
-Phase 2C/2D intentionally made every saved answer immutable immediately. Phase 2E changes the lock point to the player's explicit final submission, so previously saved answer rows must be allowed to update **only while the parent Daily attempt is incomplete**.
-
-Existing Supabase projects must run `v43b_phase2e_migration.sql` once in the Supabase SQL Editor before testing Back/edit.
-The migration is safe to run more than once and preserves these protections:
-
-- one attempt per player/challenge
-- first-pass answers still save sequentially
-- official answers remain exact-solver-only
-- question number / puzzle identity cannot be changed
-- answer rows cannot be deleted
-- completed Daily attempts cannot be revised
-
-`v43b_schema.sql` has also been updated so a brand-new v43B database would receive the Phase 2E behavior directly.
-
-## What is intentionally NOT changed
-
-- Daily puzzle composition/version remains `43A-bank42.6`.
-- The exact policy and strategy recommendations are unchanged.
-- The Daily still allows only one official attempt per player per day.
-- No feedback appears while answers remain editable.
-- Practice remains open and account-free.
-- PIN recovery and group-admin/delete tools are still future polish items.
-- Participation streak calculations exist in the persistence layer but are not yet surfaced prominently.
-
-## Phase 2E live-test goal
-
-1. Run the one-time `v43b_phase2e_migration.sql` in Supabase.
-2. Upload the full current app to GitHub.
-3. In a friend group, use **Copy invite link** or **Share invite** and open the link in a fresh/private browser.
-4. Create/sign in as a test player and confirm the player joins the group automatically without manually entering the code.
-5. Start the Daily, save at least three answers, then use **Back** to change an earlier hold.
-6. Refresh or sign out/in and confirm the revised saved answer is still there.
-7. Complete all ten and confirm the no-feedback review appears before the score.
-8. Edit one question from that review, return to review, then final-submit.
-9. Confirm the completed result is locked and the real friend leaderboard still works.
-10. On a phone, open **Add Yahtzee Coach to your Home Screen** and follow the device-specific install steps.
-
----
-
-## Previous checkpoint
-
-# Yahtzee Coach v43B Phase 2D — Real Friend Groups + Live Leaderboards
-
-This checkpoint turns the Daily Challenge social layer from a demo into real shared competition.
-The permanent-player and persistent-attempt systems from Phase 2B/2C remain intact, and the exact
-strategy engine, exact policy, Daily puzzle composition, and Practice behavior remain locked.
-
-## v43B Phase 2D changes
-
-- Signed-in players can **create a friend group** and receive a short invite code.
-- Other permanent players can **join the group with that code**; codes are case-insensitive.
-- Group creators are automatically members.
-- Players can belong to more than one group and select which group's standings they want to view.
-- The Daily results screen now uses the **real Supabase leaderboard** instead of the seven simulated v43A rows.
-- Only **completed official Daily attempts** appear on the leaderboard; partial scores never leak during a run.
-- Leaderboard order remains locked to: lowest total EV loss, then most exact holds, then lowest worst miss.
-- The results screen shows how many group members have completed today's Daily and refreshes when the player returns.
-- “Today's killer” and “Most solved / Unanimous” cards now use **real completed group answers**.
-- Friend-group member names and the group's invite code are visible to group members.
-- Adds `list_group_members()` to both the reference persistence contract and Supabase production backend.
-- Adds `v43b_social_tests.py` and expands persistence/UI tests for real social behavior.
-- The old simulated friend helpers remain only in `daily_challenge.py` for historical regression coverage; the live app no longer imports or displays them.
-- No Supabase schema migration is required for this patch; the `friend_groups` and `group_members` tables were installed in the original v43B schema.
-
-## Daily puzzle variety audit
-
-The Daily selector was re-audited before this release because repeated broad scenario names can make different decisions feel similar.
-The underlying puzzles are varying well, so the locked v42.6 composition was **not changed**.
-
-- August 2026 31-day regression: **308 of 310 underlying decisions were unique**.
-- There were **0 exact underlying puzzle repeats on consecutive days** across that month.
-- Each Daily used **7–9 distinct strategy families** in the 10-question set.
-- A separate 60-day spot audit produced **586 unique underlying decisions out of 600** (97.7%).
-- Only **4 of 600** decisions repeated an underlying puzzle seen in the previous seven days (0.7%).
-- Every Daily still preserves the locked **5 Roll 1 / 5 Roll 2** and **2 Opening / 3 Midgame / 3 Late Game / 2 True Endgame** structure.
-
-The repeated feeling is mostly from intentionally reusable scenario labels such as “Matching Dice Pressure,” “Straight Structure,” and “Full House Puzzle.” The actual dice + scorecard + game-state decisions underneath those labels are overwhelmingly different.
-
-## What is intentionally NOT changed yet
-
-- Participation streak calculations exist in the persistence layer but are not yet surfaced prominently in the player UI.
-- There is not yet a player/group deletion or group-admin screen.
-- PIN recovery is not available yet.
-- Exact solver behavior is unchanged.
-- Daily puzzle composition/version remains `43A-bank42.6`.
-- Practice behavior is unchanged and still works without signing in.
-
-## Phase 2D live-test goal
-
-1. Sign in to the player that already completed today's persistent Daily.
-2. Create a friend group and confirm an invite code appears.
-3. Confirm your already-completed Daily immediately appears as the group's first real leaderboard row.
-4. Sign out and create/sign in as another test player (or use a friend's player).
-5. Join the group with the invite code and confirm the member count increases.
-6. If that second player completes today's Daily, return to the first player and confirm both real rows are ranked together.
-
-Once this passes live, the remaining v43B social polish can focus on streak display, richer return-home/status information, and group/player management rather than core persistence.
-
----
-
-## Previous checkpoint: v43B Phase 2C — Persistent Daily Attempts
-
-This checkpoint turns the permanent-player system into a true saved Daily Challenge.
-The exact strategy engine, exact policy, Daily puzzle composition, and Practice behavior remain locked.
-
-## v43B Phase 2C changes
-
-- Starting the Daily Challenge now creates the player's **one official attempt for that day** in Supabase.
-- The database uniqueness rule enforces one attempt per player / challenge even if two tabs or devices try to start at once.
-- Every answer is written to Supabase **before** the local UI advances to the next question.
-- Locked answers are immutable and remain exact-solver-only.
-- Refreshing, leaving the app, signing out, or switching devices no longer loses Daily progress.
-- After signing back in, the app restores the saved attempt and continues at the next unanswered question.
-- Completed attempts restore the full result/review screen after a later sign-in.
-- Question 10 completion is self-healing: if the tenth answer saves but finalization is interrupted, the next load safely finalizes the already-locked attempt.
-- The old prototype **Reset today's local demo attempt** control is removed. Official attempts cannot be reset.
-- Local held-die widget state is cleared when switching players/dates so an unsubmitted hold cannot leak from one player to another.
-- The Daily UI now explicitly shows how many answers are safely saved.
-- Adds `v43b_daily_attempt_ui_tests.py` for the live persistence wiring.
-- No Supabase schema migration is required for this patch; it activates the attempt/answer tables already installed during the v43B setup.
-
-## What is intentionally NOT changed yet
-
-- The seven friend leaderboard rows are still deterministic simulated players.
-- Real friend groups, join codes, real group leaderboards, streak display, and real group question stats are not visible yet.
-- Player identity still uses the lightweight display-name + PIN flow; users sign back in to restore a session on another device.
-- Exact solver behavior is unchanged.
-- Daily puzzle composition/version remains `43A-bank42.6`.
-- Practice behavior is unchanged and still works without signing in.
-
-## Phase 2C live-test goal
-
-1. Sign in to the same player that passed Phase 2B.
-2. Start today's Daily Challenge.
-3. Lock two or three answers.
-4. Refresh/close the app or sign out.
-5. Return and sign in with the same player.
-6. Confirm the challenge resumes at the next unanswered question with the earlier answers still locked.
-7. Finish all ten.
-8. Leave and return again; confirm the completed result/review restores instead of offering a second attempt.
-
-Once this passes live, the next major v43B step can replace the simulated friend leaderboard with real groups and real completed-player results.
-
----
-
-# Yahtzee Coach v43B Phase 2B — Persistent Player Identity
-
-This checkpoint turns the working Supabase connection into the first visible v43B feature:
-**permanent Daily Challenge players**. The exact strategy engine, exact policy, Daily puzzle
-composition, and Practice behavior remain locked.
-
-## v43B Phase 2B changes
-
-- Adds a polished **Create player / Returning player** gate for Daily Challenge.
-- New players choose a public display name and private 4–12 digit PIN.
-- Returning players sign back in with the same display name + PIN.
-- Display names remain case-insensitively unique so returning-player lookup is unambiguous.
-- PINs are masked in the UI and stored in Supabase only as salted `scrypt` hashes — never plaintext.
-- Player identity is stored in the existing `players` table through the trusted Streamlit backend.
-- The active player is kept in per-user Streamlit Session State during the current app session.
-- Daily Challenge now requires a player identity; **Practice remains available without signing in**.
-- Adds a visible signed-in player status and **Sign out** control.
-- Switching players clears the local Daily preview attempt so one player's session state cannot be
-  carried into another player's run.
-- Keeps the hidden `?dbcheck=1` Supabase preflight, now labeled Phase 2B.
-- Adds `v43b_identity_tests.py` for identity-specific regression coverage.
-
-## What is intentionally NOT changed yet
-
-- Daily answers are still session-local in this Phase 2B live test.
-- One official attempt per player/day is not connected to the live UI yet.
-- Cross-device / refresh resume is not connected to the live UI yet.
-- The friend leaderboard still uses the deterministic v43A demo players.
-- Friend groups, join codes, real group leaderboards, streaks, and group question stats are not visible yet.
-- Exact solver behavior is unchanged.
-- Daily puzzle composition/version is unchanged.
-- Practice behavior is unchanged.
-
-## Phase 2B live-test goal
-
-After deployment, verify the smallest real identity loop before attempt persistence is enabled:
-
-1. Open Daily Challenge and create a player.
-2. Confirm the app shows the new player as signed in.
-3. Sign out.
-4. Use **Returning player** with the same display name + PIN.
-5. Confirm the same player returns successfully.
-6. Confirm **Open Practice without signing in** still works.
-
-Once this passes live, the next patch can safely connect the Daily attempt itself to Supabase:
-one attempt per player/day, locked-answer saving, and interruption resume.
-
----
-
-# Yahtzee Coach v43B Phase 2A3 — Supabase URL Compatibility Fix
-
-This checkpoint begins the live v43B persistence rollout while preserving the locked
-v43A.1 Daily Challenge and v42.6 Practice strategy behavior.
-
-## v43B Phase 2A3 changes
-
-- Adds the v43B persistence contract in `daily_store.py`.
-- Adds the production Supabase backend in `supabase_daily_store.py`.
-- Adds `supabase` to `requirements.txt`.
-- Includes the Supabase/Postgres schema in `v43b_schema.sql`.
-- Includes the v43B persistence regression suite in `v43b_persistence_tests.py`.
-- Keeps the hidden database preflight at `?dbcheck=1`.
-- Fixes the first live Supabase preflight failure (`PGRST125: Invalid path specified in request URL`).
-- Automatically normalizes a Supabase REST/Data API endpoint such as
-  `https://<project>.supabase.co/rest/v1` back to the base Project URL expected by `supabase-py`.
-- The preflight reports when that safe URL correction was applied.
-- Keeps exception detail developer-only so setup problems can be diagnosed without changing normal player-facing UI.
-- Cleans generated `__pycache__` / `.pyc` artifacts from the release package.
-
-## What is intentionally NOT changed yet
-
-- No player login/create-player UI is active yet.
-- Daily Challenge still uses the v43A.1 session-local attempt flow and demo leaderboard.
-- Exact solver behavior is unchanged.
-- Daily puzzle composition/version is unchanged.
-- Practice behavior is unchanged.
-
-## v43B deployment status
-
-Supabase tables have been created and Streamlit secrets are expected to contain
-`SUPABASE_URL` and `SUPABASE_SECRET_KEY`. The current checkpoint exists only to verify the
-Streamlit-to-Supabase connection safely before persistent player identity is enabled. Phase 2A3
-adds compatibility for either the base Project URL or the REST/Data API URL form in Streamlit Secrets.
-
----
-
-## Previous checkpoint: v43A.1
-
-v43A.1 keeps the complete v42.6 Practice experience intact and refines the first
-playable version of **Daily Challenge** after live desktop/mobile feedback.
-
-The purpose of v43A.1 is to make Daily Challenge the main attraction and clean up
-the competitive game loop before adding a real shared database in v43B.
-
-## v43A.1 live-feedback changes
-
-- Daily Challenge is now the first/default mode when the app loads.
-- Practice remains available at any time.
-- The large four-box rules summary was removed from the Daily intro.
-- Daily rules are condensed into the hero with an optional **How the Daily Challenge works** expander.
-- The 10-question segmented progress bar is larger and now shows percentage complete.
-- The completed Daily screen has a direct **Go to open Practice** button.
-- After switching to Practice, a completed Daily attempt shows a **View today's Daily leaderboard** return button.
-- In v43A.1 that return behavior lasts for the active Streamlit session; v43B persistence will make the leaderboard available after leaving and reopening the app.
-
-## Two modes
-
-### Practice
-
-Practice is unchanged from v42.6:
-
-- unlimited Roll 1 / Roll 2 hold training
-- 420 realistic/curated scorecard contexts
-- all 252 canonical five-dice rolls available
-- exact full-game strategy values
-- grades, visible hold rank, personalized teaching, Session Coach, mastery,
-  and achievements
-
-### Daily Challenge
-
-Every challenge date produces the same deterministic Daily 10 for everybody.
-The current challenge clock uses **America/New_York (Eastern Time)**, so a new
-challenge begins at midnight Eastern.
-
-The Daily 10 preserves the v42.6 composition rules:
-
-- exactly 10 decisions
-- 5 Roll 1 and 5 Roll 2 decisions
-- 2 Opening, 3 Midgame, 3 Late Game, 2 True Endgame
-- 9 simulated-game scorecards + 1 curated edge case
-- deliberate difficulty and strategy-family variety
-
-During the official run the app deliberately hides:
-
-- the strategy-family label
-- the difficulty label
-- the exact best hold
-- the grade
-- expected-value loss
-- teaching feedback
-
-The player simply sees the scorecard, roll number, and dice. Each answer is
-locked before moving on.
-
-After Question 10, the complete exact coaching unlocks for all ten questions.
-
-## Scoring
-
-Leaderboard order is:
-
-1. **lowest total expected game points lost**
-2. **most exact holds**
-3. **lowest single worst miss**
-
-Speed is intentionally not part of the ranking.
-
-A perfect Daily Challenge is 0.00 total expected game points lost.
-
-## v43A demo leaderboard
-
-v43A does not connect an external database yet. Instead, it includes seven
-**deterministic simulated friend results** so the complete social/results UX can
-be tested now.
-
-The user's row is scored by the real exact solver. The seven demo rows are
-clearly labeled as prototype data in the UI.
-
-The results screen includes:
-
-- total EV lost
-- exact holds out of 10
-- best exact-hold streak
-- friend rank
-- prototype friend leaderboard
-- “Today's killer” question
-- most-solved / unanimous question
-- full ten-question coaching review
-
-## One-attempt and resume behavior in v43A
-
-Within an active Streamlit session:
-
-- answers are locked as they are submitted
-- switching to Practice and back preserves Daily Challenge progress
-- completing Question 10 locks the result
-- the finished result remains available when switching modes
-
-Because v43A deliberately has no database yet, a completely new Streamlit
-session can start a fresh local attempt. A prototype-only reset button is also
-available after completion for testing.
-
-**v43B will move attempt state to the shared database**, enforcing one official
-attempt per player/day and supporting true refresh/device resume.
-
-## Competitive safety
-
-Daily Challenge refuses to lock an answer if the exact solver is unavailable.
-Unlike Practice, it does **not** silently accept the legacy heuristic fallback,
-because competitive attempts must be scored identically for every player.
-
-## Challenge versioning
-
-The app creates a stable challenge-set id from:
-
-- challenge date
-- Daily Challenge version (`43A-bank42.6`)
-- the ten deterministic puzzle ids
-
-This provides the version hook v43B will store with leaderboard submissions.
-
-## Validation
-
-v43A adds focused Daily Challenge tests on top of the v42.6 suite:
-
-- deterministic same-date Daily 10
-- unique challenge ids
-- 5/5 Roll 1/Roll 2 balance
-- 9 realistic + 1 curated composition
-- 2/3/3/2 game-stage composition
-- Eastern-time date boundary
-- exact scoring of all ten questions
-- perfect 10/10 run = 0.00 EV lost
-- deterministic demo leaderboard
-- leaderboard ranking/tiebreak path
-- group question statistics
-- Daily mode hides coaching until completion
-- Daily mode rejects heuristic fallback
-- mobile Daily result grid protection
-
-All existing exact-policy, expanded-bank, teaching, personalization, Session
-Coach, mastery, mobile UI, strategy-regression, and published-strategy tests
-remain passing.
-
-## v43B next
-
-Once the v43A loop feels right, v43B will replace the simulated friend data with:
-
-- persistent player identity
-- friend groups / join codes
-- one official attempt per player/day
-- cross-device resume
-- real daily leaderboards
-- participation streaks
-- weekly standings
-- group question statistics from actual players
-
-The puzzle engine and scoring format are already designed so that connecting the
-database does not require changing the underlying Daily Challenge.
+Initial shared Daily 10, class Top 10, student nickname/PIN accounts, visual Practice, teacher roster/dashboard tools, and Supabase persistence.
