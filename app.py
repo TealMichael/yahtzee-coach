@@ -1,276 +1,1070 @@
-from __future__ import annotations
-
-from datetime import datetime, timezone
+import re
 import html
-import hmac
-import random
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
-import pandas as pd
 import streamlit as st
+import pandas as pd
 import streamlit.components.v1 as components
 
-from fact_engine import (
-    APP_VERSION,
-    CHALLENGE_VERSION,
-    Fact,
-    current_daily_date,
-    daily_facts_for_date,
-    daily_mix_summary,
-    fact_family_options,
-    practice_fact,
-    repeated_addition_text,
-    validate_daily_facts,
+import yahtzee_engine as yc
+from exact_mode import ExactPolicyTable, build_live_report_from_loader
+from session_learning import build_session_learning_summary
+from practice_progress import build_practice_progress, newly_unlocked_badges
+from puzzle_bank import generate_practice_challenge as generate_expanded_practice_challenge
+from daily_challenge import (
+    DAILY_CHALLENGE_VERSION, DAILY_TIMEZONE, challenge_set_id,
+    current_daily_date_key, daily_challenges as get_daily_challenges, summarize_attempt,
 )
-from fact_store import FactStoreError, NameTaken, generate_pin, utc_now
-from adaptive_engine import (
-    FOCUS_SESSION_LENGTH,
-    STATUS_BUILDING,
-    STATUS_FLUENT,
-    STATUS_FOCUS,
-    STATUS_UNKNOWN,
-    build_focus_plan,
-    complete_mastery_map,
-    status_for_display,
-)
-from supabase_fact_store import SupabaseFactStore
-from persistent_login import REMEMBER_DAYS, issue_student_token, peek_student_id, verify_student_token
-from weekly_mystery import (
-    MYSTERIES,
-    default_mystery_key_for_week,
-    is_correct_guess,
-    mystery_for_key,
-    next_mystery_key,
-    school_day_number,
-    week_start_for,
+from supabase_daily_store import SupabaseDailyStore
+from daily_store import (
+    AttemptAlreadyComplete, ChallengeMismatch, DailyStoreError, DuplicateAnswer,
+    GroupNotFound, InvalidOfficialAnswer, InvalidPin, OutOfOrderAnswer, PlayerNameTaken,
 )
 
+APP_ICON_PATH = "apple_touch_icon.png"
+PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
+APP_RELEASE = "v43B Phase 2K.4.1"
+APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
+PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
+REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
+REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
+REMEMBER_DEVICE_DAYS = 30
+REMEMBER_COOKIE_MAX_AGE = REMEMBER_DEVICE_DAYS * 24 * 60 * 60
+APP_ICON_192_PATH = Path(__file__).with_name("home_icon_192.png")
+APP_ICON_512_PATH = Path(__file__).with_name("home_icon_512.png")
 
 st.set_page_config(
-    page_title="Teal's Daily Fact Challenge",
-    page_icon="✖️",
+    page_title="Yahtzee Coach",
+    page_icon=APP_ICON_PATH,
     layout="centered",
     initial_sidebar_state="collapsed",
 )
 
 
-
-DAILY_SPRINT_COMPONENT = components.declare_component(
-    "tdfc_daily_sprint",
-    path=str(Path(__file__).with_name("daily_sprint_component")),
+# Phase 2K.4.1: browser-local remembered-login bridge.
+# Unlike st.context.cookies (read-only on the Python side), Components v2 can
+# synchronously move a high-entropy device token between browser localStorage
+# and the Streamlit session. The PIN is never stored in the browser.
+_remember_storage_component = st.components.v2.component(
+    "yahtzee_remember_storage",
+    html="<span aria-hidden='true'></span>",
+    css=":host { display: none !important; height: 0 !important; }",
+    js=r"""
+    export default function({ data, setStateValue }) {
+      const key = data?.storage_key || "yc_remember_device_v2";
+      const action = data?.action || "read";
+      const token = data?.token || "";
+      const nonce = data?.nonce || "";
+      let stored = "";
+      try {
+        if (action === "set" && token) {
+          window.localStorage.setItem(key, token);
+        } else if (action === "delete") {
+          window.localStorage.removeItem(key);
+        }
+        stored = window.localStorage.getItem(key) || "";
+      } catch (err) {
+        stored = "";
+      }
+      setStateValue("payload", JSON.stringify({
+        token: stored,
+        ready: true,
+        ack: nonce
+      }));
+    }
+    """,
 )
 
-PERSISTENT_LOGIN_COMPONENT = components.declare_component(
-    "tdfc_persistent_login",
-    path=str(Path(__file__).with_name("persistent_login_component")),
-)
 
-ANSWER_PAD_COMPONENT = components.declare_component(
-    "tdfc_answer_pad",
-    path=str(Path(__file__).with_name("answer_pad_component")),
-)
+@st.cache_resource(show_spinner=False)
+def load_daily_store():
+    """Create the v43B Supabase store from private Streamlit secrets."""
+    return SupabaseDailyStore.from_secrets(st.secrets)
 
-def render_number_pad(*, key: str) -> tuple[int, float] | None:
-    """Browser-local touch keypad; digit taps never rerun Streamlit."""
-    result = ANSWER_PAD_COMPONENT(key=key, default=None)
-    if not isinstance(result, dict) or result.get("answer") is None:
-        return None
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_player_groups(player_id: str):
+    return load_daily_store().list_groups(str(player_id))
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _cached_group_members(group_id: str):
+    return load_daily_store().list_group_members(str(group_id))
+
+
+@st.cache_data(ttl=12, show_spinner=False)
+def _cached_group_leaderboard(group_id: str, challenge_id: str):
+    return load_daily_store().leaderboard(str(group_id), str(challenge_id))
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _cached_group_question_stats(group_id: str, challenge_id: str):
+    return load_daily_store().group_question_stats(str(group_id), str(challenge_id))
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_participation_streak(player_id: str, current_date: str):
+    return load_daily_store().current_participation_streak(str(player_id), str(current_date))
+
+
+def _clear_social_caches():
+    """Clear small public-result caches after a write that changes social state."""
+    _cached_player_groups.clear()
+    _cached_group_members.clear()
+    _cached_group_leaderboard.clear()
+    _cached_group_question_stats.clear()
+    _cached_participation_streak.clear()
+
+
+def database_check_enabled():
+    """Enable the temporary v43B database smoke-test banner with ?dbcheck=1."""
     try:
-        value = int(result["answer"])
-        latency = max(0.0, float(result.get("response_seconds") or 0.0))
-    except (TypeError, ValueError):
-        return None
-    if value < 0 or value > 200:
-        return None
-    nonce = str(result.get("nonce") or f"{value}:{latency}")
-    processed_key = f"answer_pad_processed::{key}"
-    if st.session_state.get(processed_key) == nonce:
-        return None
-    st.session_state[processed_key] = nonce
-    return value, latency
+        value = st.query_params.get("dbcheck", "0")
+    except Exception:
+        return False
+    if isinstance(value, list):
+        value = value[0] if value else "0"
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
-# ---------------------------------------------------------------------------
-# Styling
-# ---------------------------------------------------------------------------
+if database_check_enabled():
+    st.info("🔧 v43B Phase 2K.4 database preflight is loaded.")
+    try:
+        daily_store = load_daily_store()
+        if getattr(daily_store, "url_was_normalized", False):
+            st.caption("🔧 Supabase Project URL format was automatically corrected for the Python client.")
+        daily_store.health_check()
+        st.success("✅ v43B database connection is working.")
+    except Exception as exc:
+        st.error("❌ v43B database connection failed.")
+        st.caption(f"Database check detail: {type(exc).__name__}: {exc}")
+
+DICE_FACE = {
+    1: "⚀",
+    2: "⚁",
+    3: "⚂",
+    4: "⚃",
+    5: "⚄",
+    6: "⚅",
+}
+
+CATEGORY_DISPLAY = getattr(yc, "CATEGORY_DISPLAY_NAMES", {
+    "ones": "Ones",
+    "twos": "Twos",
+    "threes": "Threes",
+    "fours": "Fours",
+    "fives": "Fives",
+    "sixes": "Sixes",
+    "three_of_a_kind": "Three of a Kind",
+    "four_of_a_kind": "Four of a Kind",
+    "full_house": "Full House",
+    "small_straight": "Small Straight",
+    "large_straight": "Large Straight",
+    "yahtzee": "Yahtzee",
+    "chance": "Chance",
+})
+
+CATEGORY_SHORT = {
+    "ones": "1s",
+    "twos": "2s",
+    "threes": "3s",
+    "fours": "4s",
+    "fives": "5s",
+    "sixes": "6s",
+    "three_of_a_kind": "3K",
+    "four_of_a_kind": "4K",
+    "full_house": "FH",
+    "small_straight": "SS",
+    "large_straight": "LS",
+    "yahtzee": "YTZ",
+    "chance": "CH",
+}
+
+UPPER_CATEGORIES = ["ones", "twos", "threes", "fours", "fives", "sixes"]
+LOWER_CATEGORIES = [
+    "three_of_a_kind", "four_of_a_kind", "full_house",
+    "small_straight", "large_straight", "yahtzee", "chance"
+]
+
+GRADE_POINTS = {
+    "A+": 4.3, "A": 4.0, "A-": 3.7,
+    "B+": 3.3, "B": 3.0, "B-": 2.7,
+    "C+": 2.3, "C": 2.0, "C-": 1.7,
+    "D+": 1.3, "D": 1.0, "D-": 0.7,
+    "F": 0.0,
+}
+
+GRADE_BADGE_CLASS = {
+    "A+": "grade-a", "A": "grade-a", "A-": "grade-a",
+    "B+": "grade-b", "B": "grade-b", "B-": "grade-b",
+    "C+": "grade-c", "C": "grade-c", "C-": "grade-c",
+    "D+": "grade-d", "D": "grade-d", "D-": "grade-d",
+    "F": "grade-f",
+}
+
+
+EXACT_POLICY_PATH = Path(__file__).with_name("exact_policy.npz")
+
+
+@st.cache_resource(show_spinner=False)
+def load_exact_policy():
+    """Load the precomputed exact policy once per Streamlit process."""
+    return ExactPolicyTable(EXACT_POLICY_PATH)
+
+
+def solver_debug_enabled():
+    """Developer diagnostics: add ?shadow=1 or ?solver=1 to the app URL."""
+    try:
+        value = st.query_params.get("solver", st.query_params.get("shadow", "0"))
+    except Exception:
+        return False
+    if isinstance(value, list):
+        value = value[0] if value else "0"
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def build_live_report(dice, scorecard, selected_hold, roll_number):
+    """Use exact strategy when available; safely fall back to the legacy coach."""
+    return build_live_report_from_loader(
+        load_exact_policy,
+        dice=dice,
+        scorecard=scorecard,
+        user_hold=selected_hold,
+        roll_number=roll_number,
+        legacy_report_factory=lambda d, s, h, r: yc.coach_report_for_user_hold_by_roll_number(
+            d, s, h, roll_number=r
+        ),
+    )
+
+
+def render_solver_panel(records):
+    """Hidden developer panel for confirming exact-mode use and fallbacks."""
+    if not solver_debug_enabled():
+        return
+
+    with st.expander("Exact solver diagnostics", expanded=False):
+        st.caption(
+            "Exact mode is the primary strategy engine. The legacy coach is used only if an exact lookup fails."
+        )
+        if not records:
+            st.info("No submitted puzzles in this session yet.")
+            return
+
+        exact_count = sum(item.get("source") == "exact" for item in records)
+        fallback_count = sum(item.get("source") == "legacy_fallback" for item in records)
+        exact_records = [item for item in records if item.get("source") == "exact"]
+        avg_lookup = (
+            sum(float(item.get("lookup_ms", 0.0)) for item in exact_records) / len(exact_records)
+            if exact_records else 0.0
+        )
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Exact", exact_count)
+        col2.metric("Fallbacks", fallback_count)
+        col3.metric("Avg exact lookup", f"{avg_lookup:.3f} ms")
+
+        frame = pd.DataFrame(records)
+        preferred_columns = [
+            "source", "scenario", "roll_number", "dice", "user_hold",
+            "optimal_hold", "hold_rank", "points_lost", "lookup_ms", "error",
+        ]
+        visible_columns = [column for column in preferred_columns if column in frame.columns]
+        st.dataframe(frame[visible_columns], hide_index=True, use_container_width=True)
+
 st.markdown(
     """
     <style>
     .block-container {
         padding-top: 0.7rem;
-        padding-bottom: 2.5rem;
+        padding-bottom: 2.2rem;
         max-width: 760px;
     }
     h1, h2, h3 { letter-spacing: -0.035em; }
-    .top-title { text-align:center; margin:0.05rem 0 0.05rem 0; font-weight:950; }
-    .subtitle { text-align:center; color:#6b7280; font-size:0.96rem; margin:-0.15rem 0 0.75rem 0; }
-    .tiny-muted { color:#6b7280; font-size:0.82rem; }
-    .center { text-align:center; }
+    .top-title { text-align:center; margin:0.05rem 0 0.05rem 0; }
+    .subtitle { text-align:center; color:#6b7280; font-size:0.95rem; margin: -0.2rem 0 0.7rem 0; }
 
+    /* Lighter cards: no big gray separator bars. */
     .soft-card {
-        border:1px solid rgba(15,118,110,0.16);
-        border-radius:20px;
-        padding:0.9rem 1rem;
-        background:#ffffff;
-        box-shadow:0 2px 12px rgba(0,0,0,0.045);
-        margin:0.55rem 0;
+        border: 1px solid rgba(127,127,127,0.22);
+        border-radius: 18px;
+        padding: 0.78rem 0.88rem;
+        background: rgba(255,255,255,0.90);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+        margin: 0.55rem 0;
         color:#111827 !important;
     }
-    .soft-card * { color:inherit; }
-    .hero-card {
-        border:1px solid #99f6e4;
-        border-radius:22px;
-        padding:1rem;
-        background:linear-gradient(180deg,#f0fdfa 0%,#ffffff 100%);
-        margin:0.7rem 0;
-        color:#111827 !important;
-    }
-    .hero-card * { color:inherit; }
+    .soft-card * { color: inherit; }
     .section-label {
         color:#6b7280;
-        font-size:0.77rem;
-        text-transform:uppercase;
-        letter-spacing:0.06em;
-        font-weight:850;
-        margin:0.75rem 0 0.28rem 0;
-    }
-    .fact-big {
-        font-size:clamp(2.8rem,10vw,4.8rem);
-        font-weight:950;
-        letter-spacing:-0.055em;
-        text-align:center;
-        line-height:1.03;
-        margin:0.55rem 0 0.7rem 0;
-        color:#0f766e;
-    }
-    .fact-row {
-        border:1px solid #d1d5db;
-        border-radius:16px;
-        padding:0.55rem 0.7rem;
-        margin:0.35rem 0;
-        background:#ffffff;
-        color:#111827 !important;
-        font-weight:850;
-    }
-    .result-grid {
-        display:grid;
-        grid-template-columns:repeat(2,minmax(0,1fr));
-        gap:0.5rem;
-        margin:0.6rem 0;
-    }
-    .result-box {
-        border:1px solid #d1d5db;
-        border-radius:16px;
-        padding:0.72rem 0.5rem;
-        background:#f9fafb;
-        text-align:center;
-        color:#111827 !important;
-    }
-    .result-label { color:#6b7280 !important; font-size:0.76rem; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; }
-    .result-value { color:#111827 !important; font-size:1.55rem; font-weight:950; line-height:1.15; }
-
-    .progress-row { display:flex; gap:0.28rem; margin:0.55rem 0 0.8rem 0; }
-    .progress-seg { height:0.55rem; flex:1; border-radius:999px; background:#e5e7eb; }
-    .progress-seg.done { background:#14b8a6; }
-    .progress-seg.current { background:#99f6e4; }
-
-    .routine-strip {
-        display:grid;
-        grid-template-columns:repeat(4,minmax(0,1fr));
-        gap:0.42rem;
-        margin:0.65rem 0 0.9rem 0;
-    }
-    .routine-step {
-        border:1px solid #d1d5db;
-        border-radius:14px;
-        padding:0.55rem 0.4rem;
-        background:#f9fafb;
-        color:#6b7280 !important;
-        text-align:center;
         font-size:0.78rem;
-        font-weight:850;
-        line-height:1.15;
+        text-transform:uppercase;
+        letter-spacing:0.055em;
+        font-weight:800;
+        margin:0.65rem 0 0.32rem 0;
     }
-    .routine-step.done { border-color:#5eead4; background:#f0fdfa; color:#115e59 !important; }
-    .routine-step.current { border-color:#14b8a6; background:#ccfbf1; color:#115e59 !important; }
-    .routine-step.reward { border-color:#facc15; background:#fefce8; color:#854d0e !important; }
-    .finish-banner {
-        border:2px solid #14b8a6;
-        border-radius:24px;
-        padding:1.15rem 1rem;
-        background:linear-gradient(180deg,#ccfbf1 0%,#ffffff 100%);
-        text-align:center;
-        margin:0.75rem 0 0.85rem 0;
+    .practice-hero {
+        border:1px solid #dbeafe;
+        background:linear-gradient(135deg,#f8fbff 0%,#ffffff 78%);
+        border-radius:18px;
+        padding:0.72rem 0.82rem;
+        margin:0.42rem 0 0.55rem 0;
         color:#111827 !important;
     }
-    .finish-banner .big { font-size:clamp(1.8rem,6vw,2.7rem); font-weight:950; line-height:1.03; }
-    .finish-banner .sub { margin-top:0.45rem; font-size:1rem; font-weight:800; }
-
-    .timer-pill {
-        display:inline-block;
-        border:1px solid #99f6e4;
-        background:#f0fdfa;
-        color:#115e59;
-        border-radius:999px;
-        padding:0.28rem 0.65rem;
-        font-size:0.84rem;
-        font-weight:850;
-        margin:0.1rem 0 0.5rem 0;
+    .practice-title { font-size:1.18rem; font-weight:950; line-height:1.1; }
+    .practice-subtitle { color:#64748b !important; font-size:0.84rem; margin-top:0.14rem; }
+    .practice-puzzle-card {
+        border:1px solid rgba(127,127,127,0.20);
+        border-radius:16px;
+        padding:0.7rem 0.78rem;
+        background:#fff;
+        margin:0.42rem 0 0.38rem 0;
+        color:#111827 !important;
     }
-    .leader-row {
-        display:grid;
-        grid-template-columns:2.2rem 1fr;
+    .practice-scenario { font-size:1.03rem; font-weight:950; line-height:1.2; }
+    .practice-description { color:#64748b !important; font-size:0.84rem; line-height:1.35; margin-top:0.18rem; }
+    .practice-score-label { margin-top:0.7rem; }
+    .practice-question { font-size:1.02rem; font-weight:950; margin:0.72rem 0 0.12rem 0; color:#111827; }
+
+    .scenario-pill {
+        display:inline-flex;
         align-items:center;
-        gap:0.5rem;
-        border-bottom:1px solid #e5e7eb;
-        padding:0.5rem 0.1rem;
+        border-radius:999px;
+        background:#eef4ff;
+        color:#174ea6;
+        border:1px solid #d2e3fc;
+        font-weight:800;
+        padding:0.22rem 0.6rem;
+        font-size:0.8rem;
+        margin-bottom:0.35rem;
+    }
+    .muted { color:#6b7280; font-size:0.92rem; }
+    .round-line { font-weight:800; margin-top:0.35rem; }
+
+    .session-strip {
+        display:grid;
+        grid-template-columns:repeat(4, minmax(0, 1fr));
+        gap:0.45rem;
+        margin:0.55rem 0 0.65rem 0;
+    }
+    .session-box {
+        border:1px solid rgba(127,127,127,0.24);
+        border-radius:16px;
+        padding:0.58rem 0.42rem;
+        background:#f3f4f6;
+        text-align:center;
         color:#111827 !important;
     }
-    .leader-rank { font-size:1.03rem; font-weight:950; text-align:center; }
-    .leader-name { font-weight:850; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .session-box * { color:inherit; }
+    .session-label { color:#6b7280; font-size:0.78rem; margin-bottom:0.1rem; }
+    .session-value { font-size:1.24rem; font-weight:900; line-height:1.1; }
 
-    .answer-correct { border-left:5px solid #16a34a; }
-    .answer-miss { border-left:5px solid #dc2626; }
+    .open-chip-row { display:flex; flex-wrap:wrap; gap:0.28rem; margin:0.2rem 0 0.45rem 0; }
+    .open-chip {
+        border-radius:999px;
+        background:#e6f4ea;
+        border:1px solid #ceead6;
+        color:#137333;
+        font-size:0.76rem;
+        font-weight:800;
+        padding:0.2rem 0.46rem;
+    }
+    .score-section-title { font-weight:900; margin:0.45rem 0 0.3rem 0; }
+    .score-grid { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:0.32rem; }
+    .score-grid.lower { grid-template-columns:repeat(7, minmax(0,1fr)); }
+    .score-box {
+        border:1px solid rgba(127,127,127,0.22);
+        border-radius:12px;
+        padding:0.38rem 0.2rem;
+        background:rgba(255,255,255,0.78);
+        text-align:center;
+        min-height:2.85rem;
+    }
+    .score-label { font-size:0.68rem; color:#6b7280; margin-bottom:0.1rem; white-space:nowrap; }
+    .score-value { font-size:0.92rem; font-weight:900; }
+    .open-value { color:#188038; }
+    .filled-value { color:#3c4043; }
 
-    .array-shell {
-        overflow-x:auto;
-        padding:0.5rem 0.15rem 0.2rem 0.15rem;
+    .selected-summary {
+        border-radius:14px;
+        background:#fff7ed;
+        border:1px solid #fed7aa;
+        padding:0.55rem 0.65rem;
+        margin:0.65rem 0 0.55rem 0;
+        font-weight:900;
+        text-align:center;
+        color:#9a3412;
+    }
+    .dice-help { text-align:center; color:#6b7280; font-size:0.86rem; margin:0.15rem 0 0.5rem 0; }
+
+    .dice-picker-row {
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        gap:0.45rem;
+        flex-wrap:nowrap;
+        margin:0.55rem auto 0.7rem auto;
+        width:100%;
+    }
+
+    /* Dice picker buttons: tight square dice buttons, not full-width rows. */
+    .dice-picker-wrap div[data-testid="stHorizontalBlock"] {
+        gap:0.42rem !important;
+        align-items:center !important;
+        justify-content:center !important;
+    }
+    .dice-picker-wrap div[data-testid="column"] {
+        flex:0 0 auto !important;
+        width:clamp(54px, 15vw, 64px) !important;
+        min-width:clamp(54px, 15vw, 64px) !important;
+    }
+    .dice-picker-wrap div[data-testid="stButton"] > button {
+        width:clamp(54px, 15vw, 64px) !important;
+        height:clamp(54px, 15vw, 64px) !important;
+        min-height:clamp(54px, 15vw, 64px) !important;
+        max-height:clamp(54px, 15vw, 64px) !important;
+        padding:0 !important;
+        border-radius:15px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        background:#f8fafc !important;
+        color:#111827 !important;
+        border:2px solid #d1d5db !important;
+        box-shadow:0 4px 0 #c7c9cc, 0 7px 14px rgba(0,0,0,0.16) !important;
+        -webkit-tap-highlight-color:transparent !important;
+    }
+    .dice-picker-wrap div[data-testid="stButton"] > button:active {
+        transform:translateY(3px) !important;
+        box-shadow:0 1px 0 #c7c9cc, 0 3px 8px rgba(0,0,0,0.18) !important;
+    }
+    .dice-picker-wrap div[data-testid="stButton"] > button p {
+        font-size:2.95rem !important;
+        line-height:1 !important;
+        margin:0 !important;
+        padding:0 !important;
+        color:#111827 !important;
+        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
+    }
+    .dice-picker-wrap div[data-testid="stButton"] > button[kind="primary"] {
+        background:#ff4b4b !important;
+        color:#ffffff !important;
+        border-color:#ff4b4b !important;
+        box-shadow:0 4px 0 #b91c1c, 0 7px 14px rgba(255,75,75,0.25) !important;
+    }
+    .dice-picker-wrap div[data-testid="stButton"] > button[kind="primary"] p {
+        color:#ffffff !important;
+    }
+
+    /* Fallback: Streamlit may not preserve the wrapper around widgets, so scope to horizontal button rows. */
+    div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button {
+        width:clamp(54px, 15vw, 64px) !important;
+        height:clamp(54px, 15vw, 64px) !important;
+        min-height:clamp(54px, 15vw, 64px) !important;
+        max-height:clamp(54px, 15vw, 64px) !important;
+        padding:0 !important;
+        border-radius:15px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        background:#f8fafc !important;
+        color:#111827 !important;
+        border:2px solid #d1d5db !important;
+        box-shadow:0 4px 0 #c7c9cc, 0 7px 14px rgba(0,0,0,0.16) !important;
+        -webkit-tap-highlight-color:transparent !important;
+    }
+    div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button p {
+        font-size:2.95rem !important;
+        line-height:1 !important;
+        margin:0 !important;
+        padding:0 !important;
+        color:#111827 !important;
+        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
+    }
+    div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button[kind="primary"] {
+        background:#ff4b4b !important;
+        color:#ffffff !important;
+        border-color:#ff4b4b !important;
+        box-shadow:0 4px 0 #b91c1c, 0 7px 14px rgba(255,75,75,0.25) !important;
+    }
+    div[data-testid="stHorizontalBlock"] div[data-testid="column"] div[data-testid="stButton"] > button[kind="primary"] p {
+        color:#ffffff !important;
+    }
+
+    @media (max-width:380px) {
+        .dice-picker-wrap div[data-testid="stHorizontalBlock"] { gap:0.32rem !important; }
+        .dice-picker-wrap div[data-testid="column"] {
+            width:clamp(48px, 14.5vw, 56px) !important;
+            min-width:clamp(48px, 14.5vw, 56px) !important;
+        }
+        .dice-picker-wrap div[data-testid="stButton"] > button {
+            width:clamp(48px, 14.5vw, 56px) !important;
+            height:clamp(48px, 14.5vw, 56px) !important;
+            min-height:clamp(48px, 14.5vw, 56px) !important;
+            max-height:clamp(48px, 14.5vw, 56px) !important;
+            border-radius:13px !important;
+        }
+        .dice-picker-wrap div[data-testid="stButton"] > button p { font-size:2.65rem !important; }
+    }
+
+
+
+    /* V10 dice picker: one tight row of large tappable dice using Streamlit pills. */
+    div[data-testid="stPills"] {
+        width:100% !important;
+        margin:0.45rem auto 0.68rem auto !important;
+    }
+    div[data-testid="stPills"] div[role="group"] {
+        display:flex !important;
+        justify-content:center !important;
+        align-items:center !important;
+        gap:0.52rem !important;
+        flex-wrap:nowrap !important;
+        width:100% !important;
+    }
+    div[data-testid="stPills"] button {
+        width:clamp(56px, 16.5vw, 68px) !important;
+        min-width:clamp(56px, 16.5vw, 68px) !important;
+        max-width:clamp(56px, 16.5vw, 68px) !important;
+        height:clamp(56px, 16.5vw, 68px) !important;
+        min-height:clamp(56px, 16.5vw, 68px) !important;
+        max-height:clamp(56px, 16.5vw, 68px) !important;
+        border-radius:15px !important;
+        padding:0 !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        background:#f8fafc !important;
+        border:2px solid #d1d5db !important;
+        box-shadow:0 4px 0 #c7c9cc, 0 7px 14px rgba(0,0,0,0.16) !important;
+        -webkit-tap-highlight-color:transparent !important;
+        color:#111827 !important;
+    }
+    div[data-testid="stPills"] button:hover {
+        border-color:#9ca3af !important;
+        background:#ffffff !important;
+    }
+    div[data-testid="stPills"] button:active {
+        transform:translateY(3px) !important;
+        box-shadow:0 1px 0 #c7c9cc, 0 3px 8px rgba(0,0,0,0.18) !important;
+    }
+    div[data-testid="stPills"] button *,
+    div[data-testid="stPills"] button p,
+    div[data-testid="stPills"] button span {
+        font-size:clamp(2.85rem, 11.5vw, 3.55rem) !important;
+        line-height:1 !important;
+        margin:0 !important;
+        padding:0 !important;
+        color:#111827 !important;
+        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
+    }
+    div[data-testid="stPills"] button[aria-selected="true"],
+    div[data-testid="stPills"] button[aria-pressed="true"],
+    div[data-testid="stPills"] button[data-selected="true"] {
+        background:#ff4b4b !important;
+        border-color:#ff4b4b !important;
+        box-shadow:0 4px 0 #b91c1c, 0 7px 14px rgba(255,75,75,0.25) !important;
+    }
+    div[data-testid="stPills"] button[aria-selected="true"] *,
+    div[data-testid="stPills"] button[aria-pressed="true"] *,
+    div[data-testid="stPills"] button[data-selected="true"] * {
+        color:#ffffff !important;
+    }
+
+    @media (max-width:380px) {
+        div[data-testid="stPills"] div[role="group"] { gap:0.36rem !important; }
+        div[data-testid="stPills"] button {
+            width:clamp(52px, 15.7vw, 60px) !important;
+            min-width:clamp(52px, 15.7vw, 60px) !important;
+            max-width:clamp(52px, 15.7vw, 60px) !important;
+            height:clamp(52px, 15.7vw, 60px) !important;
+            min-height:clamp(52px, 15.7vw, 60px) !important;
+            max-height:clamp(52px, 15.7vw, 60px) !important;
+            border-radius:14px !important;
+        }
+        div[data-testid="stPills"] button *,
+        div[data-testid="stPills"] button p,
+        div[data-testid="stPills"] button span { font-size:clamp(2.55rem, 10.5vw, 3.05rem) !important; }
+    }
+
+
+
+    /* V11 dice picker override: keep the working st.pills behavior, but make the dice visually large.
+       Streamlit has used both stPills and stButtonGroup test ids, so target both. */
+    div[data-testid="stButtonGroup"],
+    div[data-testid="stPills"] {
+        width:100% !important;
+        margin:0.5rem auto 0.7rem auto !important;
+    }
+    div[data-testid="stButtonGroup"] div[role="group"],
+    div[data-testid="stPills"] div[role="group"] {
+        display:flex !important;
+        flex-direction:row !important;
+        justify-content:center !important;
+        align-items:center !important;
+        gap:0.42rem !important;
+        flex-wrap:nowrap !important;
+        width:100% !important;
+    }
+
+    /* The actual die button. This is intentionally sized like the approved mockup. */
+    div[data-testid="stButtonGroup"] button,
+    div[data-testid="stPills"] button,
+    button[role="checkbox"] {
+        width:clamp(58px, 17vw, 68px) !important;
+        min-width:clamp(58px, 17vw, 68px) !important;
+        max-width:clamp(58px, 17vw, 68px) !important;
+        height:clamp(58px, 17vw, 68px) !important;
+        min-height:clamp(58px, 17vw, 68px) !important;
+        max-height:clamp(58px, 17vw, 68px) !important;
+        padding:0 !important;
+        margin:0 !important;
+        border-radius:15px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        background:#f8fafc !important;
+        color:#111827 !important;
+        border:2px solid #d1d5db !important;
+        box-shadow:0 4px 0 #c7c9cc, 0 7px 14px rgba(0,0,0,0.16) !important;
+        -webkit-tap-highlight-color:transparent !important;
+        overflow:hidden !important;
+    }
+    div[data-testid="stButtonGroup"] button:hover,
+    div[data-testid="stPills"] button:hover,
+    button[role="checkbox"]:hover {
+        background:#ffffff !important;
+        border-color:#9ca3af !important;
+    }
+    div[data-testid="stButtonGroup"] button:active,
+    div[data-testid="stPills"] button:active,
+    button[role="checkbox"]:active {
+        transform:translateY(3px) !important;
+        box-shadow:0 1px 0 #c7c9cc, 0 3px 8px rgba(0,0,0,0.18) !important;
+    }
+
+    /* Make the die face itself large. Streamlit wraps pill text differently by version,
+       so this targets every likely inner text container. */
+    div[data-testid="stButtonGroup"] button *,
+    div[data-testid="stButtonGroup"] button p,
+    div[data-testid="stButtonGroup"] button span,
+    div[data-testid="stButtonGroup"] button div,
+    div[data-testid="stPills"] button *,
+    div[data-testid="stPills"] button p,
+    div[data-testid="stPills"] button span,
+    div[data-testid="stPills"] button div,
+    button[role="checkbox"] *,
+    button[role="checkbox"] p,
+    button[role="checkbox"] span,
+    button[role="checkbox"] div {
+        font-size:clamp(3.05rem, 13vw, 3.9rem) !important;
+        line-height:0.95 !important;
+        margin:0 !important;
+        padding:0 !important;
+        color:#111827 !important;
+        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
+        font-weight:500 !important;
+    }
+
+    /* Selected/held dice turn red. Cover all Streamlit selection attribute variants. */
+    div[data-testid="stButtonGroup"] button[aria-selected="true"],
+    div[data-testid="stButtonGroup"] button[aria-pressed="true"],
+    div[data-testid="stButtonGroup"] button[aria-checked="true"],
+    div[data-testid="stButtonGroup"] button[data-selected="true"],
+    div[data-testid="stPills"] button[aria-selected="true"],
+    div[data-testid="stPills"] button[aria-pressed="true"],
+    div[data-testid="stPills"] button[aria-checked="true"],
+    div[data-testid="stPills"] button[data-selected="true"],
+    button[role="checkbox"][aria-selected="true"],
+    button[role="checkbox"][aria-pressed="true"],
+    button[role="checkbox"][aria-checked="true"],
+    button[role="checkbox"][data-selected="true"] {
+        background:#ff4b4b !important;
+        border-color:#ff4b4b !important;
+        color:#ffffff !important;
+        box-shadow:0 4px 0 #b91c1c, 0 7px 14px rgba(255,75,75,0.25) !important;
+    }
+    div[data-testid="stButtonGroup"] button[aria-selected="true"] *,
+    div[data-testid="stButtonGroup"] button[aria-pressed="true"] *,
+    div[data-testid="stButtonGroup"] button[aria-checked="true"] *,
+    div[data-testid="stButtonGroup"] button[data-selected="true"] *,
+    div[data-testid="stPills"] button[aria-selected="true"] *,
+    div[data-testid="stPills"] button[aria-pressed="true"] *,
+    div[data-testid="stPills"] button[aria-checked="true"] *,
+    div[data-testid="stPills"] button[data-selected="true"] *,
+    button[role="checkbox"][aria-selected="true"] *,
+    button[role="checkbox"][aria-pressed="true"] *,
+    button[role="checkbox"][aria-checked="true"] *,
+    button[role="checkbox"][data-selected="true"] * {
+        color:#ffffff !important;
+    }
+
+    @media (max-width:380px) {
+        div[data-testid="stButtonGroup"] div[role="group"],
+        div[data-testid="stPills"] div[role="group"] { gap:0.32rem !important; }
+        div[data-testid="stButtonGroup"] button,
+        div[data-testid="stPills"] button,
+        button[role="checkbox"] {
+            width:clamp(54px, 16.2vw, 62px) !important;
+            min-width:clamp(54px, 16.2vw, 62px) !important;
+            max-width:clamp(54px, 16.2vw, 62px) !important;
+            height:clamp(54px, 16.2vw, 62px) !important;
+            min-height:clamp(54px, 16.2vw, 62px) !important;
+            max-height:clamp(54px, 16.2vw, 62px) !important;
+            border-radius:14px !important;
+        }
+        div[data-testid="stButtonGroup"] button *,
+        div[data-testid="stPills"] button *,
+        button[role="checkbox"] * { font-size:clamp(2.8rem, 12vw, 3.4rem) !important; }
+    }
+
+    /* Old HTML dice styles kept harmless in case a cached browser sees them. */
+    .die-button { display:none; }
+
+    /* Normal action buttons should not become dice-sized or huge section bars. */
+    div[data-testid="stButton"] > button {
+        border-radius:14px;
+        min-height:2.55rem;
+        font-weight:850;
+    }
+
+    .grade-row { display:flex; gap:0.7rem; align-items:center; margin-bottom:0.58rem; }
+    .grade-badge {
+        border-radius:18px;
+        padding:0.3rem 0.76rem;
+        font-size:2.05rem;
+        font-weight:950;
+        min-width:4.4rem;
+        text-align:center;
+        color:white;
+        box-shadow:0 2px 8px rgba(0,0,0,0.12);
+    }
+    .grade-a { background:#188038; }
+    .grade-b { background:#1967d2; }
+    .grade-c { background:#f29900; }
+    .grade-d { background:#d93025; }
+    .grade-f { background:#a50e0e; }
+    .result-mini { display:grid; grid-template-columns:1fr 1fr; gap:0.45rem; margin:0.45rem 0 0.62rem 0; }
+    .result-mini-box {
+        border:1px solid rgba(127,127,127,0.22);
+        border-radius:13px;
+        padding:0.52rem 0.62rem;
+        background:rgba(255,255,255,0.82);
+        color:#111827 !important;
+    }
+    .result-mini-box * { color:inherit; }
+    .result-mini-label { color:#6b7280; font-size:0.76rem; }
+    .result-mini-value { font-weight:850; font-size:0.94rem; }
+    .coach-says {
+        border-left:5px solid #1967d2;
+        background:#f3f7ff;
+        border-radius:13px;
+        padding:0.62rem 0.72rem;
+        margin:0.54rem 0;
+        color:#111827 !important;
+    }
+    .coach-says * { color:#111827 !important; }
+    .idea-compare {
+        border:1px solid rgba(127,127,127,0.22);
+        background:rgba(255,255,255,0.92);
+        border-radius:16px;
+        padding:0.72rem;
+        margin:0.55rem 0;
+        color:#111827 !important;
+    }
+    .idea-compare * { color:#111827 !important; }
+    .idea-title {
+        font-size:0.78rem;
+        text-transform:uppercase;
+        letter-spacing:0.055em;
+        font-weight:900;
+        color:#6b7280 !important;
+        margin-bottom:0.45rem;
+    }
+    .idea-grid {
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:0.48rem;
+    }
+    .idea-box {
+        border-radius:13px;
+        padding:0.58rem 0.64rem;
+        line-height:1.36;
+        background:#f8fafc;
+        border:1px solid rgba(127,127,127,0.18);
+    }
+    .idea-box.best { background:#f3f7ff; border-color:rgba(25,103,210,0.22); }
+    .idea-kicker {
+        font-size:0.72rem;
+        text-transform:uppercase;
+        letter-spacing:0.05em;
+        font-weight:900;
+        color:#6b7280 !important;
+        margin-bottom:0.18rem;
+    }
+    .idea-box.best .idea-kicker { color:#1967d2 !important; }
+    .idea-adjust {
+        margin-top:0.48rem;
+        border-radius:12px;
+        padding:0.5rem 0.62rem;
+        background:#fff7ed;
+        border:1px solid #fed7aa;
+        line-height:1.36;
+    }
+    .lesson-card {
+        border:1px solid rgba(25,103,210,0.22);
+        background:#f8fbff;
+        border-radius:15px;
+        padding:0.68rem 0.78rem;
+        margin:0.52rem 0 0.58rem 0;
+        color:#111827 !important;
+    }
+    .lesson-card * { color:#111827 !important; }
+
+    .session-coach {
+        border:1px solid #bfdbfe;
+        border-radius:18px;
+        padding:0.82rem 0.88rem;
+        background:#eff6ff;
+        margin:0.65rem 0;
+        color:#111827 !important;
+    }
+    .session-coach * { color:inherit; }
+    .session-coach-title { font-size:1.02rem; font-weight:900; margin-bottom:0.35rem; }
+    .session-coach-metrics {
+        display:grid;
+        grid-template-columns:repeat(3, minmax(0,1fr));
+        gap:0.38rem;
+        margin:0.45rem 0 0.55rem 0;
+    }
+    .session-coach-metric {
+        background:rgba(255,255,255,0.78);
+        border:1px solid #dbeafe;
+        border-radius:12px;
+        padding:0.42rem 0.35rem;
         text-align:center;
     }
-    .array-grid {
-        display:grid;
-        gap:4px;
-        width:max-content;
-        margin:0 auto;
-        padding:0.65rem;
-        border-radius:16px;
-        background:#f0fdfa;
-        border:1px solid #99f6e4;
+    .session-coach-metric-label { font-size:0.68rem; color:#64748b; }
+    .session-coach-metric-value { font-size:1rem; font-weight:900; }
+    .session-coach-line { margin:0.38rem 0; line-height:1.35; }
+    .session-coach-tag {
+        display:inline-block;
+        font-size:0.70rem;
+        font-weight:900;
+        text-transform:uppercase;
+        letter-spacing:0.04em;
+        color:#1d4ed8;
+        margin-right:0.25rem;
     }
-    .array-dot {
-        width:16px;
-        height:16px;
-        border-radius:5px;
-        background:#0f766e;
-        box-shadow:inset 0 0 0 1px rgba(255,255,255,0.35);
+    .lesson-kicker {
+        font-size:0.76rem;
+        text-transform:uppercase;
+        letter-spacing:0.055em;
+        font-weight:900;
+        color:#1967d2 !important;
+        margin-bottom:0.18rem;
     }
-    .teach-line { text-align:center; font-weight:850; font-size:1.06rem; margin:0.45rem 0 0.1rem 0; }
-    .teach-sub { text-align:center; color:#4b5563; margin:0.1rem 0 0.3rem 0; }
+    .lesson-text { font-weight:750; line-height:1.38; }
+    ul.tight-list { margin-top:0.33rem; padding-left:1.15rem; color:inherit; }
+    ul.tight-list li { margin-bottom:0.18rem; }
 
-    .private-note {
-        border-radius:16px;
-        padding:0.65rem 0.75rem;
-        background:#f3f4f6;
-        color:#374151 !important;
-        font-size:0.9rem;
+    @media (max-width:640px) {
+        .block-container { padding-left:0.7rem; padding-right:0.7rem; }
+        .soft-card { padding:0.7rem 0.75rem; border-radius:16px; margin:0.48rem 0; }
+        .session-strip { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+        .session-box { padding:0.52rem 0.35rem; }
+        .session-value { font-size:1.08rem; }
+        .score-grid { grid-template-columns:repeat(3, minmax(0,1fr)); }
+        .score-grid.lower { grid-template-columns:repeat(4, minmax(0,1fr)); }
+        .score-box { min-height:2.65rem; padding:0.32rem 0.16rem; }
+        .score-label { font-size:0.66rem; }
+        .score-value { font-size:0.86rem; }
+        .grade-badge { font-size:1.8rem; min-width:4rem; }
+        .result-mini { grid-template-columns:1fr; }
+        .idea-grid { grid-template-columns:1fr; }
+        .session-coach-metrics { grid-template-columns:repeat(3, minmax(0,1fr)); gap:0.25rem; }
+        .session-coach-metric { padding:0.38rem 0.18rem; }
+        .session-coach-metric-value { font-size:0.92rem; }
+    }
+
+    /* v41 — result hierarchy and mobile-first coaching polish. */
+    .progress-rail {
+        display:grid;
+        grid-template-columns:repeat(4, minmax(0,1fr));
+        gap:0.42rem;
+        margin:0.45rem 0 0.72rem 0;
+    }
+    .progress-chip {
+        border:1px solid rgba(127,127,127,0.20);
+        border-radius:14px;
+        background:#f8fafc;
+        padding:0.48rem 0.45rem;
+        text-align:center;
+        color:#111827 !important;
+    }
+    .progress-chip * { color:inherit; }
+    .progress-kicker { color:#6b7280 !important; font-size:0.69rem; font-weight:800; text-transform:uppercase; letter-spacing:0.045em; }
+    .progress-value { margin-top:0.08rem; font-size:1.02rem; line-height:1.12; font-weight:950; }
+
+    .result-hero {
+        border:1px solid rgba(127,127,127,0.20);
+        border-radius:20px;
+        padding:0.82rem 0.9rem;
+        background:linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        box-shadow:0 3px 14px rgba(0,0,0,0.055);
+        margin:0.5rem 0 0.62rem 0;
+        color:#111827 !important;
+    }
+    .result-hero * { color:inherit; }
+    .result-hero-top { display:flex; align-items:center; gap:0.78rem; }
+    .result-hero-copy { min-width:0; flex:1; }
+    .result-verdict { font-size:1.18rem; font-weight:950; line-height:1.15; letter-spacing:-0.02em; }
+    .result-distance { margin-top:0.18rem; color:#6b7280 !important; font-size:0.88rem; line-height:1.3; }
+    .result-meta-row { display:flex; flex-wrap:wrap; gap:0.34rem; margin-top:0.42rem; }
+    .rank-chip { display:inline-flex; align-items:center; gap:0.24rem; border:1px solid #c7d2fe; background:#eef2ff; color:#3730a3 !important; border-radius:999px; padding:0.24rem 0.52rem; font-size:0.78rem; font-weight:900; line-height:1.2; }
+    .result-callout {
+        margin-top:0.64rem;
+        border-radius:13px;
+        background:#f3f7ff;
+        border:1px solid #dbe7ff;
+        padding:0.58rem 0.66rem;
+        line-height:1.38;
+    }
+
+    .hold-compare {
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:0.5rem;
         margin:0.55rem 0;
     }
-    @media (max-width: 520px) {
-        .block-container { padding-left:0.85rem; padding-right:0.85rem; }
-        .result-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-        .leader-row { grid-template-columns:2rem 1fr; }
-        .array-dot { width:14px; height:14px; }
-        .routine-strip { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .hold-card {
+        border:1px solid rgba(127,127,127,0.20);
+        border-radius:15px;
+        padding:0.62rem 0.68rem;
+        background:#ffffff;
+        min-width:0;
+        color:#111827 !important;
+    }
+    .hold-card.best { background:#eff6ff; border-color:#bfdbfe; }
+    .hold-card-label { font-size:0.70rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:900; color:#6b7280 !important; }
+    .hold-card.best .hold-card-label { color:#1d4ed8 !important; }
+    .hold-card-value { margin-top:0.2rem; font-size:1.04rem; font-weight:950; line-height:1.28; overflow-wrap:anywhere; }
+
+    .coach-three {
+        display:grid;
+        grid-template-columns:repeat(3, minmax(0,1fr));
+        gap:0.5rem;
+        margin:0.56rem 0;
+    }
+    .coach-step {
+        border:1px solid rgba(127,127,127,0.18);
+        border-radius:14px;
+        padding:0.62rem 0.66rem;
+        background:#ffffff;
+        color:#111827 !important;
+        line-height:1.38;
+        min-width:0;
+    }
+    .coach-step * { color:inherit; }
+    .coach-step.change { background:#fff7ed; border-color:#fed7aa; }
+    .coach-step.why { background:#f3f7ff; border-color:#dbeafe; }
+    .coach-step-title { font-size:0.71rem; font-weight:950; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.2rem; color:#6b7280 !important; }
+    .coach-step.change .coach-step-title { color:#c2410c !important; }
+    .coach-step.why .coach-step-title { color:#1d4ed8 !important; }
+
+    .lesson-card-v41 {
+        border:1px solid #c7d2fe;
+        background:linear-gradient(135deg,#f5f3ff 0%,#eff6ff 100%);
+        border-radius:16px;
+        padding:0.74rem 0.82rem;
+        margin:0.58rem 0;
+        color:#111827 !important;
+    }
+    .lesson-card-v41 * { color:inherit; }
+    .lesson-card-v41 .lesson-kicker { color:#4338ca !important; }
+
+    .detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0.42rem; margin:0.35rem 0 0.5rem 0; }
+    .detail-box { border:1px solid rgba(127,127,127,0.18); border-radius:12px; padding:0.5rem 0.56rem; background:#f8fafc; }
+    .detail-label { color:#6b7280; font-size:0.71rem; }
+    .detail-value { font-weight:900; margin-top:0.08rem; overflow-wrap:anywhere; }
+    .top-hold-line { padding:0.38rem 0; border-bottom:1px solid rgba(127,127,127,0.14); line-height:1.34; }
+    .top-hold-line:last-child { border-bottom:none; }
+
+    /* v42 — lightweight session momentum, achievements, and mastery. */
+    .unlock-card {
+        border:1px solid #f6c453;
+        background:linear-gradient(135deg,#fffbea 0%,#fff7d6 100%);
+        border-radius:16px;
+        padding:0.68rem 0.76rem;
+        margin:0.56rem 0;
+        color:#111827 !important;
+        box-shadow:0 2px 10px rgba(180,120,0,0.08);
+    }
+    .unlock-card * { color:inherit; }
+    .unlock-kicker { font-size:0.70rem; text-transform:uppercase; letter-spacing:0.055em; font-weight:950; color:#9a6700 !important; margin-bottom:0.34rem; }
+    .unlock-badge { display:flex; align-items:center; gap:0.55rem; padding:0.25rem 0; }
+    .unlock-icon { font-size:1.42rem; line-height:1; }
+    .unlock-name { font-weight:950; line-height:1.15; }
+    .unlock-copy { color:#6b7280 !important; font-size:0.82rem; margin-top:0.08rem; line-height:1.3; }
+
+    .mastery-card {
+        border:1px solid rgba(127,127,127,0.20);
+        background:#ffffff;
+        border-radius:17px;
+        padding:0.72rem 0.78rem;
+        margin:0.58rem 0 0.7rem 0;
+        color:#111827 !important;
+    }
+    .mastery-card * { color:inherit; }
+    .mastery-title { font-weight:950; font-size:1rem; }
+    .mastery-title span { color:#6b7280 !important; font-size:0.76rem; font-weight:750; margin-left:0.2rem; }
+    .mastery-note { color:#6b7280 !important; font-size:0.80rem; line-height:1.32; margin:0.18rem 0 0.44rem 0; }
+    .mastery-row { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; border-top:1px solid rgba(127,127,127,0.13); padding:0.48rem 0; }
+    .mastery-copy { min-width:0; line-height:1.2; }
+    .mastery-copy b { display:block; font-size:0.88rem; }
+    .mastery-copy span { display:block; color:#6b7280 !important; font-size:0.73rem; margin-top:0.12rem; }
+    .mastery-level { flex:0 0 auto; border-radius:999px; padding:0.20rem 0.46rem; font-size:0.69rem; font-weight:950; border:1px solid #d1d5db; background:#f8fafc; color:#475569 !important; }
+    .mastery-level.strong { border-color:#bfdbfe; background:#eff6ff; color:#1d4ed8 !important; }
+    .mastery-level.session-mastery { border-color:#c4b5fd; background:#f5f3ff; color:#6d28d9 !important; }
+    .achievement-label { color:#6b7280 !important; font-size:0.69rem; font-weight:900; text-transform:uppercase; letter-spacing:0.045em; border-top:1px solid rgba(127,127,127,0.13); padding-top:0.48rem; margin-top:0.04rem; }
+    .earned-row { display:flex; flex-wrap:wrap; gap:0.3rem; margin-top:0.3rem; }
+    .earned-chip { display:inline-flex; align-items:center; border:1px solid #fde68a; background:#fffbeb; color:#92400e !important; border-radius:999px; padding:0.22rem 0.48rem; font-size:0.72rem; font-weight:900; }
+
+    @media (max-width:640px) {
+        .block-container { padding-left:0.62rem; padding-right:0.62rem; padding-top:0.48rem; }
+        .progress-rail { grid-template-columns:repeat(2, minmax(0,1fr)); gap:0.3rem; margin-bottom:0.58rem; }
+        .progress-chip { padding:0.42rem 0.24rem; border-radius:12px; }
+        .progress-kicker { font-size:0.62rem; letter-spacing:0.025em; }
+        .progress-value { font-size:0.91rem; }
+        .result-hero { padding:0.72rem 0.72rem; border-radius:17px; }
+        .result-hero-top { gap:0.58rem; align-items:flex-start; }
+        .result-verdict { font-size:1.06rem; }
+        .result-distance { font-size:0.82rem; }
+        .result-meta-row { margin-top:0.36rem; gap:0.28rem; }
+        .rank-chip { font-size:0.74rem; padding:0.22rem 0.46rem; }
+        .grade-badge { font-size:1.7rem; min-width:3.75rem; padding:0.28rem 0.58rem; border-radius:15px; }
+        .hold-compare { grid-template-columns:1fr; gap:0.38rem; }
+        .hold-card { padding:0.56rem 0.62rem; }
+        .coach-three { grid-template-columns:1fr; gap:0.38rem; }
+        .coach-step { padding:0.56rem 0.62rem; }
+        .lesson-card-v41 { padding:0.64rem 0.68rem; }
+        .detail-grid { grid-template-columns:1fr 1fr; gap:0.32rem; }
+        .detail-box { padding:0.44rem 0.48rem; }
+        .session-coach { padding:0.72rem 0.7rem; border-radius:16px; }
+        .mastery-card { padding:0.64rem 0.66rem; border-radius:15px; }
+        .mastery-row { align-items:flex-start; }
+        .mastery-copy span { font-size:0.70rem; }
+        .mastery-level { font-size:0.65rem; }
+        .unlock-card { padding:0.62rem 0.66rem; }
+    }
+    @media (max-width:390px) {
+        .progress-value { font-size:0.84rem; }
+        .progress-kicker { font-size:0.58rem; }
+        .result-hero-top { align-items:center; }
+        .result-verdict { font-size:1rem; }
+        .hold-card-value { font-size:0.98rem; }
+        .detail-grid { grid-template-columns:1fr; }
     }
     </style>
     """,
@@ -278,1892 +1072,2628 @@ st.markdown(
 )
 
 
-# ---------------------------------------------------------------------------
-# Store / session helpers
-# ---------------------------------------------------------------------------
-def database_configured() -> bool:
-    try:
-        return bool(st.secrets.get("SUPABASE_URL")) and bool(st.secrets.get("SUPABASE_SECRET_KEY"))
-    except Exception:
-        return False
+def hold_label(hold):
+    hold = list(sorted(hold))
+    if not hold:
+        return "reroll everything"
+    return "keep " + ", ".join(str(d) for d in hold)
 
 
-@st.cache_resource(show_spinner=False)
-def load_store() -> SupabaseFactStore:
-    return SupabaseFactStore.from_secrets(st.secrets)
+def unique_dice_label(index, die):
+    # Zero-width spaces make duplicate dice tappable separately while looking identical.
+    return DICE_FACE.get(int(die), str(die)) + ("\u200b" * (index + 1))
 
 
-def get_store() -> SupabaseFactStore | None:
-    if not database_configured():
-        return None
-    try:
-        return load_store()
-    except Exception:
-        return None
+def extract_line(report, prefix):
+    for line in report.splitlines():
+        if line.startswith(prefix):
+            return line.replace(prefix, "").strip()
+    return ""
 
 
-def teacher_password_configured() -> bool:
-    try:
-        return bool(str(st.secrets.get("TEACHER_PASSWORD") or "").strip())
-    except Exception:
-        return False
-
-
-def init_state() -> None:
-    defaults = {
-        "app_mode": "Daily Challenge",
-        "student_id": None,
-        "student_nickname": None,
-        "student_class_id": None,
-        "student_class_name": None,
-        "teacher_authed": False,
-        "practice_fact": None,
-        "practice_result": None,
-        "practice_recent": [],
-        "practice_focus_last": None,
-        "bulk_created_credentials": None,
-        "practice_retry_correct": False,
-        "practice_retry_count": 0,
-        "practice_question_serial": 0,
-        "practice_started_at": None,
-        "fix_feedback": None,
-        "focus_feedback": None,
-        "focus_started_at": None,
-        "persistent_login_pending_action": None,
-        "persistent_login_check_complete": False,
-        "persistent_login_reader_nonce": 0,
+def extract_section(report, header):
+    lines = report.splitlines()
+    headers = {
+        "Roll 1 lookahead note:", "Game-aware note:", "Yahtzee-path note:",
+        "What was good about your move?", "Bonus-chase check:",
+        "Narrow upper-box note:", "Why was the optimal move better?",
+        "How close was it?", "Your idea vs. best idea:", "Teaching takeaway:", "Top exact holds:",
+        "Top Roll 1 options:", "Coach recommendation:",
     }
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
+    capture = False
+    items = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped == header:
+            capture = True
+            continue
+        if capture and stripped in headers:
+            break
+        if capture and stripped.startswith("- "):
+            items.append(stripped[2:])
+    return items
 
 
-init_state()
+def extract_recommendation(report):
+    lines = report.splitlines()
+    capture = False
+    rec_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped == "Coach recommendation:":
+            capture = True
+            continue
+        if capture and stripped:
+            rec_lines.append(stripped)
+    return " ".join(rec_lines)
 
 
-def switch_mode(mode: str) -> None:
-    st.session_state.app_mode = mode
+def clean_coach_sentence(text):
+    text = re.sub(r"\s+", " ", text or "").strip()
+    text = text.replace("The stronger mathematical play was to ", "Best play: ")
+    text = text.replace(" because it produced the highest strategy value.", ".")
+    text = text.replace("Stay with this thinking. ", "")
+    return text
 
 
-def sign_out() -> None:
-    st.session_state.persistent_login_pending_action = {"action": "clear"}
-    st.session_state.persistent_login_check_complete = False
-    for key in ("student_id", "student_nickname", "student_class_id", "student_class_name"):
-        st.session_state[key] = None
-    st.session_state.practice_result = None
+def grade_to_points(grade):
+    return GRADE_POINTS.get((grade or "").strip(), None)
 
 
-def _persistent_login_secret() -> str:
+def points_to_letter(points):
+    if points is None: return "—"
+    if points >= 4.15: return "A+"
+    if points >= 3.85: return "A"
+    if points >= 3.5: return "A-"
+    if points >= 3.15: return "B+"
+    if points >= 2.85: return "B"
+    if points >= 2.5: return "B-"
+    if points >= 2.15: return "C+"
+    if points >= 1.85: return "C"
+    if points >= 1.5: return "C-"
+    if points >= 1.15: return "D+"
+    if points >= 0.85: return "D"
+    if points >= 0.5: return "D-"
+    return "F"
+
+
+def session_average_grade(history):
+    scores = []
+    for item in history:
+        points = grade_to_points(item.get("grade", ""))
+        if points is not None:
+            scores.append(points)
+    if not scores:
+        return "—", None
+    avg = sum(scores) / len(scores)
+    return points_to_letter(avg), avg
+
+
+def render_session_coach(records):
+    """Show a cautious session-level learning summary from exact solver metadata."""
+    summary = build_session_learning_summary(records)
+    if summary["rounds"] == 0:
+        return
+
+    if not summary["ready"]:
+        needed = summary["rounds_needed"]
+        st.caption(
+            f"🎯 Session Coach is learning your patterns — {summary['rounds']}/5 exact rounds complete"
+            + (f" ({needed} more to unlock the first summary)." if needed else ".")
+        )
+        return
+
+    optimal_pct = round(summary["optimal_rate"] * 100)
+    avg_loss = summary["avg_points_lost"]
+    strength = summary["strengths"][0] if summary["strengths"] else None
+    focus = summary["focus_areas"][0] if summary["focus_areas"] else None
+
+    lines = []
+    if strength:
+        lines.append(
+            f"<div class='session-coach-line'><span class='session-coach-tag'>Strength</span>"
+            f"<b>{strength['skill']}</b> — {strength['strong_count']} of {strength['attempts']} decisions "
+            f"were exact or within 0.75 expected points of exact.</div>"
+        )
+    else:
+        lines.append(
+            "<div class='session-coach-line'><span class='session-coach-tag'>Strength</span>"
+            "No repeated skill has enough evidence yet for a strong label. Keep playing and the pattern tracker will stay conservative.</div>"
+        )
+
+    if focus:
+        lines.append(
+            f"<div class='session-coach-line'><span class='session-coach-tag'>Work on</span>"
+            f"<b>{focus['skill']}</b> — {focus['description']}.</div>"
+        )
+    else:
+        lines.append(
+            "<div class='session-coach-line'><span class='session-coach-tag'>Work on</span>"
+            "No clear recurring weakness yet. That is a good sign; keep building a larger sample.</div>"
+        )
+
+    lines.append(
+        f"<div class='session-coach-line'><span class='session-coach-tag'>Big lesson</span>"
+        f"{summary['biggest_lesson']}</div>"
+    )
+    if summary.get("trend"):
+        lines.append(
+            f"<div class='session-coach-line'><span class='session-coach-tag'>Trend</span>"
+            f"{summary['trend']}</div>"
+        )
+
+    st.markdown(
+        "<div class='session-coach'>"
+        "<div class='session-coach-title'>🎯 Session Coach</div>"
+        "<div class='muted'>A session-only pattern summary based on exact expected-value decisions. "
+        "It waits for repeated evidence before calling something a strength or weakness.</div>"
+        "<div class='session-coach-metrics'>"
+        f"<div class='session-coach-metric'><div class='session-coach-metric-label'>Exact rounds</div><div class='session-coach-metric-value'>{summary['rounds']}</div></div>"
+        f"<div class='session-coach-metric'><div class='session-coach-metric-label'>Best-hold rate</div><div class='session-coach-metric-value'>{optimal_pct}%</div></div>"
+        f"<div class='session-coach-metric'><div class='session-coach-metric-label'>Avg pts lost</div><div class='session-coach-metric-value'>{avg_loss:.2f}</div></div>"
+        "</div>"
+        + "".join(lines)
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def score_box_html(category, scorecard):
+    value = scorecard.get(category)
+    label = CATEGORY_SHORT.get(category, CATEGORY_DISPLAY.get(category, category))
+    if value is None:
+        value_html = "<span class='open-value'>OPEN</span>"
+    else:
+        value_html = f"<span class='filled-value'>{value}</span>"
+    return f"<div class='score-box'><div class='score-label'>{label}</div><div class='score-value'>{value_html}</div></div>"
+
+
+def score_grid_html(scorecard, categories, lower=False):
+    class_name = "score-grid lower" if lower else "score-grid"
+    return f"<div class='{class_name}'>" + "".join(score_box_html(cat, scorecard) for cat in categories) + "</div>"
+
+
+def open_chips_html(scorecard):
+    open_upper = [CATEGORY_SHORT[c] for c in UPPER_CATEGORIES if scorecard.get(c) is None]
+    open_lower = [CATEGORY_SHORT[c] for c in LOWER_CATEGORIES if scorecard.get(c) is None]
+    chips = [f"<span class='open-chip'>{label}</span>" for label in (open_upper + open_lower)]
+    if not chips:
+        return "<span class='muted'>No open categories found.</span>"
+    return "<div class='open-chip-row'>" + "".join(chips) + "</div>"
+
+
+def selected_hold_from_indices(dice, indices):
+    return sorted([dice[int(i)] for i in sorted(indices)])
+
+
+def hold_indices_from_values(dice, held_values):
+    """Map a held-value multiset back to concrete die indices for editable Daily questions."""
+    remaining = [int(value) for value in held_values]
+    indices = []
+    for index, die in enumerate(dice):
+        try:
+            match = remaining.index(int(die))
+        except ValueError:
+            continue
+        indices.append(index)
+        remaining.pop(match)
+    return indices
+
+
+def die_pip_classes(die):
+    pip_map = {
+        1: ["pip-c"],
+        2: ["pip-tl", "pip-br"],
+        3: ["pip-tl", "pip-c", "pip-br"],
+        4: ["pip-tl", "pip-tr", "pip-bl", "pip-br"],
+        5: ["pip-tl", "pip-tr", "pip-c", "pip-bl", "pip-br"],
+        6: ["pip-tl", "pip-tr", "pip-ml", "pip-mr", "pip-bl", "pip-br"],
+    }
+    return pip_map.get(int(die), ["pip-c"])
+
+
+def die_button_html(die, index, round_id, is_held, disabled=False):
+    classes = ["die-button"]
+    if is_held:
+        classes.append("held")
+    if disabled:
+        classes.append("disabled")
+    pip_html = "".join(f"<span class='pip {pip_class}'></span>" for pip_class in die_pip_classes(die))
+    label = f"Die {index + 1}, value {die}"
+    if disabled:
+        return f"<span class='{' '.join(classes)}' aria-label='{label}'>{pip_html}</span>"
+    return f"<a class='{' '.join(classes)}' aria-label='{label}' href='?toggle_die={round_id}_{index}#dice-picker'>{pip_html}</a>"
+
+
+def dice_picker_html(dice, selected_indices, round_id, disabled=False):
+    dice_html = [
+        die_button_html(die, index, round_id, index in selected_indices, disabled=disabled)
+        for index, die in enumerate(dice)
+    ]
+    return "<div id='dice-picker' class='dice-picker-row'>" + "".join(dice_html) + "</div>"
+
+
+def get_single_query_param(name):
+    value = st.query_params.get(name, None)
+    if isinstance(value, list):
+        return value[0] if value else None
+    return value
+
+
+def process_dice_toggle_query(held_key, round_id, answer_submitted=False):
+    toggle_value = get_single_query_param("toggle_die")
+    if not toggle_value:
+        return
+
+    # Clear immediately so browser refreshes do not keep re-toggling the same die.
+    st.query_params.clear()
+
+    if answer_submitted:
+        st.rerun()
+        return
+
+    prefix = f"{round_id}_"
+    if not str(toggle_value).startswith(prefix):
+        st.rerun()
+        return
+
     try:
-        return str(st.secrets.get("SUPABASE_SECRET_KEY") or "")
+        die_index = int(str(toggle_value).replace(prefix, "", 1))
+    except ValueError:
+        st.rerun()
+        return
+
+    if die_index < 0 or die_index > 4:
+        st.rerun()
+        return
+
+    held = list(st.session_state.get(held_key, []))
+    if die_index in held:
+        held.remove(die_index)
+    else:
+        held.append(die_index)
+        held.sort()
+    st.session_state[held_key] = held
+    st.rerun()
+
+
+def app_challenge_signature(challenge):
+    """Small session-level signature used to prevent repetitive practice rounds."""
+    scorecard = challenge.get("scorecard", {}) or {}
+    categories = getattr(yc, "YAHTZEE_CATEGORIES", list(scorecard.keys()))
+    filled = tuple(
+        (category, scorecard.get(category))
+        for category in categories
+        if scorecard.get(category) is not None
+    )
+    return (
+        challenge.get("scenario_name"),
+        challenge.get("roll_number"),
+        tuple(sorted(challenge.get("dice", []))),
+        filled,
+    )
+
+
+def new_round(scroll_to_top=False):
+    recent_scenarios = list(st.session_state.get("recent_scenario_names", []))
+    recent_signatures = list(st.session_state.get("recent_challenge_signatures", []))
+
+    try:
+        challenge = generate_expanded_practice_challenge(
+            avoid_recent_scenarios=recent_scenarios[-4:],
+            avoid_recent_signatures=recent_signatures[-8:],
+        )
+    except Exception:
+        # Safety fallback: v42's original practice deck remains available if the
+        # expanded bank cannot load for any reason.
+        try:
+            challenge = yc.generate_practice_challenge(
+                avoid_recent_scenarios=recent_scenarios[-4:],
+                avoid_recent_signatures=recent_signatures[-8:],
+            )
+        except TypeError:
+            challenge = yc.generate_practice_challenge()
+
+    st.session_state.challenge = challenge
+
+    scenario_name = challenge.get("scenario_name")
+    if scenario_name:
+        st.session_state.recent_scenario_names = (recent_scenarios + [scenario_name])[-5:]
+
+    signature = app_challenge_signature(challenge)
+    st.session_state.recent_challenge_signatures = (recent_signatures + [signature])[-10:]
+
+    st.session_state.report = None
+    st.session_state.round_id = st.session_state.get("round_id", 0) + 1
+    st.session_state.scroll_to_result = False
+    st.session_state.scroll_to_top = scroll_to_top
+    st.session_state.new_badges = []
+    # Reset held dice for the new round.
+    st.session_state[f"held_indices_{st.session_state.round_id}"] = []
+
+
+def initialize_state():
+    if "history" not in st.session_state:
+        st.session_state.history = []
+    if "solver_history" not in st.session_state:
+        st.session_state.solver_history = []
+    if "recent_scenario_names" not in st.session_state:
+        st.session_state.recent_scenario_names = []
+    if "recent_challenge_signatures" not in st.session_state:
+        st.session_state.recent_challenge_signatures = []
+    if "scroll_to_result" not in st.session_state:
+        st.session_state.scroll_to_result = False
+    if "scroll_to_top" not in st.session_state:
+        st.session_state.scroll_to_top = False
+    if "new_badges" not in st.session_state:
+        st.session_state.new_badges = []
+    if "round_id" not in st.session_state:
+        st.session_state.round_id = 0
+    if "challenge" not in st.session_state:
+        new_round(scroll_to_top=False)
+
+
+def render_scorecard(scorecard):
+    st.markdown("<div class='section-label'>Current scorecard</div>", unsafe_allow_html=True)
+    st.markdown(open_chips_html(scorecard), unsafe_allow_html=True)
+    with st.expander("Full scorecard", expanded=True):
+        st.markdown("<div class='score-section-title'>Upper</div>", unsafe_allow_html=True)
+        st.markdown(score_grid_html(scorecard, UPPER_CATEGORIES), unsafe_allow_html=True)
+        st.markdown("<div class='score-section-title'>Lower</div>", unsafe_allow_html=True)
+        st.markdown(score_grid_html(scorecard, LOWER_CATEGORIES, lower=True), unsafe_allow_html=True)
+
+
+
+
+def install_dice_scroll_guard():
+    """Preserve scroll position when the user taps dice.
+
+    Dice taps must still rerun Streamlit so the held state and "Your hold" text
+    update live. This guard saves the current scroll position before a dice tap
+    and restores it immediately after the rerun. It does not affect Submit Hold
+    or Next Round, which use their own intentional scrolling.
+    """
+    components.html(
+        """
+        <script>
+        (function() {
+            const STORAGE_KEY = "yc_dice_scroll_y";
+            const PENDING_KEY = "yc_dice_scroll_pending";
+            const TIME_KEY = "yc_dice_scroll_time";
+            const parentWindow = window.parent;
+            const doc = parentWindow.document;
+            const root = doc.scrollingElement || doc.documentElement || doc.body;
+
+            try { parentWindow.history.scrollRestoration = "manual"; } catch (err) {}
+
+            function currentScrollY() {
+                return parentWindow.scrollY || root.scrollTop || doc.documentElement.scrollTop || doc.body.scrollTop || 0;
+            }
+
+            function setScrollY(y) {
+                parentWindow.scrollTo(0, y);
+                if (root) { root.scrollTop = y; }
+                if (doc.documentElement) { doc.documentElement.scrollTop = y; }
+                if (doc.body) { doc.body.scrollTop = y; }
+            }
+
+            function isDiceTap(target) {
+                if (!target || !target.closest) { return false; }
+                return !!target.closest(
+                    'div[data-testid="stPills"] button, div[data-testid="stButtonGroup"] button, button[role="checkbox"]'
+                );
+            }
+
+            function saveScroll(target) {
+                if (!isDiceTap(target)) { return; }
+                try {
+                    parentWindow.sessionStorage.setItem(STORAGE_KEY, String(currentScrollY()));
+                    parentWindow.sessionStorage.setItem(PENDING_KEY, "1");
+                    parentWindow.sessionStorage.setItem(TIME_KEY, String(Date.now()));
+                } catch (err) {}
+            }
+
+            function clearPending() {
+                try {
+                    parentWindow.sessionStorage.removeItem(PENDING_KEY);
+                    parentWindow.sessionStorage.removeItem(STORAGE_KEY);
+                    parentWindow.sessionStorage.removeItem(TIME_KEY);
+                } catch (err) {}
+            }
+
+            function restoreIfNeeded() {
+                try {
+                    if (parentWindow.sessionStorage.getItem(PENDING_KEY) !== "1") { return; }
+                    const savedAt = parseInt(parentWindow.sessionStorage.getItem(TIME_KEY) || "0", 10);
+                    if (savedAt && Date.now() - savedAt > 7000) {
+                        clearPending();
+                        return;
+                    }
+                    const y = parseInt(parentWindow.sessionStorage.getItem(STORAGE_KEY) || "0", 10);
+                    if (Number.isNaN(y)) {
+                        clearPending();
+                        return;
+                    }
+
+                    // Restore many times because Streamlit lays out the rerun in phases.
+                    // This keeps the visible screen anchored while the dice turn red.
+                    const delays = [0, 1, 10, 25, 50, 90, 140, 210, 320, 480, 700, 950, 1250, 1600];
+                    delays.forEach(function(delay) {
+                        setTimeout(function() { setScrollY(y); }, delay);
+                    });
+                    let frames = 0;
+                    function restoreFrame() {
+                        setScrollY(y);
+                        frames += 1;
+                        if (frames < 12) { parentWindow.requestAnimationFrame(restoreFrame); }
+                    }
+                    parentWindow.requestAnimationFrame(restoreFrame);
+                    setTimeout(clearPending, 1800);
+                } catch (err) {}
+            }
+
+            restoreIfNeeded();
+
+            if (!doc.__yahtzeeDiceScrollGuardInstalledV15) {
+                doc.__yahtzeeDiceScrollGuardInstalledV15 = true;
+                ["pointerdown", "touchstart", "mousedown", "click"].forEach(function(evtName) {
+                    doc.addEventListener(evtName, function(event) {
+                        saveScroll(event.target);
+                    }, true);
+                });
+            }
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
+def parse_float_text(text):
+    match = re.search(r"-?\d+(?:\.\d+)?", str(text or ""))
+    return float(match.group(0)) if match else None
+
+
+def result_distance_text(lost_text, grade):
+    lost_value = parse_float_text(lost_text)
+    if lost_value is None:
+        return "Exact strategy comparison available below."
+    if lost_value <= 1e-5:
+        return "Exact best play — no expected game points given up."
+    if lost_value <= 0.25:
+        return f"Only {lost_value:.2f} expected game points from exact — essentially a near tie."
+    if lost_value <= 0.75:
+        return f"{lost_value:.2f} expected game points from exact — a small strategic edge."
+    if lost_value <= 2.50:
+        return f"{lost_value:.2f} expected game points from exact — worth learning from, but the idea had merit."
+    return f"{lost_value:.2f} expected game points from exact — this adjustment matters a lot over time."
+
+
+def render_session_progress(history, solver_records):
+    progress = build_practice_progress(solver_records)
+    avg_letter, _ = session_average_grade(history)
+    best_text = f"{progress['optimal_count']}/{progress['rounds']}" if progress['rounds'] else "—"
+    loss_text = f"{progress['avg_points_lost']:.2f} pts" if progress['avg_points_lost'] is not None else "—"
+    streak = progress['current_exact_streak']
+    streak_text = f"🔥 {streak}" if streak else "—"
+    st.markdown(
+        "<div class='progress-rail'>"
+        f"<div class='progress-chip'><div class='progress-kicker'>Rounds</div><div class='progress-value'>{len(history)}</div></div>"
+        f"<div class='progress-chip'><div class='progress-kicker'>Best holds</div><div class='progress-value'>{best_text}</div></div>"
+        f"<div class='progress-chip'><div class='progress-kicker'>Streak</div><div class='progress-value'>{streak_text}</div></div>"
+        f"<div class='progress-chip'><div class='progress-kicker'>Avg loss</div><div class='progress-value'>{loss_text}</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    if history:
+        best_streak = progress['best_exact_streak']
+        streak_note = f" · Best streak: {best_streak}" if best_streak else ""
+        st.caption(f"Session grade: {avg_letter}{streak_note} · Progress resets with this browser session.")
+
+
+def render_new_badges():
+    badges = st.session_state.get("new_badges", [])
+    if not badges:
+        return
+    badge_html = "".join(
+        f"<div class='unlock-badge'><span class='unlock-icon'>{badge['icon']}</span>"
+        f"<div><div class='unlock-name'>{badge['name']}</div><div class='unlock-copy'>{badge['description']}</div></div></div>"
+        for badge in badges
+    )
+    st.markdown(
+        "<div class='unlock-card'><div class='unlock-kicker'>Achievement unlocked</div>"
+        + badge_html + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_practice_momentum(records):
+    progress = build_practice_progress(records)
+    if progress["rounds"] < 3:
+        return
+
+    mastery_rows = [row for row in progress["mastery"] if row["attempts"] >= 2][:4]
+    mastery_html = ""
+    for row in mastery_rows:
+        level_class = row["level"].lower().replace(" ", "-")
+        mastery_html += (
+            "<div class='mastery-row'>"
+            f"<div class='mastery-copy'><b>{row['skill']}</b>"
+            f"<span>{row['strong_count']}/{row['attempts']} strong decisions · {row['avg_loss']:.2f} avg pts lost</span></div>"
+            f"<div class='mastery-level {level_class}'>{row['level']}</div>"
+            "</div>"
+        )
+
+    if not mastery_html:
+        mastery_html = (
+            "<div class='muted'>Keep playing. A strategy appears here after you have seen it at least twice.</div>"
+        )
+
+    badge_html = "".join(
+        f"<span class='earned-chip'>{badge['icon']} {badge['name']}</span>"
+        for badge in progress["badges"]
+    ) or "<span class='muted'>No achievements yet — the first exact best hold unlocks Bullseye.</span>"
+
+    st.markdown(
+        "<div class='mastery-card'>"
+        "<div class='mastery-title'>🧩 Strategy mastery <span>this session</span></div>"
+        "<div class='mastery-note'>Mastery is intentionally conservative: repeated strong decisions are required before a skill levels up.</div>"
+        + mastery_html
+        + "<div class='achievement-label'>Session achievements</div>"
+        + f"<div class='earned-row'>{badge_html}</div>"
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_result(report):
+    st.markdown("<div id='coach-result-anchor'></div>", unsafe_allow_html=True)
+    if st.session_state.get("scroll_to_result", False):
+        components.html("""
+            <script>
+            setTimeout(function() {
+                const el = window.parent.document.getElementById('coach-result-anchor');
+                if (el) { el.scrollIntoView({behavior:'smooth', block:'start'}); }
+            }, 250);
+            </script>
+            """, height=0)
+        st.session_state.scroll_to_result = False
+
+    grade = extract_line(report, "Grade:")
+    rating = extract_line(report, "Coach rating:")
+    your_choice = extract_line(report, "Your choice:")
+    optimal_choice = extract_line(report, "Optimal choice:")
+    hold_rank = extract_line(report, "Hold rank:")
+    efficiency = extract_line(report, "Efficiency:")
+    decision_metric_label = "Hold rank" if hold_rank else "Efficiency"
+    decision_metric_value = hold_rank or efficiency or "—"
+    lost = extract_line(report, "Expected game points lost:") or extract_line(report, "Strategy value lost:")
+    recommendation = clean_coach_sentence(extract_recommendation(report))
+    good_items = extract_section(report, "What was good about your move?")
+    why_items = extract_section(report, "Why was the optimal move better?")
+    closeness_items = extract_section(report, "How close was it?")
+    idea_items = extract_section(report, "Your idea vs. best idea:")
+    takeaway_items = extract_section(report, "Teaching takeaway:")
+    simple_why_items = extract_section(report, "Simple why:")
+    note_items = extract_section(report, "Narrow upper-box note:")
+    top_holds = extract_section(report, "Top exact holds:")
+    grade_class = GRADE_BADGE_CLASS.get(grade, "grade-b")
+
+    user_idea = next((item[len("Your idea: "):] for item in idea_items if item.startswith("Your idea: ")), "")
+    best_idea = next((item[len("Best idea: "):] for item in idea_items if item.startswith("Best idea: ")), "")
+    adjustment = next((item[len("Adjustment: "):] for item in idea_items if item.startswith("Adjustment: ")), "")
+
+    st.markdown("<div class='section-label'>Coach result</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='result-hero'>"
+        "<div class='result-hero-top'>"
+        f"<div class='grade-badge {grade_class}'>{grade or '—'}</div>"
+        "<div class='result-hero-copy'>"
+        f"<div class='result-verdict'>{rating or 'Coach feedback'}</div>"
+        f"<div class='result-distance'>{result_distance_text(lost, grade)}</div>"
+        + (f"<div class='result-meta-row'><div class='rank-chip'>🏆 Hold rank: {hold_rank}</div></div>" if hold_rank else "")
+        + "</div></div>"
+        + (f"<div class='result-callout'><b>Coach says:</b> {recommendation}</div>" if recommendation else "")
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        "<div class='hold-compare'>"
+        f"<div class='hold-card'><div class='hold-card-label'>You kept</div><div class='hold-card-value'>{your_choice or '—'}</div></div>"
+        f"<div class='hold-card best'><div class='hold-card-label'>Exact best hold</div><div class='hold-card-value'>{optimal_choice or '—'}</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    what_went_well = good_items[0] if good_items else (user_idea or "Your hold had a clear strategic target.")
+    what_changes = adjustment or (why_items[0] if why_items else "Compare your hold with the exact best hold above.")
+    why_it_matters = simple_why_items[0] if simple_why_items else (why_items[0] if why_items else (best_idea or recommendation or "The exact solver compares every legal hold through the rest of the game."))
+    if what_changes == why_it_matters and len(why_items) > 1:
+        why_it_matters = why_items[1]
+
+    st.markdown(
+        "<div class='coach-three'>"
+        f"<div class='coach-step'><div class='coach-step-title'>✓ What you did well</div><div>{what_went_well}</div></div>"
+        f"<div class='coach-step change'><div class='coach-step-title'>→ What changes</div><div>{what_changes}</div></div>"
+        f"<div class='coach-step why'><div class='coach-step-title'>Why it matters</div><div>{why_it_matters}</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    if takeaway_items:
+        takeaway = takeaway_items[0]
+        if ": " in takeaway:
+            lesson_title, lesson_text = takeaway.split(": ", 1)
+        else:
+            lesson_title, lesson_text = "Key lesson", takeaway
+        st.markdown(
+            f"<div class='lesson-card-v41'><div class='lesson-kicker'>🧠 {lesson_title}</div>"
+            f"<div class='lesson-text'>{lesson_text}</div></div>",
+            unsafe_allow_html=True,
+        )
+
+    with st.expander("Strategy details", expanded=False):
+        st.caption("The exact math is here when you want it; the main coach view stays focused on the lesson.")
+        st.markdown(
+            "<div class='detail-grid'>"
+            f"<div class='detail-box'><div class='detail-label'>{decision_metric_label}</div><div class='detail-value'>{decision_metric_value}</div></div>"
+            f"<div class='detail-box'><div class='detail-label'>Expected points lost</div><div class='detail-value'>{lost or '0.00'}</div></div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        if closeness_items:
+            st.markdown(f"**How close was it?** {closeness_items[0]}")
+        if note_items:
+            st.markdown("**Scorecard note**")
+            st.markdown("<ul class='tight-list'>" + "".join(f"<li>{line}</li>" for line in note_items[:2]) + "</ul>", unsafe_allow_html=True)
+        if top_holds:
+            st.markdown("**Top exact holds**")
+            st.markdown("".join(f"<div class='top-hold-line'>{line}</div>" for line in top_holds[:3]), unsafe_allow_html=True)
+        st.markdown("**Full text report**")
+        st.code(report, language="text")
+
+
+
+# ---------------------------------------------------------------------------
+# v43B Phase 2E — invite links, editable Daily review, and home-screen polish
+# ---------------------------------------------------------------------------
+
+st.markdown(
+    """
+    <style>
+    .mode-note { text-align:center; color:#6b7280; font-size:0.78rem; margin:-0.15rem 0 0.55rem 0; }
+    .daily-hero {
+        border:1px solid #d8e4ff; background:linear-gradient(135deg,#f4f8ff 0%,#ffffff 72%);
+        border-radius:20px; padding:0.9rem 0.95rem; margin:0.45rem 0 0.68rem 0; color:#111827 !important;
+    }
+    .daily-hero * { color:inherit; }
+    .daily-kicker { color:#1d4ed8 !important; font-size:0.75rem; font-weight:950; text-transform:uppercase; letter-spacing:0.055em; }
+    .daily-title { font-size:1.35rem; line-height:1.15; font-weight:950; margin:0.14rem 0 0.22rem 0; }
+    .daily-rule { color:#5f6b7a !important; font-size:0.88rem; line-height:1.35; }
+    .daily-progress {
+        display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:0.24rem; margin:0.28rem 0 0.18rem 0;
+    }
+    .daily-dot {
+        height:0.58rem; border-radius:999px; background:#e5e7eb; border:1px solid rgba(127,127,127,.12);
+        transition:background .15s ease, transform .15s ease;
+    }
+    .daily-dot.done { background:#16a34a; }
+    .daily-dot.current { background:#2563eb; transform:scaleY(1.22); }
+    .daily-progress-copy { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-bottom:0.18rem; }
+    .daily-progress-copy b { font-size:0.92rem; }
+    .daily-progress-copy span { color:#6b7280; font-size:0.78rem; font-weight:700; }
+    .daily-progress-percent { color:#6b7280; font-size:0.72rem; text-align:right; margin-bottom:0.58rem; }
+    .daily-lock-note { color:#6b7280; font-size:0.78rem; text-align:center; margin:0.3rem 0 0.15rem 0; }
+    .daily-flash { border:1px solid #bbf7d0; background:#f0fdf4; color:#166534 !important; border-radius:12px; padding:0.46rem 0.62rem; font-weight:800; font-size:0.82rem; margin:0.3rem 0; }
+    .daily-roll-stage {
+        border-radius:16px;
+        padding:0.68rem 0.78rem;
+        margin:0.38rem 0 0.52rem 0;
+        text-align:center;
+        border:2px solid transparent;
+        box-shadow:0 2px 8px rgba(0,0,0,0.04);
+    }
+    .daily-roll-stage.roll-1 { background:#eff6ff; border-color:#93c5fd; color:#1d4ed8 !important; }
+    .daily-roll-stage.roll-2 { background:#f0fdf4; border-color:#86efac; color:#15803d !important; }
+    .daily-roll-stage-title { font-size:1.08rem; font-weight:950; letter-spacing:.015em; line-height:1.05; }
+    .daily-roll-stage-sub { font-size:.82rem; font-weight:800; margin-top:.18rem; opacity:.9; }
+    .daily-result-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.4rem; margin:0.6rem 0; }
+    .daily-result-box { border:1px solid rgba(127,127,127,.22); border-radius:15px; background:#f8fafc; padding:0.58rem 0.42rem; text-align:center; color:#111827 !important; }
+    .daily-result-label { color:#6b7280 !important; font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.035em; }
+    .daily-result-value { font-size:1.17rem; font-weight:950; margin-top:0.08rem; }
+    .daily-result-sub { color:#6b7280 !important; font-size:0.66rem; margin-top:0.04rem; }
+    .daily-rank-banner { border:1px solid #fde68a; background:#fffbeb; border-radius:17px; padding:0.72rem 0.78rem; margin:0.5rem 0; color:#78350f !important; }
+    .daily-rank-banner b { font-size:1.02rem; }
+    .group-story-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.42rem; margin:0.48rem 0; }
+    .group-story-card { border:1px solid rgba(127,127,127,.2); border-radius:15px; padding:0.62rem 0.68rem; background:#fff; color:#111827 !important; }
+    .group-story-card .story-kicker { color:#6b7280 !important; font-size:0.68rem; font-weight:900; text-transform:uppercase; letter-spacing:.04em; }
+    .group-story-card .story-title { font-weight:950; margin:0.12rem 0; }
+    .group-story-card .story-copy { color:#5f6b7a !important; font-size:0.79rem; }
+    .review-summary { display:grid; grid-template-columns:1fr 1fr; gap:0.35rem; margin:0.3rem 0 0.45rem 0; }
+    .review-box { border:1px solid rgba(127,127,127,.18); border-radius:13px; padding:0.5rem 0.58rem; background:#fafafa; color:#111827 !important; }
+    .review-box * { color:inherit; }
+    .review-label { color:#6b7280 !important; font-size:0.68rem; text-transform:uppercase; font-weight:850; }
+    .review-value { color:#111827 !important; font-weight:900; font-size:0.88rem; margin-top:.08rem; }
+    .daily-dice-line { font-size:1.9rem; letter-spacing:.12rem; margin:.15rem 0 .42rem 0; }
+    .prototype-badge { display:inline-block; border-radius:999px; background:#f3e8ff; color:#6b21a8 !important; border:1px solid #e9d5ff; font-size:.69rem; font-weight:900; padding:.18rem .45rem; }
+    .identity-note { border:1px solid #bfdbfe; background:#eff6ff; color:#1e3a8a !important; border-radius:14px; padding:.62rem .7rem; margin:.42rem 0 .62rem 0; font-size:.82rem; line-height:1.35; }
+    .identity-note b { color:#1d4ed8 !important; }
+    @media (max-width:640px) {
+        .daily-result-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.3rem; }
+        .group-story-grid { grid-template-columns:1fr; gap:.32rem; }
+        .daily-hero { padding:.72rem .7rem; border-radius:17px; }
+        .daily-title { font-size:1.18rem; }
+        .daily-progress { gap:.15rem; }
+        .daily-dot { height:.48rem; }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+def _reset_daily_local_attempt(date_key: str | None = None):
+    """Reset only the local mirror of a Daily attempt; never delete database data."""
+    date_key = date_key or current_daily_date_key()
+    st.session_state.daily_date_key = date_key
+    st.session_state.daily_challenges = get_daily_challenges(date_key)
+    st.session_state.daily_set_id = challenge_set_id(date_key, st.session_state.daily_challenges)
+    st.session_state.daily_started = False
+    st.session_state.daily_completed = False
+    st.session_state.daily_ready_to_submit = False
+    st.session_state.daily_question_index = 0
+    st.session_state.daily_answers = []
+    st.session_state.daily_flash = ""
+    st.session_state.daily_attempt_id = None
+    st.session_state.daily_persistence_sync_key = None
+    st.session_state.daily_display_name = st.session_state.get("daily_display_name", "You") or "You"
+    # Held-die widget state is local UI state and must never leak between players/dates.
+    for key in list(st.session_state.keys()):
+        if str(key).startswith(("daily_held_", "daily_dice_pills_")):
+            del st.session_state[key]
+
+
+def initialize_daily_state():
+    today = current_daily_date_key()
+    if st.session_state.get("daily_date_key") != today:
+        _reset_daily_local_attempt(today)
+    elif "daily_challenges" not in st.session_state:
+        _reset_daily_local_attempt(today)
+    if "app_mode" not in st.session_state:
+        st.session_state.app_mode = "Daily Challenge"
+    if "daily_attempt_id" not in st.session_state:
+        st.session_state.daily_attempt_id = None
+    if "daily_ready_to_submit" not in st.session_state:
+        st.session_state.daily_ready_to_submit = False
+    if "daily_persistence_sync_key" not in st.session_state:
+        st.session_state.daily_persistence_sync_key = None
+
+
+def initialize_player_identity_state():
+    """Keep private player identity only in this user's Streamlit session."""
+    if "active_player_id" not in st.session_state:
+        st.session_state.active_player_id = None
+    if "active_player_name" not in st.session_state:
+        st.session_state.active_player_name = None
+    if "player_auth_flash" not in st.session_state:
+        st.session_state.player_auth_flash = ""
+    if "active_group_id" not in st.session_state:
+        st.session_state.active_group_id = None
+    if "group_flash" not in st.session_state:
+        st.session_state.group_flash = ""
+    if "active_device_token" not in st.session_state:
+        st.session_state.active_device_token = None
+    if "remember_restore_checked" not in st.session_state:
+        st.session_state.remember_restore_checked = False
+    if "remember_cookie_command" not in st.session_state:
+        st.session_state.remember_cookie_command = None
+    if "remember_storage_command" not in st.session_state:
+        st.session_state.remember_storage_command = None
+    if "remember_storage_nonce" not in st.session_state:
+        st.session_state.remember_storage_nonce = 0
+
+
+def _browser_remember_cookie() -> str:
+    try:
+        return str(st.context.cookies.get(REMEMBER_COOKIE_NAME, "") or "").strip()
     except Exception:
         return ""
 
 
-def _set_student_session(student, class_record) -> None:
-    st.session_state.student_id = student.student_id
-    st.session_state.student_nickname = student.nickname
-    st.session_state.student_class_id = student.class_id
-    st.session_state.student_class_name = class_record.class_name
+def _next_remember_storage_nonce() -> str:
+    st.session_state.remember_storage_nonce = int(st.session_state.get("remember_storage_nonce", 0)) + 1
+    return str(st.session_state.remember_storage_nonce)
 
 
-def handle_persistent_student_login(store: SupabaseFactStore | None) -> None:
-    """Read/write the optional 30-day browser login token.
+def _queue_remember_storage_set(token: str):
+    st.session_state.remember_storage_command = {
+        "action": "set", "token": str(token), "nonce": _next_remember_storage_nonce()
+    }
 
-    The browser stores only a signed token, never the PIN itself. Every restore
-    re-checks the current student record so deleted/deactivated students stop
-    working, and a PIN reset invalidates the older token.
-    """
-    pending = st.session_state.get("persistent_login_pending_action")
-    if pending:
-        action = str(pending.get("action") or "")
-        token = str(pending.get("token") or "")
-        result = PERSISTENT_LOGIN_COMPONENT(
-            action=action,
-            token=token,
-            default={"ready": False},
-            key=f"persistent_login_{action}_{abs(hash(token)) if token else 'empty'}",
+
+def _queue_remember_storage_delete():
+    st.session_state.remember_storage_command = {
+        "action": "delete", "token": "", "nonce": _next_remember_storage_nonce()
+    }
+
+
+def _queue_remember_cookie_set(token: str):
+    st.session_state.remember_cookie_command = {"action": "set", "token": str(token)}
+    _queue_remember_storage_set(token)
+
+
+def _queue_remember_cookie_delete():
+    st.session_state.remember_cookie_command = {"action": "delete", "token": ""}
+    _queue_remember_storage_delete()
+
+
+def render_remember_storage_bridge() -> dict:
+    """Read/write the 30-day device token through first-party browser localStorage."""
+    command = st.session_state.get("remember_storage_command") or {}
+    action = str(command.get("action") or "read")
+    token = str(command.get("token") or "")
+    nonce = str(command.get("nonce") or "")
+    default_payload = json.dumps({"token": "", "ready": False, "ack": ""})
+    try:
+        result = _remember_storage_component(
+            data={
+                "storage_key": REMEMBER_STORAGE_KEY,
+                "action": action,
+                "token": token,
+                "nonce": nonce,
+            },
+            default={"payload": default_payload},
+            on_payload_change=lambda: None,
+            key="remember_storage_bridge",
         )
-        if isinstance(result, dict) and result.get("ready"):
-            st.session_state.persistent_login_pending_action = None
-            if action == "clear":
-                st.session_state.persistent_login_reader_nonce = int(st.session_state.get("persistent_login_reader_nonce", 0)) + 1
-                st.session_state.persistent_login_check_complete = True
+        payload_raw = getattr(result, "payload", default_payload) or default_payload
+        payload = json.loads(str(payload_raw))
+        if nonce and str(payload.get("ack") or "") == nonce:
+            st.session_state.remember_storage_command = None
+        return {
+            "token": str(payload.get("token") or "").strip(),
+            "ready": bool(payload.get("ready")),
+        }
+    except Exception as exc:
+        if database_check_enabled():
+            st.caption(f"Remembered-login browser detail: {type(exc).__name__}: {exc}")
+        # Cookie restore remains as a compatibility fallback.
+        return {"token": "", "ready": True}
+
+
+def render_pending_remember_cookie_command():
+    """Write/delete the first-party remembered-device cookie in the browser."""
+    command = st.session_state.get("remember_cookie_command")
+    if not command:
+        return
+    name_js = json.dumps(REMEMBER_COOKIE_NAME)
+    if command.get("action") == "set":
+        token_js = json.dumps(str(command.get("token") or ""))
+        script = f"""
+        <script>
+        (function() {{
+          const name = {name_js};
+          const token = {token_js};
+          document.cookie = `${{name}}=${{token}}; Path=/; Max-Age={REMEMBER_COOKIE_MAX_AGE}; SameSite=Lax; Secure`;
+        }})();
+        </script>
+        """
+    else:
+        script = f"""
+        <script>
+        (function() {{
+          const name = {name_js};
+          document.cookie = `${{name}}=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure`;
+        }})();
+        </script>
+        """
+    st.html(script, unsafe_allow_javascript=True)
+    st.session_state.remember_cookie_command = None
+
+
+def _restore_remembered_player(storage_state: dict | None = None):
+    """Restore a player from localStorage first, with the old cookie as a fallback."""
+    if st.session_state.get("active_player_id") or st.session_state.get("remember_restore_checked"):
+        return
+    storage_state = storage_state or {}
+    cookie_token = _browser_remember_cookie()
+    storage_token = str(storage_state.get("token") or "").strip()
+    storage_ready = bool(storage_state.get("ready"))
+
+    # A Components-v2 localStorage read arrives on the next rerun. Do not mark
+    # restore complete until that browser read has finished, unless the legacy
+    # first-party cookie already gives us a token immediately.
+    if not cookie_token and not storage_ready:
         return
 
-    if student_signed_in() or store is None:
-        st.session_state.persistent_login_check_complete = True
-        return
-
-    result = PERSISTENT_LOGIN_COMPONENT(
-        action="read",
-        token="",
-        default={"ready": False},
-        key=f"persistent_login_reader_{st.session_state.get('persistent_login_reader_nonce', 0)}",
-    )
-    if not isinstance(result, dict) or not result.get("ready"):
-        st.session_state.persistent_login_check_complete = False
-        return
-
-    st.session_state.persistent_login_check_complete = True
-    token = str(result.get("token") or "")
+    st.session_state.remember_restore_checked = True
+    token = storage_token or cookie_token
     if not token:
         return
-
     try:
-        # The signed payload tells us which student to load; validation still
-        # requires the student's current visible PIN and active class/account.
-        student_id = peek_student_id(token)
-        if not student_id:
-            raise ValueError("Missing student id")
-        student = store.get_student(student_id)
-        if not student.active:
-            raise ValueError("Inactive student")
-        payload = verify_student_token(token, student.pin_code, _persistent_login_secret())
-        if payload is None:
-            raise ValueError("Expired or invalid remembered login")
-        classes = store.list_classes()
-        class_record = next((item for item in classes if item.class_id == student.class_id), None)
-        if class_record is None:
-            raise ValueError("Student class is not active")
-        _set_student_session(student, class_record)
-        st.rerun()
+        player = load_daily_store().authenticate_device_session(token)
+    except Exception as exc:
+        if database_check_enabled():
+            st.caption(f"Remembered-login detail: {type(exc).__name__}: {exc}")
+        return
+    if player is None:
+        _queue_remember_cookie_delete()
+        return
+    _activate_player(player, created=False)
+    st.session_state.active_device_token = token
+
+
+def _remember_this_device(player_id: str) -> bool:
+    """Create a revocable browser login after a successful PIN authentication."""
+    try:
+        token = load_daily_store().create_device_session(str(player_id), REMEMBER_DEVICE_DAYS)
+    except Exception as exc:
+        st.session_state.player_auth_flash = "Signed in, but this device could not be remembered yet."
+        if database_check_enabled():
+            st.session_state.player_auth_flash += f" ({type(exc).__name__}: {exc})"
+        return False
+    st.session_state.active_device_token = token
+    _queue_remember_cookie_set(token)
+    return True
+
+
+def _activate_player(player, *, created: bool = False):
+    """Switch the active v43B player without carrying another player's Daily state."""
+    previous_id = st.session_state.get("active_player_id")
+    if previous_id != player.player_id:
+        _reset_daily_local_attempt(current_daily_date_key())
+        st.session_state.active_group_id = None
+        st.session_state.group_flash = ""
+        st.session_state.pop("friend_group_selector", None)
+    st.session_state.active_player_id = player.player_id
+    st.session_state.active_player_name = player.display_name
+    st.session_state.daily_display_name = player.display_name
+    st.session_state.player_auth_flash = ""
+
+
+def _sign_out_player():
+    token = st.session_state.get("active_device_token") or _browser_remember_cookie()
+    if token:
+        try:
+            load_daily_store().revoke_device_session(token)
+        except Exception:
+            pass
+    _queue_remember_cookie_delete()
+    # Prevent the still-visible cookie snapshot from immediately restoring on the sign-out rerun.
+    st.session_state.remember_restore_checked = True
+    st.session_state.active_device_token = None
+    st.session_state.active_player_id = None
+    st.session_state.active_player_name = None
+    st.session_state.player_auth_flash = ""
+    st.session_state.active_group_id = None
+    st.session_state.group_flash = ""
+    st.session_state.pop("friend_group_selector", None)
+    _reset_daily_local_attempt(current_daily_date_key())
+    st.session_state.daily_display_name = "You"
+
+
+def _query_param_value(name: str) -> str:
+    try:
+        value = st.query_params.get(name, "")
     except Exception:
-        st.session_state.persistent_login_pending_action = {"action": "clear"}
-        st.session_state.persistent_login_check_complete = False
-        st.rerun()
+        return ""
+    if isinstance(value, list):
+        value = value[0] if value else ""
+    return str(value or "").strip()
 
 
-def student_signed_in() -> bool:
-    return bool(st.session_state.student_id and st.session_state.student_class_id)
+def _pending_invite_code() -> str:
+    return re.sub(r"\s+", "", _query_param_value("invite")).upper()[:12]
 
 
-def parse_answer(value: str) -> int:
-    text = str(value or "").strip()
-    if not text or not text.isdigit():
-        raise ValueError("Enter a whole-number answer.")
-    number = int(text)
-    if not 0 <= number <= 200:
-        raise ValueError("Enter a reasonable whole-number answer.")
-    return number
+def _clear_pending_invite():
+    try:
+        if "invite" in st.query_params:
+            del st.query_params["invite"]
+    except Exception:
+        pass
 
 
-def format_seconds(seconds: float | None) -> str:
-    value = float(seconds or 0.0)
-    if value < 60:
-        return f"{value:.1f}s"
-    minutes = int(value // 60)
-    remainder = value - minutes * 60
-    return f"{minutes}:{remainder:04.1f}"
+def _group_invite_url(join_code: str) -> str:
+    code = re.sub(r"\s+", "", str(join_code or "")).upper()
+    return f"{PUBLIC_APP_URL}?invite={code}"
 
 
-def progress_bar(completed: int, total: int = 10, current: int | None = None) -> None:
-    cells = []
-    for index in range(1, total + 1):
-        cls = "progress-seg done" if index <= completed else "progress-seg"
-        if current is not None and index == current and index > completed:
-            cls = "progress-seg current"
-        cells.append(f'<div class="{cls}"></div>')
-    st.markdown('<div class="progress-row">' + "".join(cells) + "</div>", unsafe_allow_html=True)
+def process_pending_group_invite() -> bool:
+    """Auto-join a group after a player arrives through an invite link and signs in."""
+    code = _pending_invite_code()
+    if not code or not st.session_state.get("active_player_id"):
+        return False
+    try:
+        group = load_daily_store().join_group(st.session_state.active_player_id, code)
+    except GroupNotFound:
+        st.session_state.group_flash = "That invite link is no longer valid."
+        _clear_pending_invite()
+        return False
+    except Exception as exc:
+        st.warning("Your player is signed in, but the group invite could not be joined yet. Try the invite link again.")
+        if database_check_enabled():
+            st.caption(f"Invite join detail: {type(exc).__name__}: {exc}")
+        return False
+    _clear_social_caches()
+    st.session_state.active_group_id = group.group_id
+    st.session_state.group_flash = f"Joined {group.group_name} from the invite link."
+    st.session_state.app_mode = "Daily Challenge"
+    _clear_pending_invite()
+    return True
 
 
-def render_routine_strip(stage: str) -> None:
-    """Make the four-part student path obvious without turning Mystery into required work."""
-    stages = ["daily", "fix", "focus", "mystery"]
-    labels = {
-        "daily": "1 · Daily 10",
-        "fix": "2 · Fix Misses",
-        "focus": "3 · Focus",
-        "mystery": "4 · Mystery",
-    }
-    current_index = stages.index(stage) if stage in stages else 0
-    cells = []
-    for index, key in enumerate(stages):
-        if index < current_index:
-            cls = "routine-step done"
-            prefix = "✓ "
-        elif index == current_index:
-            cls = "routine-step reward" if key == "mystery" else "routine-step current"
-            prefix = "★ " if key == "mystery" else "→ "
-        else:
-            cls = "routine-step"
-            prefix = "🔒 "
-        cells.append(f'<div class="{cls}">{prefix}{labels[key]}</div>')
-    st.markdown('<div class="routine-strip">' + "".join(cells) + "</div>", unsafe_allow_html=True)
-
-
-def render_array(fact: Fact) -> None:
-    columns = fact.b
-    cells = "".join('<div class="array-dot"></div>' for _ in range(fact.a * fact.b))
-    st.markdown(
+def render_group_invite_controls(group):
+    """Share/copy a one-tap URL that queues this group before player sign-up/sign-in."""
+    invite_url = _group_invite_url(group.join_code)
+    url_js = json.dumps(invite_url)
+    title_js = json.dumps(f"Join {group.group_name} in Yahtzee Coach")
+    components.html(
         f"""
-        <div class="array-shell">
-            <div class="array-grid" style="grid-template-columns:repeat({columns},16px);">
-                {cells}
-            </div>
+        <div style="display:flex;gap:8px;font-family:Arial,sans-serif;margin:2px 0 4px 0;">
+          <button id="shareInvite" style="flex:1;border:1px solid #2563eb;background:#2563eb;color:white;border-radius:9px;padding:9px 10px;font-weight:700;cursor:pointer;">📤 Share invite</button>
+          <button id="copyInvite" style="flex:1;border:1px solid #cbd5e1;background:white;color:#0f172a;border-radius:9px;padding:9px 10px;font-weight:700;cursor:pointer;">🔗 Copy invite link</button>
         </div>
-        <div class="teach-line">{fact.a} rows of {fact.b} = {fact.product}</div>
-        <div class="teach-sub">{html.escape(repeated_addition_text(fact))}</div>
+        <div id="inviteStatus" style="font-family:Arial,sans-serif;font-size:12px;color:#64748b;text-align:center;height:16px;"></div>
+        <script>
+          const inviteUrl = {url_js};
+          const inviteTitle = {title_js};
+          const status = document.getElementById('inviteStatus');
+          async function copyInvite() {{
+            try {{
+              await window.parent.navigator.clipboard.writeText(inviteUrl);
+              status.textContent = 'Invite link copied.';
+            }} catch (e) {{
+              try {{
+                await navigator.clipboard.writeText(inviteUrl);
+                status.textContent = 'Invite link copied.';
+              }} catch (e2) {{
+                status.textContent = 'Copy was blocked — use the invite code shown above.';
+              }}
+            }}
+          }}
+          document.getElementById('copyInvite').addEventListener('click', copyInvite);
+          document.getElementById('shareInvite').addEventListener('click', async () => {{
+            const nav = window.parent.navigator || navigator;
+            if (nav.share) {{
+              try {{
+                await nav.share({{title: inviteTitle, text: 'Join my Yahtzee Coach friend group!', url: inviteUrl}});
+                status.textContent = 'Invite ready to share.';
+                return;
+              }} catch (e) {{ if (e && e.name === 'AbortError') return; }}
+            }}
+            await copyInvite();
+          }});
+        </script>
         """,
+        height=64,
+    )
+
+
+def install_app_shell_metadata():
+    """Add Home Screen metadata using real public image URLs instead of temporary data/blob icons."""
+    apple_icon_url = f"{PUBLIC_ASSET_BASE}apple_touch_icon.png"
+    icon192_url = f"{PUBLIC_ASSET_BASE}home_icon_192.png"
+    icon512_url = f"{PUBLIC_ASSET_BASE}home_icon_512.png"
+    manifest = {
+        "name": "Yahtzee Coach",
+        "short_name": "Yahtzee Coach",
+        "description": "Daily Yahtzee decision coach with exact strategy, friend groups, and leaderboards.",
+        "start_url": PUBLIC_APP_URL,
+        "display": "standalone",
+        "background_color": "#061b14",
+        "theme_color": "#0b3b2e",
+        "icons": [
+            {"src": icon192_url, "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": icon512_url, "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ],
+    }
+    html_block = """
+        <script>
+        (function() {
+          const head = document.head;
+          function ensureLink(rel, href) {
+            let el = head.querySelector(`link[rel="${rel}"]`);
+            if (!el) {
+              el = document.createElement('link');
+              el.setAttribute('rel', rel);
+              head.appendChild(el);
+            }
+            el.setAttribute('href', href);
+            return el;
+          }
+          function ensureMeta(name, content) {
+            let el = head.querySelector(`meta[name="${name}"]`);
+            if (!el) {
+              el = document.createElement('meta');
+              el.setAttribute('name', name);
+              head.appendChild(el);
+            }
+            el.setAttribute('content', content);
+          }
+          let manifestUrl = window.__ycManifestUrl;
+          if (!manifestUrl) {
+            const blob = new Blob([__MANIFEST__], {type: 'application/manifest+json'});
+            manifestUrl = URL.createObjectURL(blob);
+            window.__ycManifestUrl = manifestUrl;
+          }
+          ensureLink('manifest', manifestUrl);
+          ensureLink('apple-touch-icon', __APPLE_ICON__);
+          ensureLink('icon', __ICON_192__);
+          ensureMeta('apple-mobile-web-app-capable', 'yes');
+          ensureMeta('mobile-web-app-capable', 'yes');
+          ensureMeta('apple-mobile-web-app-title', 'Yahtzee Coach');
+          ensureMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
+          ensureMeta('theme-color', '#0b3b2e');
+        })();
+        </script>
+        """
+    html_block = html_block.replace("__MANIFEST__", json.dumps(json.dumps(manifest)))
+    html_block = html_block.replace("__APPLE_ICON__", json.dumps(apple_icon_url))
+    html_block = html_block.replace("__ICON_192__", json.dumps(icon192_url))
+    st.html(html_block, unsafe_allow_javascript=True)
+
+
+def render_install_mode():
+    """Render a reliable third-mode Home Screen guide using native Streamlit controls."""
+    st.markdown("## 📲 Add Yahtzee Coach to your Home Screen")
+    left, center, right = st.columns([1, 1.1, 1])
+    with center:
+        st.image(str(APP_ICON_512_PATH), width=170)
+
+    st.markdown(
+        "Save **Yahtzee Coach** to your phone or computer for quick access with the custom teacher-die icon. "
+        "The final Add/Install action is controlled by your browser, so this page gives the exact route instead of showing a button that may do nothing."
+    )
+
+    ios_tab, android_tab, computer_tab = st.tabs(["🍎 iPhone / iPad", "🤖 Android", "💻 Computer"])
+
+    with ios_tab:
+        st.markdown("""
+**Safari**  
+1. Tap the **Share** button.  
+2. Scroll down and tap **Add to Home Screen**.  
+3. Leave **Open as Web App** on if it appears.  
+4. Tap **Add**.
+""")
+        st.caption("Apple requires those final system taps; the website cannot press Add to Home Screen automatically.")
+
+    with android_tab:
+        st.markdown("""
+**Chrome**  
+1. Tap the **⋮** browser menu.  
+2. Tap **Add to Home screen** or **Install app**.  
+3. Confirm the install.
+""")
+        st.caption("Chrome may also show its own install option when it considers the site installable.")
+
+    with computer_tab:
+        st.markdown("""
+**Chrome / Edge**  
+Use the browser's install option in the address bar or menu. In Chrome, look under **⋮ → Cast, save, and share → Install page as app**.
+
+**Safari on Mac**  
+Choose **File → Add to Dock**.
+""")
+
+    st.divider()
+    st.caption("Direct app link")
+    st.code(PUBLIC_APP_URL, language=None)
+
+def _daily_puzzle_ids():
+    return [str(challenge.get("challenge_id", "")) for challenge in st.session_state.daily_challenges]
+
+
+def _hold_values_from_exact_label(label: str) -> list[int]:
+    """Convert exact-mode labels such as 'keep 2, 2, 5' back to die values."""
+    text = str(label or "").strip().lower()
+    if not text or "reroll" in text:
+        return []
+    return [int(value) for value in re.findall(r"\b[1-6]\b", text)]
+
+
+def _register_today_in_database(store):
+    return store.ensure_challenge(
+        st.session_state.daily_set_id,
+        st.session_state.daily_date_key,
+        DAILY_CHALLENGE_VERSION,
+        _daily_puzzle_ids(),
+    )
+
+
+def _rebuild_persisted_daily_answer(challenge, answer_record):
+    """Recreate the rich local review object from the immutable compact DB answer."""
+    if str(challenge.get("challenge_id", "")) != str(answer_record.puzzle_id):
+        raise ChallengeMismatch("Saved Daily answer does not match today's puzzle order.")
+    selected_hold = list(answer_record.chosen_hold)
+    report, solver_record = build_live_report(
+        challenge["dice"],
+        challenge["scorecard"],
+        selected_hold,
+        challenge["roll_number"],
+    )
+    if solver_record.get("source") != "exact":
+        raise InvalidOfficialAnswer("The exact solver is required to restore an official Daily answer.")
+    rebuilt_loss = float(solver_record.get("points_lost", 0.0) or 0.0)
+    if abs(rebuilt_loss - float(answer_record.points_lost)) > 1e-6:
+        raise ChallengeMismatch("Saved Daily score does not match the locked exact policy.")
+    return _daily_solver_record(challenge, solver_record, selected_hold, report)
+
+
+def _apply_daily_resume_state(resume_state, *, resumed_message: bool = False):
+    challenges = st.session_state.daily_challenges
+    answers = list(resume_state.answers)
+    if len(answers) > len(challenges):
+        raise ChallengeMismatch("Saved Daily attempt has too many answers.")
+    rebuilt = [
+        _rebuild_persisted_daily_answer(challenges[index], answer_record)
+        for index, answer_record in enumerate(answers)
+    ]
+    st.session_state.daily_attempt_id = resume_state.attempt.attempt_id
+    st.session_state.daily_started = True
+    st.session_state.daily_answers = rebuilt
+    st.session_state.daily_completed = bool(resume_state.attempt.complete)
+    st.session_state.daily_ready_to_submit = bool(not resume_state.attempt.complete and len(rebuilt) >= len(challenges))
+    st.session_state.daily_question_index = (len(challenges) - 1 if st.session_state.daily_ready_to_submit else len(rebuilt))
+    st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
+    if resumed_message and 0 < len(rebuilt) < len(challenges):
+        st.session_state.daily_flash = f"Welcome back — {len(rebuilt)} choice{'s' if len(rebuilt) != 1 else ''} restored."
+    elif resumed_message and st.session_state.daily_ready_to_submit:
+        st.session_state.daily_flash = "All 10 choices are ready to review."
+
+
+def _daily_sync_key():
+    return f"{st.session_state.get('active_player_id')}|{st.session_state.daily_set_id}"
+
+
+def _force_daily_resync():
+    st.session_state.daily_persistence_sync_key = None
+
+
+def sync_daily_attempt_from_database(*, force: bool = False) -> bool:
+    """Load today's existing attempt once per player/session, including refresh/device resume."""
+    if not st.session_state.get("active_player_id"):
+        return False
+    sync_key = _daily_sync_key()
+    if not force and st.session_state.get("daily_persistence_sync_key") == sync_key:
+        return True
+    try:
+        store = load_daily_store()
+        _register_today_in_database(store)
+        resume_state = store.get_resume_state(
+            st.session_state.active_player_id,
+            st.session_state.daily_set_id,
+        )
+        if resume_state is not None:
+            _apply_daily_resume_state(resume_state, resumed_message=True)
+        else:
+            st.session_state.daily_started = False
+            st.session_state.daily_completed = False
+            st.session_state.daily_ready_to_submit = False
+            st.session_state.daily_question_index = 0
+            st.session_state.daily_answers = []
+            st.session_state.daily_attempt_id = None
+        st.session_state.daily_persistence_sync_key = sync_key
+        return True
+    except Exception as exc:
+        st.error("Today's Daily Challenge couldn't be loaded right now. Please try again.")
+        if database_check_enabled():
+            st.caption(f"Daily persistence detail: {type(exc).__name__}: {exc}")
+        return False
+
+
+def start_persistent_daily_attempt() -> bool:
+    """Create the single official attempt, or restore it if another request already created it."""
+    try:
+        store = load_daily_store()
+        _register_today_in_database(store)
+        attempt, created = store.get_or_create_attempt(
+            st.session_state.active_player_id,
+            st.session_state.daily_set_id,
+        )
+        resume_state = store.get_resume_state(
+            st.session_state.active_player_id,
+            st.session_state.daily_set_id,
+        )
+        if resume_state is None:
+            raise DailyStoreError("The Daily attempt could not be reloaded after creation.")
+        _apply_daily_resume_state(resume_state, resumed_message=not created)
+        st.session_state.daily_persistence_sync_key = _daily_sync_key()
+        if created:
+            st.session_state.daily_flash = ""
+        return True
+    except Exception as exc:
+        st.error("Today's Daily couldn't be started right now. Please try again.")
+        if database_check_enabled():
+            st.caption(f"Daily start detail: {type(exc).__name__}: {exc}")
+        return False
+
+
+def _set_app_mode(mode: str):
+    """Widget callback: switch the top navigation safely before the next rerun renders it."""
+    st.session_state.app_mode = mode
+
+
+def render_player_identity_gate():
+    """Create or restore the player used for Daily Challenge."""
+    st.markdown(
+        "<div class='daily-hero'>"
+        "<div class='daily-kicker'>👋 Welcome to Yahtzee Coach</div>"
+        "<div class='daily-title'>Play today's Daily Challenge</div>"
+        "<div class='daily-rule'>Sign in to save your Daily results and compete with friends.</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    invite_code = _pending_invite_code()
+    if invite_code:
+        st.success("🎟️ You were invited to a friend group. Sign in or create a player and we'll join you automatically.")
+
+    return_tab, create_tab = st.tabs(["Returning Player", "Create Player"])
+
+    with return_tab:
+        with st.form("returning_player_form", clear_on_submit=True):
+            return_name = st.text_input(
+                "Display name",
+                max_chars=24,
+                key="returning_player_name",
+            )
+            return_pin = st.text_input(
+                "PIN",
+                type="password",
+                max_chars=12,
+                key="returning_player_pin",
+            )
+            return_remember = st.checkbox(
+                "Keep me signed in on this device for 30 days",
+                value=True,
+                key="returning_player_remember",
+                help="Use this only on a device you trust. Your PIN is never stored in the browser.",
+            )
+            return_submitted = st.form_submit_button(
+                "Sign in", type="primary", use_container_width=True
+            )
+        st.caption("Your PIN is private.")
+        with st.expander("Forgot your PIN?", expanded=False):
+            st.write("PIN recovery isn't available during this beta yet. If you get locked out, contact Mike or the person who invited you so we can help.")
+            st.caption("Never send anyone your PIN — just share your display name when asking for help.")
+        if return_submitted:
+            try:
+                player = load_daily_store().authenticate_player(return_name, return_pin)
+            except Exception:
+                st.error("Sign-in isn't available right now. Please try again.")
+            else:
+                if player is None:
+                    st.error("Display name or PIN did not match.")
+                else:
+                    _activate_player(player, created=False)
+                    if return_remember:
+                        _remember_this_device(player.player_id)
+                    st.rerun()
+
+    with create_tab:
+        with st.form("create_player_form", clear_on_submit=True):
+            new_name = st.text_input(
+                "Display name",
+                max_chars=24,
+                placeholder="2-24 characters",
+                key="create_player_name",
+            )
+            new_pin = st.text_input(
+                "Choose a PIN",
+                type="password",
+                max_chars=12,
+                placeholder="4-12 digits",
+                key="create_player_pin",
+            )
+            confirm_pin = st.text_input(
+                "Confirm PIN",
+                type="password",
+                max_chars=12,
+                key="create_player_pin_confirm",
+            )
+            create_remember = st.checkbox(
+                "Keep me signed in on this device for 30 days",
+                value=True,
+                key="create_player_remember",
+                help="Use this only on a device you trust. Your PIN is never stored in the browser.",
+            )
+            create_submitted = st.form_submit_button(
+                "Create player", type="primary", use_container_width=True
+            )
+        st.caption("Your display name is visible to friends. Your PIN is private.")
+        if create_submitted:
+            if new_pin != confirm_pin:
+                st.error("Those PINs do not match.")
+            else:
+                try:
+                    player = load_daily_store().create_player(new_name, new_pin)
+                except PlayerNameTaken:
+                    st.error("That display name is already in use. Try another name or use Returning Player.")
+                except InvalidPin as exc:
+                    st.error(str(exc))
+                except ValueError as exc:
+                    st.error(str(exc))
+                except Exception:
+                    st.error("Player creation isn't available right now. Please try again.")
+                else:
+                    _activate_player(player, created=True)
+                    if create_remember:
+                        _remember_this_device(player.player_id)
+                    st.rerun()
+
+    st.button(
+        "Open Practice without signing in",
+        use_container_width=True,
+        key="identity_to_practice",
+        on_click=_set_app_mode,
+        args=("Practice",),
+    )
+
+
+def render_player_status_bar():
+    flash = st.session_state.get("player_auth_flash", "")
+    if flash:
+        st.info(flash)
+        st.session_state.player_auth_flash = ""
+    name = st.session_state.get("active_player_name") or "Player"
+    left, right = st.columns([5, 1])
+    with left:
+        st.caption(f"👤 **{name}**")
+    with right:
+        if st.button("Sign out", use_container_width=True, key="player_sign_out"):
+            _sign_out_player()
+            st.rerun()
+
+
+
+
+def _select_active_group(groups):
+    """Keep a stable selected group for this signed-in player."""
+    if not groups:
+        st.session_state.active_group_id = None
+        return None
+    group_by_id = {group.group_id: group for group in groups}
+    if st.session_state.get("active_group_id") not in group_by_id:
+        st.session_state.active_group_id = groups[0].group_id
+    return group_by_id.get(st.session_state.active_group_id)
+
+
+def _load_player_groups():
+    if not st.session_state.get("active_player_id"):
+        return []
+    try:
+        return _cached_player_groups(st.session_state.active_player_id)
+    except Exception as exc:
+        st.warning("Your friend groups could not be loaded right now. Your Daily attempt is unaffected.")
+        if database_check_enabled():
+            st.caption(f"Group load detail: {type(exc).__name__}: {exc}")
+        return []
+
+
+def render_group_selector(groups, *, key="friend_group_selector"):
+    """Let players switch which group's standings they are viewing."""
+    active = _select_active_group(groups)
+    if not groups:
+        return None
+    if len(groups) == 1:
+        st.session_state.active_group_id = groups[0].group_id
+        return groups[0]
+    ids = [group.group_id for group in groups]
+    labels = {group.group_id: group.group_name for group in groups}
+    chosen_id = st.selectbox(
+        "Friend group",
+        options=ids,
+        index=ids.index(active.group_id) if active else 0,
+        format_func=lambda group_id: labels[group_id],
+        key=key,
+    )
+    if chosen_id != st.session_state.get("active_group_id"):
+        st.session_state.active_group_id = chosen_id
+    return next(group for group in groups if group.group_id == chosen_id)
+
+
+def render_friend_group_hub(*, expanded: bool = False):
+    """Keep friend-group administration secondary to the Daily experience."""
+    groups = _load_player_groups()
+    active = _select_active_group(groups)
+
+    with st.expander("👥 Invite & manage friends", expanded=expanded or not groups):
+        if groups:
+            active = render_group_selector(groups, key="friend_group_manage_selector")
+            try:
+                members = _cached_group_members(active.group_id)
+            except Exception:
+                members = []
+            member_count = len(members)
+            st.markdown(
+                f"**{html.escape(active.group_name)}** · {member_count} member{'s' if member_count != 1 else ''}"
+            )
+            st.caption(f"Invite code: **{active.join_code}**")
+            render_group_invite_controls(active)
+            with st.expander("Show invite link", expanded=False):
+                st.code(_group_invite_url(active.join_code), language=None)
+            if members:
+                with st.expander("Group members", expanded=False):
+                    st.write(" · ".join(member["display_name"] for member in members))
+        else:
+            st.markdown("**Play the Daily with friends.** Create a group or join one with an invite code.")
+
+        st.markdown("#### Create or join a group")
+        create_tab, join_tab = st.tabs(["Create group", "Join with code"])
+        with create_tab:
+            with st.form("create_friend_group_form", clear_on_submit=True):
+                group_name = st.text_input(
+                    "Group name",
+                    max_chars=40,
+                    placeholder="Example: Sunday Rollers",
+                    key="create_friend_group_name",
+                )
+                create_group_submitted = st.form_submit_button(
+                    "Create friend group", type="primary", use_container_width=True
+                )
+            if create_group_submitted:
+                try:
+                    group = load_daily_store().create_group(
+                        st.session_state.active_player_id,
+                        group_name,
+                    )
+                except ValueError as exc:
+                    st.error(str(exc))
+                except Exception as exc:
+                    st.error("The friend group could not be created. Please try again.")
+                    if database_check_enabled():
+                        st.caption(f"Group create detail: {type(exc).__name__}: {exc}")
+                else:
+                    _clear_social_caches()
+                    st.session_state.active_group_id = group.group_id
+                    st.session_state.group_flash = f"{group.group_name} created. Invite code: {group.join_code}"
+                    st.rerun()
+
+        with join_tab:
+            with st.form("join_friend_group_form", clear_on_submit=True):
+                join_code = st.text_input(
+                    "Invite code",
+                    max_chars=12,
+                    placeholder="Example: TEAL42",
+                    key="join_friend_group_code",
+                )
+                join_group_submitted = st.form_submit_button(
+                    "Join friend group", type="primary", use_container_width=True
+                )
+            if join_group_submitted:
+                try:
+                    group = load_daily_store().join_group(
+                        st.session_state.active_player_id,
+                        join_code,
+                    )
+                except GroupNotFound:
+                    st.error("No friend group matched that invite code.")
+                except Exception as exc:
+                    st.error("The friend group could not be joined. Please try again.")
+                    if database_check_enabled():
+                        st.caption(f"Group join detail: {type(exc).__name__}: {exc}")
+                else:
+                    _clear_social_caches()
+                    st.session_state.active_group_id = group.group_id
+                    st.session_state.group_flash = f"Joined {group.group_name}."
+                    st.rerun()
+
+    flash = st.session_state.get("group_flash", "")
+    if flash:
+        st.success(flash)
+        st.session_state.group_flash = ""
+    return active
+
+
+def _real_group_context():
+    """Return active group, members, completed leaderboard, and per-question stats."""
+    groups = _load_player_groups()
+    active = _select_active_group(groups)
+    if active is None:
+        return None, [], [], []
+    members = _cached_group_members(active.group_id)
+    board = _cached_group_leaderboard(active.group_id, st.session_state.daily_set_id)
+    for row in board:
+        row["is_user"] = row.get("player_id") == st.session_state.get("active_player_id")
+    stats = _cached_group_question_stats(active.group_id, st.session_state.daily_set_id)
+    return active, members, board, stats
+
+
+def _user_real_rank(board):
+    for row in board:
+        if row.get("is_user"):
+            return int(row.get("rank", 0)) or None
+    return None
+
+
+def _story_from_group_stats(stats):
+    if not stats:
+        return {"toughest": None, "easiest": None}
+    toughest = min(stats, key=lambda row: (row["exact_rate"], -row["avg_loss"], row["question_number"]))
+    easiest = max(stats, key=lambda row: (row["exact_rate"], -row["avg_loss"], -row["question_number"]))
+    return {"toughest": toughest, "easiest": easiest}
+
+def _daily_date_label(date_key: str) -> str:
+    try:
+        value = datetime.strptime(date_key, "%Y-%m-%d")
+        return value.strftime("%B %d, %Y").replace(" 0", " ")
+    except Exception:
+        return date_key
+
+
+def render_daily_progress(index: int, saved: int, *, complete: bool = False):
+    dots = []
+    for i in range(10):
+        if complete:
+            css = "done"
+        elif i == index:
+            css = "current"
+        elif i < saved:
+            css = "done"
+        else:
+            css = ""
+        dots.append(f"<div class='daily-dot {css}' title='Question {i + 1}'></div>")
+    question_text = "Challenge complete" if complete else ("Review your 10" if saved >= 10 else f"Question {index + 1} of 10")
+    percent = min(100, max(0, int(round((saved / 10) * 100))))
+    status_text = "10/10 submitted" if complete else f"{saved}/10 saved"
+    st.markdown(
+        "<div class='daily-progress-copy'>"
+        f"<b>{question_text}</b><span>{status_text}</span>"
+        "</div><div class='daily-progress'>" + "".join(dots) + "</div>"
+        f"<div class='daily-progress-percent'>{percent}% saved</div>",
         unsafe_allow_html=True,
     )
 
 
-def strategy_tip(fact: Fact) -> str:
-    a, b = fact.a, fact.b
-    pair = {a, b}
-    if 10 in pair:
-        other = b if a == 10 else a
-        return f"Think ×10: {other} tens = {fact.product}."
-    if 5 in pair:
-        other = b if a == 5 else a
-        return f"Count by 5s {other} times, or take half of {other} × 10."
-    if 2 in pair:
-        other = b if a == 2 else a
-        return f"×2 means double: {other} + {other} = {fact.product}."
-    if a == b:
-        return f"This is a square fact: {a} × {a} = {fact.product}."
-    if 9 in pair:
-        other = b if a == 9 else a
-        return f"Use ×10 and subtract one group: {other * 10} − {other} = {fact.product}."
-    if 11 in pair:
-        other = b if a == 11 else a
-        return f"Break 11 apart: 10 × {other} + 1 × {other} = {other * 10} + {other} = {fact.product}."
-    if 12 in pair:
-        other = b if a == 12 else a
-        return f"Break 12 apart: 10 × {other} + 2 × {other} = {other * 10} + {other * 2} = {fact.product}."
-    if 4 in pair:
-        other = b if a == 4 else a
-        return f"Double twice: {other} × 2 = {other * 2}, then double {other * 2} to get {fact.product}."
-    if 3 in pair:
-        other = b if a == 3 else a
-        return f"Use a double plus one more group: 2 × {other} = {2 * other}, then + {other} = {fact.product}."
-    if 6 in pair:
-        other = b if a == 6 else a
-        return f"Use 5 groups plus 1 more: 5 × {other} = {5 * other}, then + {other} = {fact.product}."
-    if 7 in pair:
-        other = b if a == 7 else a
-        return f"Use 5 groups plus 2 more: 5 × {other} = {5 * other} and 2 × {other} = {2 * other}; together = {fact.product}."
-    if 8 in pair:
-        other = b if a == 8 else a
-        return f"Use 10 groups minus 2 groups: {10 * other} − {2 * other} = {fact.product}."
-    larger = max(a, b)
-    smaller = min(a, b)
-    return f"Break it into an easier fact you know, then put the groups back together: {smaller} × {larger} = {fact.product}."
+def _daily_solver_record(challenge, solver_record, selected_hold, report):
+    record = dict(solver_record)
+    record["scenario"] = challenge.get("scenario_name", "")
+    record["bank_version"] = challenge.get("bank_version", "")
+    record["daily_version"] = challenge.get("daily_version", DAILY_CHALLENGE_VERSION)
+    record["skill_tag"] = challenge.get("skill_tag", "")
+    record["difficulty"] = challenge.get("difficulty", "")
+    record["stage"] = challenge.get("stage", "")
+    record["bonus_status"] = challenge.get("bonus_status", "")
+    record["challenge_id"] = challenge.get("challenge_id", "")
+    record["daily_number"] = challenge.get("daily_number")
+    record["timestamp_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return {
+        "challenge": challenge,
+        "solver_record": record,
+        "selected_hold": list(selected_hold),
+        "report": report,
+    }
 
 
-def render_header() -> str:
-    st.markdown("<h1 class='top-title'>Teal's Daily Fact Challenge</h1>", unsafe_allow_html=True)
-    st.markdown("<div class='subtitle'>10 facts a day · accuracy first · speed breaks ties</div>", unsafe_allow_html=True)
-    mode = st.radio(
-        "App mode",
-        ["Daily Challenge", "Practice", "Teacher"],
-        horizontal=True,
-        label_visibility="collapsed",
-        key="app_mode",
-    )
-    if student_signed_in() and mode != "Teacher":
-        left, right = st.columns([5, 1.4])
-        with left:
-            st.caption(f"👤 {st.session_state.student_nickname} · {st.session_state.student_class_name}")
-        with right:
-            st.button("Sign out", use_container_width=True, on_click=sign_out)
-    return mode
+def _participation_streak() -> int:
+    if not st.session_state.get("active_player_id"):
+        return 0
+    try:
+        return int(_cached_participation_streak(
+            st.session_state.active_player_id,
+            st.session_state.daily_date_key,
+        ))
+    except Exception as exc:
+        if database_check_enabled():
+            st.caption(f"Streak detail: {type(exc).__name__}: {exc}")
+        return 0
 
 
-def render_db_setup_message() -> None:
-    st.info(
-        "Daily Challenge accounts are not connected yet. Practice still works. "
-        "For the full app, finish the Supabase + Streamlit Secrets steps in DEPLOYMENT_STEPS.txt."
+def _daily_streak_copy(streak: int, *, completed_today: bool) -> str:
+    streak = max(0, int(streak or 0))
+    if streak <= 0:
+        return ""
+    if completed_today and streak == 1:
+        return "🔥 First Daily complete — your streak has started!"
+    suffix = "day" if streak == 1 else "days"
+    if completed_today:
+        return f"🔥 {streak}-{suffix} Daily streak"
+    return f"🔥 {streak}-{suffix} streak alive — finish today's Daily to keep it going"
+
+
+def render_daily_intro():
+    date_key = st.session_state.daily_date_key
+    st.markdown(
+        "<div class='daily-hero'>"
+        "<div class='daily-kicker'>🎲 Daily Challenge</div>"
+        f"<div class='daily-title'>{_daily_date_label(date_key)}</div>"
+        "<div class='daily-rule'><b>10 hold decisions. Same challenge for everyone.</b><br>"
+        "Lose as few expected game points as possible. You can review and change your choices before you submit, and coaching unlocks only after the Daily is finished.<br>"
+        "<span style='font-size:.80rem'>5 Roll 1 · 5 Roll 2 · new challenge at midnight Eastern</span></div>"
+        "</div>",
+        unsafe_allow_html=True,
     )
 
+    streak = _participation_streak()
+    streak_copy = _daily_streak_copy(streak, completed_today=False)
+    if streak_copy:
+        st.caption(streak_copy)
 
-def render_student_sign_in(store: SupabaseFactStore | None) -> bool:
-    if student_signed_in():
-        return True
-    if store is not None and not st.session_state.get("persistent_login_check_complete", False):
-        st.caption("Checking this device for a saved sign-in…")
+    groups = _load_player_groups()
+    if groups:
+        active = render_group_selector(groups, key="daily_intro_group_selector")
+        try:
+            store = load_daily_store()
+            member_count = len(_cached_group_members(active.group_id))
+            finished_count = len(_cached_group_leaderboard(active.group_id, st.session_state.daily_set_id))
+        except Exception:
+            member_count = 0
+            finished_count = 0
+        group_line = f"👥 Competing in **{active.group_name}**"
+        if member_count:
+            group_line += f" · {member_count} member{'s' if member_count != 1 else ''}"
+        if member_count > 1:
+            if finished_count == 0:
+                group_line += " · nobody has finished yet"
+            elif finished_count < member_count:
+                group_line += f" · {finished_count} finished"
+            else:
+                group_line += " · everyone has finished"
+        st.caption(group_line)
+
+    if st.button("Start today's Daily Challenge", type="primary", use_container_width=True):
+        st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
+        if start_persistent_daily_attempt():
+            st.rerun()
+
+    st.button(
+        "Open Practice",
+        use_container_width=True,
+        on_click=_set_app_mode,
+        args=("Practice",),
+    )
+
+    with st.expander("How the Daily Challenge works", expanded=False):
+        st.markdown(
+            "- **One Daily each day:** everyone gets the same 10 decisions.\n"
+            "- **Your choices save automatically:** leave and come back without losing your place.\n"
+            "- **Review before submitting:** use Back or the final review to fix accidental taps.\n"
+            "- **No hints during the run:** grades, exact answers, and coaching appear only after you finish.\n"
+            "- **Friends:** completed players appear on your group's leaderboard.\n"
+            "- **Reset:** a new challenge begins at midnight Eastern."
+        )
+
+    render_friend_group_hub(expanded=not groups)
+
+
+def _daily_answer_at(index: int):
+    answers = st.session_state.get("daily_answers", [])
+    return answers[index] if 0 <= index < len(answers) else None
+
+
+def _daily_widget_keys(index: int) -> tuple[str, str]:
+    date_key = st.session_state.daily_date_key
+    return (
+        f"daily_held_{date_key}_{index}",
+        f"daily_dice_pills_{date_key}_{index}",
+    )
+
+
+def _saved_hold_indices(index: int) -> list[int]:
+    answer = _daily_answer_at(index)
+    if answer is None:
+        return []
+    dice = st.session_state.daily_challenges[index]["dice"]
+    return hold_indices_from_values(dice, answer.get("selected_hold", []))
+
+
+def _reset_daily_widget_to_saved(index: int):
+    """Discard an un-saved UI change when navigating backward."""
+    held_key, pills_key = _daily_widget_keys(index)
+    if pills_key in st.session_state:
+        del st.session_state[pills_key]
+    st.session_state[held_key] = _saved_hold_indices(index)
+
+
+def _save_daily_choice(index: int, selected_hold) -> bool:
+    """Save a new answer or revise an existing draft without exposing feedback."""
+    challenge = st.session_state.daily_challenges[index]
+    dice = challenge["dice"]
+    report, solver_record = build_live_report(
+        dice,
+        challenge["scorecard"],
+        selected_hold,
+        challenge["roll_number"],
+    )
+    if solver_record.get("source") != "exact":
+        st.error("The exact scorer was unavailable, so this choice was NOT saved. Please try again.")
         return False
-    if store is None:
-        render_db_setup_message()
-        if st.button("Open Practice without signing in", use_container_width=True, on_click=switch_mode, args=("Practice",)):
-            pass
+
+    attempt_id = st.session_state.get("daily_attempt_id")
+    if not attempt_id:
+        st.error("Your saved Daily attempt could not be found, so this choice was NOT saved. Please sign in again.")
+        _force_daily_resync()
         return False
+
+    saved_answer = _daily_answer_at(index)
+    same_choice = bool(
+        saved_answer is not None
+        and sorted(int(v) for v in saved_answer.get("selected_hold", []))
+        == sorted(int(v) for v in selected_hold)
+    )
 
     try:
-        classes = store.list_classes()
+        if saved_answer is None:
+            load_daily_store().save_answer(
+                attempt_id,
+                question_number=index + 1,
+                puzzle_id=str(challenge.get("challenge_id", "")),
+                chosen_hold=selected_hold,
+                optimal_hold=_hold_values_from_exact_label(solver_record.get("optimal_hold", "")),
+                points_lost=float(solver_record.get("points_lost", 0.0) or 0.0),
+                solver_source="exact",
+            )
+        elif not same_choice:
+            load_daily_store().revise_answer(
+                attempt_id,
+                question_number=index + 1,
+                puzzle_id=str(challenge.get("challenge_id", "")),
+                chosen_hold=selected_hold,
+                optimal_hold=_hold_values_from_exact_label(solver_record.get("optimal_hold", "")),
+                points_lost=float(solver_record.get("points_lost", 0.0) or 0.0),
+                solver_source="exact",
+            )
+    except (DuplicateAnswer, OutOfOrderAnswer, AttemptAlreadyComplete, ChallengeMismatch):
+        _force_daily_resync()
+        if sync_daily_attempt_from_database(force=True):
+            st.session_state.daily_flash = "Your Daily was refreshed."
+            st.rerun()
+        return False
     except Exception as exc:
-        st.error("The class database could not be loaded. Ask your teacher to check the app setup.")
-        if str(st.query_params.get("dbcheck", "0")) == "1":
-            st.exception(exc)
-        return False
-
-    if not classes:
-        st.info("No classes are set up yet. The teacher can create the first class in the Teacher tab.")
-        return False
-
-    st.markdown("### Student sign in")
-    st.caption("Use the nickname and 4-digit PIN your teacher gave you.")
-    class_by_name = {item.class_name: item for item in classes}
-    with st.form("student_signin", clear_on_submit=False):
-        class_name = st.selectbox("Class", list(class_by_name))
-        nickname = st.text_input("Nickname", max_chars=28)
-        pin = st.text_input("4-digit PIN", type="password", max_chars=4)
-        remember_device = st.checkbox(f"Keep me signed in on this device for {REMEMBER_DAYS} days")
-        st.caption("Great for your assigned Chromebook or iPad. Leave this unchecked on a shared device.")
-        submitted = st.form_submit_button("Sign in", use_container_width=True, type="primary")
-    if submitted:
-        selected = class_by_name[class_name]
-        try:
-            student = store.authenticate_student(selected.class_id, nickname, pin)
-        except Exception:
-            student = None
-        if student is None:
-            st.error("That nickname/PIN combination did not match this class.")
-            return False
-        _set_student_session(student, selected)
-        if remember_device:
-            token = issue_student_token(student.student_id, pin, _persistent_login_secret())
-            st.session_state.persistent_login_pending_action = {"action": "store", "token": token}
+        detail = str(exc).lower()
+        if saved_answer is not None and "locked daily answers cannot be changed" in detail:
+            st.error("Back/edit needs the one-time Phase 2E Supabase migration. Your existing saved choice was not changed.")
         else:
-            # If this device previously remembered somebody else, a manual
-            # sign-in without the checkbox deliberately clears that old login.
-            st.session_state.persistent_login_pending_action = {"action": "clear"}
-        st.session_state.persistent_login_check_complete = True
+            st.error("We couldn't save that change. Please try again.")
+        if database_check_enabled():
+            st.caption(f"Daily save detail: {type(exc).__name__}: {exc}")
+        return False
+
+    rich_answer = _daily_solver_record(challenge, solver_record, selected_hold, report)
+    if saved_answer is None:
+        st.session_state.daily_answers.append(rich_answer)
+    else:
+        st.session_state.daily_answers[index] = rich_answer
+
+    held_key, _ = _daily_widget_keys(index)
+    st.session_state[held_key] = hold_indices_from_values(dice, selected_hold)
+    return True
+
+
+def render_daily_question():
+    challenges = st.session_state.daily_challenges
+    answers = st.session_state.daily_answers
+    index = int(st.session_state.daily_question_index)
+    index = max(0, min(index, len(challenges) - 1))
+    st.session_state.daily_question_index = index
+
+    challenge = challenges[index]
+    saved_count = len(answers)
+    render_daily_progress(index, saved_count)
+    flash = st.session_state.get("daily_flash", "")
+    if flash:
+        st.markdown(f"<div class='daily-flash'>✓ {flash}</div>", unsafe_allow_html=True)
+        st.session_state.daily_flash = ""
+
+    st.markdown(
+        "<div class='soft-card'>"
+        f"<span class='scenario-pill'>Daily {index + 1}/10</span>"
+        "<div class='muted'>No strategy label or difficulty hint is shown during the official run.</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    render_scorecard(challenge["scorecard"])
+    roll_number = int(challenge["roll_number"])
+    if roll_number == 1:
+        roll_stage_class = "roll-1"
+        roll_stage_title = "🔵 ROLL 1 · First roll"
+        roll_stage_sub = "2 rerolls remaining"
+    else:
+        roll_stage_class = "roll-2"
+        roll_stage_title = "🟢 ROLL 2 · Second roll"
+        roll_stage_sub = "1 reroll remaining"
+    st.markdown(
+        f"<div class='daily-roll-stage {roll_stage_class}'>"
+        f"<div class='daily-roll-stage-title'>{roll_stage_title}</div>"
+        f"<div class='daily-roll-stage-sub'>{roll_stage_sub}</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("<div class='section-label'>Tap dice to hold</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='dice-help'>Your choice is saved when you move forward. You can use Back and revise any saved answer until final submission; no coaching is revealed.</div>",
+        unsafe_allow_html=True,
+    )
+
+    held_key, pills_key = _daily_widget_keys(index)
+    if held_key not in st.session_state:
+        st.session_state[held_key] = _saved_hold_indices(index)
+    dice = challenge["dice"]
+    selected_indices = st.pills(
+        "Daily dice to hold",
+        options=list(range(len(dice))),
+        default=st.session_state.get(held_key, []),
+        format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
+        selection_mode="multi",
+        key=pills_key,
+        label_visibility="collapsed",
+    )
+    selected_indices = list(selected_indices or [])
+    st.session_state[held_key] = sorted(selected_indices)
+    selected_hold = selected_hold_from_indices(dice, selected_indices)
+    st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
+
+    already_saved = index < len(answers)
+    all_ten_saved = len(answers) >= 10
+    if all_ten_saved:
+        primary_label = "Save changes & return to review"
+    elif index == len(challenges) - 1:
+        primary_label = "Save & review all 10"
+    elif already_saved:
+        primary_label = "Save changes & next"
+    else:
+        primary_label = "Save & next"
+
+    back_col, save_col = st.columns([1, 2])
+    with back_col:
+        back_clicked = st.button(
+            "← Back",
+            use_container_width=True,
+            disabled=index <= 0,
+            key=f"daily_back_{index}",
+        )
+    with save_col:
+        save_clicked = st.button(
+            primary_label,
+            type="primary",
+            use_container_width=True,
+            key=f"daily_save_{index}",
+        )
+
+    if back_clicked:
+        _reset_daily_widget_to_saved(index)
+        st.session_state.daily_ready_to_submit = False
+        st.session_state.daily_question_index = index - 1
         st.rerun()
-    st.markdown(f"<div class='private-note'>Nicknames are public inside the class leaderboard. PINs stay private and are never shown to classmates. Remembered sign-ins expire after {REMEMBER_DAYS} days or when you sign out.</div>", unsafe_allow_html=True)
-    return False
+
+    if save_clicked:
+        if not _save_daily_choice(index, selected_hold):
+            return
+        if all_ten_saved or index + 1 >= len(challenges):
+            st.session_state.daily_ready_to_submit = True
+            st.session_state.daily_question_index = len(challenges) - 1
+            st.session_state.daily_flash = "Choice saved. Review your 10 before final submission."
+        else:
+            st.session_state.daily_ready_to_submit = False
+            st.session_state.daily_question_index = index + 1
+            st.session_state.daily_flash = f"Answer {index + 1} saved."
+        st.rerun()
+
+    st.markdown(
+        "<div class='daily-lock-note'>Your choices stay private and editable until you submit. After that, your result is final.</div>",
+        unsafe_allow_html=True,
+    )
 
 
-# ---------------------------------------------------------------------------
-# Weekly Mystery reward
-# ---------------------------------------------------------------------------
-def ensure_weekly_mystery(store: SupabaseFactStore, day):
-    week_start = week_start_for(day)
-    record = store.get_or_create_weekly_mystery(week_start, default_mystery_key_for_week(week_start))
-    return week_start, record, mystery_for_key(record.mystery_key)
-
-
-def _mystery_solve_title(clue_count: int) -> str:
-    clue_count = int(clue_count)
-    if clue_count <= 1:
-        return "🔮 One-Clue Wonder"
-    if clue_count == 2:
-        return "🕵️ Sharp Detective"
-    if clue_count <= 4:
-        return "🔍 Mystery Solver"
-    return "🎯 Friday Solver"
-
-
-def _render_mystery_clues(mystery, clue_count: int) -> None:
-    if clue_count <= 0:
-        st.caption("No clues unlocked yet this week.")
+def render_daily_submission_review():
+    """Show all 10 chosen holds without feedback, then let the player final-submit."""
+    answers = st.session_state.daily_answers
+    if len(answers) < 10:
+        st.session_state.daily_ready_to_submit = False
+        st.session_state.daily_question_index = len(answers)
+        st.rerun()
         return
-    for index, clue in enumerate(mystery.clues[:clue_count], start=1):
+
+    render_daily_progress(9, 10)
+    st.markdown(
+        "<div class='daily-hero'>"
+        "<div class='daily-kicker'>Final review</div>"
+        "<div class='daily-title'>Check your 10 choices</div>"
+        "<div class='daily-rule'><b>No grades, EV loss, or exact answers are shown yet.</b><br>"
+        "Edit anything you entered by mistake. Once you submit, your result is final.</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    review_rows = []
+    for i, answer in enumerate(answers, start=1):
+        challenge = answer["challenge"]
+        dice_faces = " ".join(DICE_FACE.get(int(die), str(die)) for die in challenge.get("dice", []))
+        review_rows.append({
+            "Q": i,
+            "Roll": challenge.get("roll_number"),
+            "Dice": dice_faces,
+            "Your hold": hold_label(answer.get("selected_hold", [])),
+        })
+    st.dataframe(pd.DataFrame(review_rows), hide_index=True, use_container_width=True)
+
+    edit_question = st.selectbox(
+        "Need to fix one?",
+        options=list(range(1, 11)),
+        format_func=lambda q: f"Question {q}: {hold_label(answers[q - 1].get('selected_hold', []))}",
+        key="daily_review_edit_question",
+    )
+    edit_col, back_col = st.columns(2)
+    with edit_col:
+        if st.button("✏️ Edit selected question", use_container_width=True, key="daily_review_edit"):
+            st.session_state.daily_ready_to_submit = False
+            st.session_state.daily_question_index = int(edit_question) - 1
+            st.rerun()
+    with back_col:
+        if st.button("← Back to Question 10", use_container_width=True, key="daily_review_back"):
+            st.session_state.daily_ready_to_submit = False
+            st.session_state.daily_question_index = 9
+            st.rerun()
+
+    st.warning("Submitting ends today's Daily. After this point, your 10 choices cannot be changed.")
+    if st.button("🏁 Submit final Daily Challenge", type="primary", use_container_width=True, key="daily_final_submit"):
+        attempt_id = st.session_state.get("daily_attempt_id")
+        if not attempt_id:
+            st.error("Your Daily couldn't be found. Please sign in again before submitting.")
+            _force_daily_resync()
+            return
+        try:
+            load_daily_store().complete_attempt(attempt_id)
+            _clear_social_caches()
+        except Exception as exc:
+            st.error("Your Daily couldn't be submitted yet. Your 10 choices are still saved and editable.")
+            if database_check_enabled():
+                st.caption(f"Daily finalize detail: {type(exc).__name__}: {exc}")
+            return
+        st.session_state.daily_completed = True
+        st.session_state.daily_ready_to_submit = False
+        st.session_state.daily_question_index = 10
+        _force_daily_resync()
+        st.rerun()
+
+
+def _leaderboard_frame(board):
+    rows = []
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    for item in board:
+        rank = int(item["rank"])
+        name = item["display_name"] + ("  ← you" if item.get("is_user") else "")
+        rows.append({
+            "Rank": f"{medals.get(rank, '')} {rank}".strip(),
+            "Player": name,
+            "EV Lost": f"{item['total_ev_loss']:.2f}",
+            "Exact": f"{item['exact_count']}/10",
+            "Worst miss": f"{item['worst_miss']:.2f}",
+        })
+    return pd.DataFrame(rows)
+
+
+def _share_square(points_lost: float) -> str:
+    """Convert EV loss into a compact spoiler-free Wordle-style result square."""
+    loss = max(0.0, float(points_lost or 0.0))
+    if loss <= 1e-9:
+        return "🟩"
+    if loss <= 0.10:
+        return "🟨"
+    if loss <= 1.00:
+        return "🟧"
+    return "🟥"
+
+
+def build_daily_share_text(records, summary, rank=None, completed_count=0):
+    """Build a compact spoiler-free Daily result suitable for text messages/social sharing."""
+    squares = [_share_square(item.get("points_lost", 0.0)) for item in records]
+    first_row = "".join(squares[:5])
+    second_row = "".join(squares[5:10])
+    date_label = _daily_date_label(st.session_state.daily_date_key)
+    lines = [
+        f"🎲 Yahtzee Coach Daily — {date_label}",
+        f"{summary['total_ev_loss']:.2f} EV lost · {summary['exact_count']}/10 exact",
+        first_row,
+        second_row,
+        f"🔥 Best exact streak: {summary['best_exact_streak']}",
+    ]
+    if rank is not None and int(completed_count or 0) > 0:
+        lines.append(f"🏆 Group rank right now: #{int(rank)} of {int(completed_count)}")
+    lines.extend([
+        "🟩 exact · 🟨 essentially optimal · 🟧 close · 🟥 miss",
+        PUBLIC_APP_URL,
+    ])
+    return "\n".join(lines)
+
+
+def render_daily_share_result(records, summary, rank=None, completed_count=0):
+    """Render compact spoiler-free Daily blocks with native share/copy controls."""
+    share_text = build_daily_share_text(records, summary, rank=rank, completed_count=completed_count)
+    share_text_js = json.dumps(share_text)
+    squares = [_share_square(item.get("points_lost", 0.0)) for item in records]
+    first_row = "".join(squares[:5])
+    second_row = "".join(squares[5:10])
+    share_html = f"""
+        <div style="font-family:Arial,sans-serif;border:1px solid #d1d5db;border-radius:16px;padding:15px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);box-shadow:0 2px 10px rgba(0,0,0,0.04);">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;font-weight:800;color:#64748b;">Your Daily · Spoiler-free</div>
+          <div style="font-size:28px;line-height:1.18;letter-spacing:2px;margin:7px 0 1px 0;">{first_row}</div>
+          <div style="font-size:28px;line-height:1.18;letter-spacing:2px;">{second_row}</div>
+          <div style="font-size:12px;color:#64748b;margin-top:8px;">🟩 exact · 🟨 essentially optimal · 🟧 close · 🟥 miss</div>
+          <div style="display:flex;gap:10px;margin-top:12px;">
+            <button id="shareDaily" style="flex:1;border:1px solid #166534;background:#166534;color:white;border-radius:10px;padding:10px 12px;font-weight:800;cursor:pointer;">📤 Share result</button>
+            <button id="copyDaily" style="flex:1;border:1px solid #cbd5e1;background:white;color:#0f172a;border-radius:10px;padding:10px 12px;font-weight:800;cursor:pointer;">📋 Copy score</button>
+          </div>
+          <div id="shareDailyStatus" style="min-height:18px;margin-top:7px;font-size:12px;color:#64748b;text-align:center;"></div>
+        </div>
+        <script>
+        (function() {{
+          const shareText = {share_text_js};
+          const status = document.getElementById('shareDailyStatus');
+          async function copyScore() {{
+            try {{
+              if (navigator.clipboard && navigator.clipboard.writeText) {{
+                await navigator.clipboard.writeText(shareText);
+              }} else {{
+                throw new Error('clipboard unavailable');
+              }}
+              status.textContent = 'Score copied — paste it into a text or group chat!';
+              return true;
+            }} catch (err) {{
+              try {{
+                const area = document.createElement('textarea');
+                area.value = shareText;
+                area.style.position = 'fixed';
+                area.style.opacity = '0';
+                document.body.appendChild(area);
+                area.focus();
+                area.select();
+                const copied = document.execCommand('copy');
+                document.body.removeChild(area);
+                if (copied) {{
+                  status.textContent = 'Score copied — paste it into a text or group chat!';
+                  return true;
+                }}
+              }} catch (fallbackErr) {{}}
+              status.textContent = 'Copy was blocked. Open Preview shared result below to copy it manually.';
+              return false;
+            }}
+          }}
+          document.getElementById('copyDaily').addEventListener('click', copyScore);
+          document.getElementById('shareDaily').addEventListener('click', async function() {{
+            if (navigator.share) {{
+              try {{
+                await navigator.share({{text: shareText}});
+                status.textContent = 'Share sheet opened with your Daily score.';
+                return;
+              }} catch (err) {{
+                if (err && err.name === 'AbortError') return;
+              }}
+            }}
+            await copyScore();
+          }});
+        }})();
+        </script>
+    """
+    st.html(share_html, unsafe_allow_javascript=True)
+    with st.expander("Preview shared result", expanded=False):
+        st.code(share_text, language=None)
+
+
+def _daily_review_item(answer):
+    challenge = answer["challenge"]
+    record = answer["solver_record"]
+    report = answer["report"]
+    number = int(challenge.get("daily_number", 0))
+    loss = float(record.get("points_lost", 0.0) or 0.0)
+    grade = extract_line(report, "Grade:") or ("A+" if loss <= 1e-9 else "—")
+    lesson_items = extract_section(report, "Teaching takeaway:")
+    lesson = lesson_items[0] if lesson_items else record.get("lesson_title", "")
+    label = f"Q{number} · {grade} · {loss:.2f} pts lost · {challenge.get('scenario_name', 'Strategy Review')}"
+    with st.expander(label, expanded=False):
+        st.caption(
+            f"{challenge.get('stage', '')} · {challenge.get('difficulty', '')} · Roll {challenge.get('roll_number')} · {challenge.get('skill_tag', '')}"
+        )
+        dice_faces = " ".join(DICE_FACE.get(int(die), str(die)) for die in challenge.get("dice", []))
+        st.markdown(f"<div class='daily-dice-line'>{dice_faces}</div>", unsafe_allow_html=True)
+        st.markdown("**Scorecard at the decision**")
+        st.markdown("<div class='score-section-title'>Upper</div>", unsafe_allow_html=True)
+        st.markdown(score_grid_html(challenge["scorecard"], UPPER_CATEGORIES), unsafe_allow_html=True)
+        st.markdown("<div class='score-section-title'>Lower</div>", unsafe_allow_html=True)
+        st.markdown(score_grid_html(challenge["scorecard"], LOWER_CATEGORIES, lower=True), unsafe_allow_html=True)
         st.markdown(
-            f"<div class='soft-card'><strong>Clue #{index}</strong><br>{html.escape(clue)}</div>",
+            "<div class='review-summary'>"
+            f"<div class='review-box'><div class='review-label'>You kept</div><div class='review-value'>{record.get('user_hold', '—')}</div></div>"
+            f"<div class='review-box'><div class='review-label'>Exact best</div><div class='review-value'>{record.get('optimal_hold', '—')}</div></div>"
+            f"<div class='review-box'><div class='review-label'>Hold rank</div><div class='review-value'>#{record.get('hold_rank', '—')} of {record.get('legal_hold_count', '—')}</div></div>"
+            f"<div class='review-box'><div class='review-label'>EV lost</div><div class='review-value'>{loss:.2f}</div></div>"
+            "</div>",
             unsafe_allow_html=True,
         )
+        simple_why_items = extract_section(report, "Simple why:")
+        simple_why = simple_why_items[0] if simple_why_items else record.get("simple_why", "")
+        if simple_why:
+            st.markdown(f"**💡 Why this wins:** {simple_why}")
+        if lesson:
+            st.markdown(f"**🧠 Remember:** {lesson}")
+        idea = record.get("adjustment", "")
+        if idea:
+            st.markdown(f"**Try this instead:** {idea}")
+        top_holds = extract_section(report, "Top exact holds:")
+        if top_holds:
+            st.markdown("**Top exact holds**")
+            st.markdown("".join(f"<div class='top-hold-line'>{line}</div>" for line in top_holds[:3]), unsafe_allow_html=True)
 
 
-def _render_mystery_stats(store: SupabaseFactStore) -> None:
-    stats = store.mystery_student_stats(st.session_state.student_id)
-    solved = int(stats.get("solved") or 0)
-    earliest = stats.get("earliest_solve")
-    if solved:
-        earliest_text = "Friday" if int(earliest or 5) >= 5 else f"{int(earliest)} clue{'s' if int(earliest) != 1 else ''}"
-        st.caption(f"Mysteries solved: {solved} · Earliest solve: {earliest_text}")
+def render_daily_results():
+    answers = st.session_state.daily_answers
+    records = [answer["solver_record"] for answer in answers]
+    challenges = st.session_state.daily_challenges
+    summary = summarize_attempt(records)
 
+    # Keep group switching available, but put group administration later.
+    groups = _load_player_groups()
+    if len(groups) > 1:
+        render_group_selector(groups, key="daily_results_group_selector")
 
-def render_weekly_mystery_reward(store: SupabaseFactStore, day, challenge) -> None:
-    """Earn clues Monday-Thursday; guessing exists only Thursday and Friday."""
     try:
-        week_start, _, mystery = ensure_weekly_mystery(store, day)
-        day_number = school_day_number(day)
-        if day_number is not None:
-            store.unlock_mystery_day(
-                st.session_state.student_id, week_start, day_number, challenge.challenge_id
-            )
-        unlocks = store.list_mystery_unlocks(st.session_state.student_id, week_start)
-        guesses = store.list_mystery_guesses(st.session_state.student_id, week_start)
+        active_group, members, board, stats = _real_group_context()
     except Exception as exc:
-        st.info("🕵️ Weekly Mystery will appear after your teacher finishes the v2.5 database update.")
-        if str(st.query_params.get("dbcheck", "0")) == "1":
-            st.exception(exc)
-        return
-
-    # Clues are earned only by completing Monday-Thursday. Friday never
-    # backfills clues a student skipped earlier in the week.
-    clue_count = min(4, sum(1 for row in unlocks if 1 <= int(row.day_number) <= 4))
-    completed_days = {int(row.day_number) for row in unlocks}
-    guess_by_day = {int(row.guess_day): row for row in guesses}
-    solved_guess = next((row for row in guesses if row.correct), None)
-
-    st.markdown("### 🕵️ This Week's Mystery")
-    st.caption("Earn one clue for each full routine Monday–Thursday. Guess #1 is Thursday; Guess #2 is Friday.")
-    _render_mystery_clues(mystery, clue_count)
-
-    if day_number is None:
-        st.info("The Weekly Mystery continues on school days.")
-        _render_mystery_stats(store)
-        return
-
-    if day_number <= 3:
-        if clue_count:
-            st.success(f"🎁 Clue #{clue_count} earned! You're completely done for today.")
-        st.caption("No guessing yet — your first guess opens Thursday.")
-        _render_mystery_stats(store)
-        return
-
-    if day_number == 4:
-        st.success(f"🎁 You earned Clue #{clue_count}! Thursday Guess #1 is unlocked.")
-        existing = guess_by_day.get(4)
-        if existing is not None:
-            if existing.correct:
-                st.success(f"🕵️ You solved it on Thursday! Your guess was **{existing.guess_text}**. The official reveal is Friday.")
-            else:
-                st.info(f"Thursday guess: **{existing.guess_text}** · Not quite. You get one final guess Friday.")
-        else:
-            st.markdown("**🎯 Guess #1 of 2 — Thursday**")
-            st.caption("Use it now or skip it. Thursday's unused guess does not carry over to Friday.")
-            with st.form(f"weekly_mystery_thursday_guess_{week_start.isoformat()}", clear_on_submit=True):
-                raw_guess = st.text_input("Thursday guess", max_chars=80, placeholder="What do you think the answer is?")
-                submit_guess = st.form_submit_button("Submit Thursday guess", use_container_width=True, type="primary")
-            if submit_guess:
-                cleaned = " ".join(str(raw_guess or "").strip().split())
-                if not cleaned:
-                    st.error("Type a guess first — or simply wait until Friday.")
-                else:
-                    store.submit_mystery_guess(
-                        st.session_state.student_id,
-                        week_start,
-                        cleaned,
-                        correct=is_correct_guess(mystery, cleaned),
-                        clue_count=max(1, clue_count),
-                        guess_day=4,
-                    )
-                    st.rerun()
-        _render_mystery_stats(store)
-        return
-
-    # Friday: completing Friday unlocks the second/final guess and the reveal,
-    # but it does not grant any missed Monday-Thursday clues.
-    if 5 not in completed_days:
-        st.caption("Complete Friday's full routine to unlock the final guess and reveal.")
-        return
-
-    thursday_guess = guess_by_day.get(4)
-    friday_guess = guess_by_day.get(5)
-    reveal_key = f"mystery_reveal_without_guess_{week_start.isoformat()}"
-
-    if solved_guess is not None:
-        when = "Thursday" if int(solved_guess.guess_day) == 4 else "Friday"
-        st.success(f"🏆 Mystery solved on {when}! Your guess was **{solved_guess.guess_text}**.")
-    elif friday_guess is None and not st.session_state.get(reveal_key):
-        if thursday_guess is not None:
-            st.caption(f"Thursday guess: {thursday_guess.guess_text}")
-        st.markdown("**🎯 Guess #2 of 2 — Friday**")
-        st.caption(f"Final guess using the {clue_count} clue{'s' if clue_count != 1 else ''} you actually earned this week.")
-        with st.form(f"weekly_mystery_friday_guess_{week_start.isoformat()}", clear_on_submit=True):
-            raw_guess = st.text_input("Friday guess", max_chars=80, placeholder="What is your final guess?")
-            submit_guess = st.form_submit_button("Submit Friday guess & reveal", use_container_width=True, type="primary")
-        if submit_guess:
-            cleaned = " ".join(str(raw_guess or "").strip().split())
-            if not cleaned:
-                st.error("Type your final guess first.")
-            else:
-                store.submit_mystery_guess(
-                    st.session_state.student_id,
-                    week_start,
-                    cleaned,
-                    correct=is_correct_guess(mystery, cleaned),
-                    clue_count=max(1, clue_count),
-                    guess_day=5,
-                )
-                st.rerun()
-        if st.button("Reveal without using my Friday guess", use_container_width=True, type="secondary", key=f"mystery_reveal_{week_start.isoformat()}"):
-            st.session_state[reveal_key] = True
-            st.rerun()
-        return
+        active_group, members, board, stats = None, [], [], []
+        st.warning("Your Daily result is safe, but friend standings couldn't be refreshed right now.")
+        if database_check_enabled():
+            st.caption(f"Leaderboard detail: {type(exc).__name__}: {exc}")
+    rank = _user_real_rank(board)
+    story = _story_from_group_stats(stats)
+    rank_value = f"#{rank} of {len(board)}" if rank is not None else "—"
 
     st.markdown(
-        f"<div class='hero-card center'><div style='font-size:1rem;font-weight:850'>🎉 MYSTERY REVEALED</div>"
-        f"<div style='font-size:2rem;font-weight:950;margin-top:.25rem'>{html.escape(mystery.answer)}</div>"
-        f"<div style='margin-top:.45rem'>{html.escape(mystery.reveal_note)}</div></div>",
+        "<div class='daily-hero'>"
+        "<div class='daily-kicker'>✅ Today's Daily</div>"
+        f"<div class='daily-title'>{_daily_date_label(st.session_state.daily_date_key)}</div>"
+        "<div class='daily-rule'>Nice work. Here's how your 10 decisions turned out.</div>"
+        "</div>",
         unsafe_allow_html=True,
     )
-    if friday_guess is not None:
-        if friday_guess.correct:
-            st.success("✅ Your Friday guess was correct!")
-        else:
-            st.caption(f"Your Friday guess was: {friday_guess.guess_text}")
-    _render_mystery_stats(store)
+    st.markdown(
+        "<div class='daily-result-grid'>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>EV Lost</div><div class='daily-result-value'>{summary['total_ev_loss']:.2f}</div><div class='daily-result-sub'>lower is better</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Exact</div><div class='daily-result-value'>{summary['exact_count']}/10</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Group Rank</div><div class='daily-result-value'>{rank_value}</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Best Exact Run</div><div class='daily-result-value'>🔥 {summary['best_exact_streak']}</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
+    participation_streak = _participation_streak()
+    streak_copy = _daily_streak_copy(participation_streak, completed_today=True)
+    if streak_copy:
+        st.caption(streak_copy)
 
-# ---------------------------------------------------------------------------
-# Daily Challenge
-# ---------------------------------------------------------------------------
-def ensure_today(store: SupabaseFactStore):
-    day = current_daily_date()
-    facts = daily_facts_for_date(day)
-    validate_daily_facts(facts)
-    challenge = store.get_or_create_challenge(day, CHALLENGE_VERSION, facts)
-    return day, list(challenge.facts), challenge
+    render_daily_share_result(records, summary, rank=rank, completed_count=len(board))
 
-
-def load_leaderboard_context(store: SupabaseFactStore, challenge) -> dict:
-    """Load a privacy-sanitized student leaderboard snapshot.
-
-    Supabase performs the accuracy-first/time-second ranking.  After ranking,
-    the student session intentionally keeps only rank, nickname, and student ID.
-    Classmates' scores and times never enter the student-facing context.
-    """
-    class_id = st.session_state.student_class_id
-    roster = store.list_students(class_id)
-    completed = store.completed_attempts_for_class(class_id, challenge.challenge_id, students=roster)
-    rows = [
-        {
-            "student_id": row["student_id"],
-            "nickname": row["nickname"],
-            "rank": index,
-        }
-        for index, row in enumerate(completed[:10], start=1)
-    ]
-    return {"rows": rows, "finished": len(completed), "roster_count": len(roster)}
-
-
-def _leaderboard_cache_key(challenge) -> str:
-    return f"leaderboard_context_{st.session_state.student_id}_{challenge.challenge_id}"
-
-
-def get_cached_leaderboard_context(store: SupabaseFactStore, challenge, *, refresh: bool = False) -> dict:
-    """Reuse one leaderboard snapshot during Fix/Focus reruns.
-
-    Streamlit reruns the entire script after every Focus answer. Reloading the
-    class roster + completed attempts each time created avoidable whole-class
-    traffic. Refresh only when the Daily is first completed or the whole
-    learning routine is done.
-    """
-    key = _leaderboard_cache_key(challenge)
-    if refresh or key not in st.session_state:
-        st.session_state[key] = load_leaderboard_context(store, challenge)
-    return st.session_state[key]
-
-
-def _focus_rows_cache_key(challenge) -> str:
-    return f"focus_rows_{st.session_state.student_id}_{challenge.challenge_id}"
-
-
-def get_cached_focus_rows(store: SupabaseFactStore, challenge) -> list:
-    key = _focus_rows_cache_key(challenge)
-    if key not in st.session_state:
-        st.session_state[key] = store.learning_activity_rows(
-            st.session_state.student_id, challenge.challenge_id, "focus"
-        )
-    return list(st.session_state[key])
-
-
-def append_cached_focus_row(challenge, row) -> None:
-    key = _focus_rows_cache_key(challenge)
-    rows = list(st.session_state.get(key, []))
-    rows.append(row)
-    st.session_state[key] = rows
-
-
-def get_cached_focus_override(store: SupabaseFactStore, challenge) -> int | None:
-    key = f"focus_override_{st.session_state.student_id}_{challenge.challenge_id}"
-    if key not in st.session_state:
-        st.session_state[key] = store.get_effective_focus_override(st.session_state.student_id)
-    return st.session_state[key]
-
-
-def render_leaderboard(
-    store: SupabaseFactStore, challenge, *, highlight_student_id: str | None = None, context: dict | None = None
-) -> None:
-    context = context or load_leaderboard_context(store, challenge)
-    rows = list(context["rows"])
-    finished = int(context["finished"])
-    roster_count = int(context["roster_count"])
-
-    st.markdown("### 🏆 Today's Top 10")
-    st.caption(f"{finished} of {roster_count} finished · rank is based on accuracy first, with time used privately as the tiebreaker")
-    if not rows:
-        st.info("No one has finished yet. The first completed challenge will start the board!")
-        return
-
-    medal = {1: "🥇", 2: "🥈", 3: "🥉"}
-    html_rows = []
-    for row in rows:
-        marker = medal.get(row["rank"], str(row["rank"]))
-        name = html.escape(str(row["nickname"]))
-        own = row["student_id"] == highlight_student_id
-        suffix = " · you" if own else ""
-        html_rows.append(
-            f'<div class="leader-row"><div class="leader-rank">{marker}</div>'
-            f'<div class="leader-name">{name}{suffix}</div></div>'
-        )
-    st.markdown('<div class="soft-card">' + "".join(html_rows) + "</div>", unsafe_allow_html=True)
-    if highlight_student_id and not any(row["student_id"] == highlight_student_id for row in rows):
-        st.caption("Only the Top 10 is shown. Your exact class rank stays private.")
-
-
-def render_daily_review(facts: list[Fact], answers) -> None:
-    with st.expander("Review your Daily 10", expanded=False):
-        for fact, answer in zip(facts, answers):
-            cls = "answer-correct" if answer.correct else "answer-miss"
-            symbol = "✅" if answer.correct else "❌"
-            correct_text = "" if answer.correct else f" · correct answer {answer.correct_answer}"
+    # Social payoff comes before group administration.
+    if active_group is not None:
+        completed = len(board)
+        total_members = len(members)
+        st.markdown(f"### 🏆 {active_group.group_name}")
+        if total_members <= 1:
             st.markdown(
-                f'<div class="soft-card {cls}"><strong>{symbol} {answer.question_number}. {fact.label}</strong><br>'
-                f'You answered <strong>{answer.student_answer}</strong>{correct_text}</div>',
+                "<div class='daily-rank-banner'><b>You're the only member so far.</b><br>Invite a friend to turn this into a real leaderboard.</div>",
                 unsafe_allow_html=True,
             )
-        if all(answer.correct for answer in answers):
-            st.success("Perfect accuracy — all 10 Daily facts were correct.")
+        elif completed == 1 and rank == 1:
+            waiting = max(0, total_members - completed)
+            st.markdown(
+                f"<div class='daily-rank-banner'><b>You're the first to finish today!</b><br>Waiting for {waiting} friend{'s' if waiting != 1 else ''}.</div>",
+                unsafe_allow_html=True,
+            )
+        elif rank is not None:
+            st.markdown(
+                f"<div class='daily-rank-banner'><b>You're #{rank} of {completed} today.</b><br>Lowest total EV lost leads the group.</div>",
+                unsafe_allow_html=True,
+            )
+        if total_members > 1 and completed < total_members:
+            waiting = total_members - completed
+            st.caption(f"{completed} of {total_members} finished · waiting for {waiting} more")
+        elif total_members > 1 and completed >= total_members:
+            st.caption("Everyone's in — final standings for today.")
+        if board:
+            st.dataframe(_leaderboard_frame(board), hide_index=True, use_container_width=True)
 
-
-def render_learning_path(progress, missed_count: int) -> None:
-    if progress.completed_at is not None or progress.focus_completed_at is not None:
-        stage = "mystery"
-    elif progress.fix_completed_at is not None:
-        stage = "focus"
+        toughest = story.get("toughest")
+        easiest = story.get("easiest")
+        story_cards = []
+        if toughest:
+            q = toughest["question_number"]
+            challenge = challenges[q - 1]
+            exact_copy = (
+                "Nobody got it exact."
+                if toughest["exact_count"] == 0
+                else f"{toughest['exact_count']}/{toughest['players']} exact."
+            )
+            story_cards.append(
+                "<div class='group-story-card'><div class='story-kicker'>😈 Today's Killer</div>"
+                f"<div class='story-title'>Q{q} · {challenge.get('scenario_name', '')}</div>"
+                f"<div class='story-copy'>{exact_copy} Avg loss: {toughest['avg_loss']:.2f}.</div></div>"
+            )
+        if easiest:
+            q = easiest["question_number"]
+            challenge = challenges[q - 1]
+            unanimous = easiest["exact_count"] == easiest["players"]
+            headline = "🎯 Everyone Nailed It" if unanimous else "🎯 Most Solved"
+            exact_copy = (
+                f"All {easiest['players']} players exact."
+                if unanimous
+                else f"{easiest['exact_count']}/{easiest['players']} exact."
+            )
+            story_cards.append(
+                f"<div class='group-story-card'><div class='story-kicker'>{headline}</div>"
+                f"<div class='story-title'>Q{q} · {challenge.get('scenario_name', '')}</div>"
+                f"<div class='story-copy'>{exact_copy} Avg loss: {easiest['avg_loss']:.2f}.</div></div>"
+            )
+        if story_cards:
+            st.markdown("<div class='group-story-grid'>" + "".join(story_cards) + "</div>", unsafe_allow_html=True)
     else:
-        stage = "fix"
-    render_routine_strip(stage)
-    if stage == "fix":
-        if missed_count:
-            st.caption(f"Next: fix {missed_count} missed fact{'s' if missed_count != 1 else ''}, then your personalized Focus Practice.")
-        else:
-            st.caption("No misses today ✓ · next up is your personalized Focus Practice.")
-    elif stage == "focus":
-        st.caption("Next: finish 8 Focus Facts. Then your learning work is DONE and your Mystery reward unlocks.")
-    else:
-        st.caption("Learning work complete ✓ · your Weekly Mystery is the reward, not another assignment.")
+        st.markdown("### 🏆 Play with friends")
+        st.caption("Create or join a friend group to compare Daily results on a shared leaderboard.")
+
+    st.markdown("### Review Your 10")
+    st.caption("Tap any question to see the exact hold and coaching.")
+    for answer in answers:
+        _daily_review_item(answer)
+
+    st.caption("🔒 Today's Daily is complete. Come back tomorrow for a new set.")
+
+    st.button(
+        "🎯 Go to open Practice",
+        type="primary",
+        use_container_width=True,
+        key="daily_to_practice",
+        on_click=_set_app_mode,
+        args=("Practice",),
+    )
+
+    # Explicitly below Review Your 10, per the player-facing hierarchy.
+    render_friend_group_hub(expanded=active_group is None)
+
+    render_solver_panel(records)
 
 
-def render_daily_result_summary(store: SupabaseFactStore, day, challenge, attempt, *, leaderboard_context: dict | None = None) -> None:
-    leaderboard = list((leaderboard_context or load_leaderboard_context(store, challenge))["rows"])
-    own_top = next((row for row in leaderboard if row["student_id"] == st.session_state.student_id), None)
-    st.markdown(f"## Daily 10 complete · {day.strftime('%B %d').replace(' 0', ' ')}")
+def render_daily_mode():
+    if not st.session_state.get("active_player_id"):
+        render_player_identity_gate()
+        return
+    render_player_status_bar()
+    if not sync_daily_attempt_from_database():
+        return
+    if not st.session_state.daily_started:
+        render_daily_intro()
+        return
+    if st.session_state.daily_completed:
+        render_daily_results()
+        return
+    if st.session_state.get("daily_ready_to_submit"):
+        render_daily_submission_review()
+        return
+    st.caption(
+        f"🎲 Daily in progress · {_daily_date_label(st.session_state.daily_date_key)} · "
+        f"{len(st.session_state.daily_answers)}/10 saved · You can leave, come back, or use Back before submitting."
+    )
+    render_daily_question()
+
+
+def render_practice_mode():
+    challenge = st.session_state.challenge
+    round_id = st.session_state.round_id
+    history = st.session_state.history
+
+    st.markdown(
+        "<div class='practice-hero'>"
+        "<div class='practice-title'>🎯 Practice</div>"
+        "<div class='practice-subtitle'>Unlimited practice · instant coaching after every decision</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    if st.session_state.get("daily_completed") and len(st.session_state.get("daily_answers", [])) >= 10:
+        st.button(
+            "🏆 Daily complete · View leaderboard",
+            use_container_width=True,
+            key="practice_to_daily_results",
+            on_click=_set_app_mode,
+            args=("Daily Challenge",),
+        )
+
+    if st.session_state.get("scroll_to_top", False):
+        components.html("""
+            <script>
+            setTimeout(function() {
+                const doc = window.parent.document;
+                const el = doc.getElementById('app-top-anchor') || doc.querySelector('.block-container');
+                if (el) { el.scrollIntoView({behavior: 'smooth', block: 'start'}); }
+                window.parent.scrollTo({top: 0, behavior: 'smooth'});
+                doc.documentElement.scrollTop = 0;
+                doc.body.scrollTop = 0;
+            }, 250);
+            </script>
+            """, height=0)
+        st.session_state.scroll_to_top = False
+
+    roll_number = challenge["roll_number"]
+    dice = challenge["dice"]
+    scorecard = challenge["scorecard"]
+    answer_submitted = st.session_state.report is not None
+    rolls_remaining = int(challenge.get("rolls_remaining", 3 - roll_number))
+
     st.markdown(
         f"""
-        <div class="hero-card">
-            <div class="result-grid">
-                <div class="result-box"><div class="result-label">Daily 10</div><div class="result-value">Complete ✓</div></div>
-                <div class="result-box"><div class="result-label">Top 10</div><div class="result-value">{('#' + str(own_top['rank'])) if own_top else '—'}</div></div>
-                <div class="result-box"><div class="result-label">Facts to Fix</div><div class="result-value">{10 - int(attempt.correct_count or 0)}</div></div>
-            </div>
+        <div class='practice-puzzle-card'>
+            <div class='practice-scenario'>{challenge.get('scenario_name', 'Practice Round')}</div>
+            <div class='practice-description'>{challenge.get('scenario_description', '')}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    if own_top:
-        st.success(f"You're #{own_top['rank']} in your class Top 10 right now!")
-    elif len(leaderboard) >= 10:
-        st.info("Only the class Top 10 is shown. Your exact class rank stays private.")
-    else:
-        st.caption("The class Top 10 will keep filling in as classmates finish.")
 
-
-def _missed_daily_items(facts: list[Fact], answers) -> list[tuple[int, Fact, object]]:
-    result = []
-    for fact, answer in zip(facts, answers):
-        if not answer.correct:
-            result.append((int(answer.question_number), fact, answer))
-    return result
-
-
-def render_fix_misses(store: SupabaseFactStore, challenge, facts: list[Fact], answers) -> bool:
-    missed = _missed_daily_items(facts, answers)
-    if not missed:
-        store.mark_fix_complete(st.session_state.student_id, challenge.challenge_id)
-        return True
-
-    rows = store.learning_activity_rows(st.session_state.student_id, challenge.challenge_id, "fix_miss")
-    corrected = {int(row.activity_index) for row in rows if row.correct and row.activity_index is not None}
-    if all(question_number in corrected for question_number, _, _ in missed):
-        store.mark_fix_complete(st.session_state.student_id, challenge.challenge_id)
-        return True
-
-    current_position, (question_number, fact, daily_answer) = next(
-        (idx, item) for idx, item in enumerate(missed) if item[0] not in corrected
-    )
-    st.markdown("## Learning Step 2 of 3 · Fix Your Misses")
-    st.caption("A miss is useful information. Learn it, answer it correctly, then move on.")
-    progress_bar(len(corrected), total=len(missed), current=current_position + 1)
-
-    attempts_here = [row for row in rows if row.activity_index == question_number]
-    if attempts_here and not attempts_here[-1].correct:
-        st.error("Not yet — use the model, then try the same fact again.")
-
+    roll_class = "roll-1" if int(roll_number) == 1 else "roll-2"
+    roll_label = "First roll" if int(roll_number) == 1 else "Second roll"
+    reroll_word = "reroll" if rolls_remaining == 1 else "rerolls"
     st.markdown(
-        f"<div class='soft-card'><strong>Daily miss:</strong> You answered {daily_answer.student_answer}.<br>"
-        f"<strong>{fact.label} = {fact.product}</strong></div>",
+        f"""
+        <div class='daily-roll-stage {roll_class}'>
+            <div class='daily-roll-stage-title'>🎲 ROLL {roll_number} · {roll_label}</div>
+            <div class='daily-roll-stage-sub'>{rolls_remaining} {reroll_word} remaining</div>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
-    render_array(fact)
+
+    st.markdown("<div class='section-label practice-score-label'>Your scorecard</div>", unsafe_allow_html=True)
+    render_scorecard(scorecard)
+    st.markdown("<div class='practice-question'>Which dice would you keep?</div>", unsafe_allow_html=True)
     st.markdown(
-        f"<div class='soft-card'><strong>💡 A way to think about it:</strong><br>{html.escape(strategy_tip(fact))}</div>",
+        "<div class='dice-help'>Tap dice to keep them. Leave all five unselected to reroll everything.</div>",
         unsafe_allow_html=True,
     )
-    st.markdown(f"### Now you try it again: {fact.label} = ?")
-    pad_result = render_number_pad(
-        key=f"fix_pad_{challenge.challenge_id}_{question_number}_{len(attempts_here)}"
+
+    held_key = f"held_indices_{round_id}"
+    if held_key not in st.session_state:
+        st.session_state[held_key] = []
+    selected_indices = st.pills(
+        "Dice to hold",
+        options=list(range(len(dice))),
+        default=st.session_state.get(held_key, []),
+        format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
+        selection_mode="multi",
+        key=f"dice_pills_{round_id}",
+        label_visibility="collapsed",
+        disabled=answer_submitted,
     )
-    if pad_result is not None:
-        value, _ = pad_result
-        store.record_practice(
-            st.session_state.student_id,
-            "Fix Your Misses",
-            fact,
-            value,
-            challenge_id=challenge.challenge_id,
-            activity_type="fix_miss",
-            activity_index=question_number,
-            is_retry=True,
-            count_for_mastery=False,
+    selected_indices = list(selected_indices or [])
+    st.session_state[held_key] = sorted(selected_indices)
+    selected_hold = selected_hold_from_indices(dice, selected_indices)
+    st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
+
+    if not answer_submitted:
+        if st.button("Submit hold", type="primary", use_container_width=True):
+            report, solver_record = build_live_report(dice, scorecard, selected_hold, roll_number)
+            st.session_state.report = report
+            st.session_state.history.append({
+                "scenario": challenge.get("scenario_name", ""),
+                "roll": roll_number,
+                "dice": str(dice),
+                "choice": hold_label(selected_hold),
+                "optimal": extract_line(report, "Optimal choice:"),
+                "grade": extract_line(report, "Grade:"),
+            })
+            solver_record["scenario"] = challenge.get("scenario_name", "")
+            solver_record["bank_version"] = challenge.get("bank_version", "")
+            solver_record["skill_tag"] = challenge.get("skill_tag", "")
+            solver_record["difficulty"] = challenge.get("difficulty", "")
+            solver_record["stage"] = challenge.get("stage", "")
+            solver_record["bonus_status"] = challenge.get("bonus_status", "")
+            solver_record["challenge_id"] = challenge.get("challenge_id", "")
+            solver_record["timestamp_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            before_solver_history = list(st.session_state.solver_history)
+            st.session_state.solver_history.append(solver_record)
+            st.session_state.new_badges = newly_unlocked_badges(before_solver_history, st.session_state.solver_history)
+            st.session_state.scroll_to_result = True
+            st.session_state.scroll_to_top = False
+            st.rerun()
+
+    if st.session_state.report:
+        render_result(st.session_state.report)
+        if st.button("Next Practice Puzzle →", type="primary", use_container_width=True):
+            new_round(scroll_to_top=True)
+            st.rerun()
+
+        with st.expander("📈 See my practice progress", expanded=False):
+            render_session_progress(history, st.session_state.solver_history)
+            render_new_badges()
+            render_session_coach(st.session_state.solver_history)
+            render_practice_momentum(st.session_state.solver_history)
+
+    if history:
+        with st.expander("Session history", expanded=False):
+            st.dataframe(pd.DataFrame(history), hide_index=True, use_container_width=True)
+    render_solver_panel(st.session_state.solver_history)
+
+def render_help_feedback_footer():
+    """Low-profile beta help and feedback inbox."""
+    st.markdown("<div style='height:.55rem'></div>", unsafe_allow_html=True)
+    with st.expander("❓ Help & feedback", expanded=False):
+        st.caption(APP_PUBLIC_VERSION)
+        st.markdown(
+            "**Something confusing, broken, or worth adding?** Send a quick note here. "
+            "Your current app section and beta version are attached automatically."
         )
-        st.rerun()
-    return False
-
-
-def _focus_index_state(rows, index: int) -> tuple[object | None, bool]:
-    at_index = [row for row in rows if row.activity_index == index]
-    first = next((row for row in at_index if not row.is_retry), None)
-    if first is None:
-        return None, False
-    if first.correct:
-        return first, True
-    corrected = any(row.is_retry and row.correct for row in at_index)
-    return first, corrected
-
-
-def ensure_focus_plan(store: SupabaseFactStore, day, challenge, answers, progress=None):
-    progress = progress or store.get_learning_progress(st.session_state.student_id, challenge.challenge_id)
-    if progress.focus_plan:
-        return progress
-    mastery = store.get_mastery(st.session_state.student_id)
-    misses = [(answer.a, answer.b) for answer in answers if not answer.correct and max(answer.a, answer.b) <= 10]
-    override = get_cached_focus_override(store, challenge)
-    plan = build_focus_plan(
-        mastery,
-        student_id=st.session_state.student_id,
-        date_key=day.isoformat(),
-        override_family=override,
-        recent_daily_misses=misses,
-    )
-    return store.set_focus_plan(st.session_state.student_id, challenge.challenge_id, plan)
-
-
-def render_focus_practice(store: SupabaseFactStore, day, challenge, answers, progress=None) -> bool:
-    progress = ensure_focus_plan(store, day, challenge, answers, progress=progress)
-    plan = list(progress.focus_plan)
-    if len(plan) != FOCUS_SESSION_LENGTH:
-        st.error("Your Focus Practice plan could not be prepared. Ask your teacher to refresh the app.")
-        return False
-
-    rows = get_cached_focus_rows(store, challenge)
-    done_indices = []
-    for index in range(FOCUS_SESSION_LENGTH):
-        _, done = _focus_index_state(rows, index)
-        if done:
-            done_indices.append(index)
-    if len(done_indices) == FOCUS_SESSION_LENGTH:
-        first_tries = [row for row in rows if not row.is_retry and row.activity_index is not None]
-        evidence = []
-        for row in first_tries:
-            idx = int(row.activity_index)
-            if 0 <= idx < len(plan):
-                evidence.append((plan[idx], bool(row.correct), row.response_seconds, row.created_at))
-        if evidence:
-            store.record_mastery_evidence_batch(st.session_state.student_id, evidence)
-        store.mark_focus_complete(st.session_state.student_id, challenge.challenge_id)
-        return True
-
-    index = next(i for i in range(FOCUS_SESSION_LENGTH) if i not in done_indices)
-    fact = plan[index]
-    first, _ = _focus_index_state(rows, index)
-    override = get_cached_focus_override(store, challenge)
-
-    st.markdown("## Learning Step 3 of 3 · 🎯 Your Focus Practice")
-    if override:
-        st.caption(f"8 short retrievals · your teacher has temporarily focused this practice on the {override}s")
-    else:
-        st.caption("8 short retrievals picked from what the app is gradually learning about you — no placement test.")
-    progress_bar(len(done_indices), total=FOCUS_SESSION_LENGTH, current=index + 1)
-
-    if first is None:
-        st.markdown(f'<div class="fact-big">{fact.a} × {fact.b}</div>', unsafe_allow_html=True)
-        pad_result = render_number_pad(
-            key=f"focus_first_pad_{challenge.challenge_id}_{index}"
-        )
-        if pad_result is not None:
-            value, latency = pad_result
-            saved_row = store.record_practice(
-                st.session_state.student_id,
-                "My Focus Facts",
-                fact,
-                value,
-                response_seconds=latency,
-                challenge_id=challenge.challenge_id,
-                activity_type="focus",
-                activity_index=index,
-                is_retry=False,
-                count_for_mastery=False,
+        with st.form("beta_feedback_form", clear_on_submit=True):
+            feedback_type = st.selectbox(
+                "Feedback type",
+                ["Something confusing", "Bug / something broke", "Idea / suggestion", "Account / PIN help"],
+                key="beta_feedback_type",
             )
-            append_cached_focus_row(challenge, saved_row)
-            st.rerun()
-        return False
-
-    # A miss gets explicit instruction, then must be retrieved correctly before
-    # the plan advances. The correction itself is not counted as new mastery evidence.
-    st.error(f"Not yet — {fact.a} × {fact.b} = {fact.product}.")
-    st.markdown("### See the multiplication")
-    render_array(fact)
-    st.markdown(
-        f"<div class='soft-card'><strong>💡 A way to think about it:</strong><br>{html.escape(strategy_tip(fact))}</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(f"### Try it again: {fact.label} = ?")
-    retry_count = sum(1 for row in rows if row.activity_index == index and row.is_retry)
-    pad_result = render_number_pad(
-        key=f"focus_retry_pad_{challenge.challenge_id}_{index}_{retry_count}"
-    )
-    if pad_result is not None:
-        value, _ = pad_result
-        saved_row = store.record_practice(
-            st.session_state.student_id,
-            "My Focus Facts",
-            fact,
-            value,
-            challenge_id=challenge.challenge_id,
-            activity_type="focus",
-            activity_index=index,
-            is_retry=True,
-            count_for_mastery=False,
-        )
-        append_cached_focus_row(challenge, saved_row)
-        st.rerun()
-    return False
-
-
-def render_mastery_card(store: SupabaseFactStore) -> None:
-    summary = store.mastery_summary(st.session_state.student_id)
-    st.markdown("### 🌱 My Growth")
-    st.caption("Your fact map grows from normal Daily and Focus work. It starts blank — there is no placement test.")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("🟢 Fluent", summary.get(STATUS_FLUENT, 0))
-    c2.metric("🟡 Building", summary.get(STATUS_BUILDING, 0))
-    c3.metric("🔴 Focus", summary.get(STATUS_FOCUS, 0))
-    c4.metric("⚪ Learning", summary.get(STATUS_UNKNOWN, 0))
-
-
-def render_day_complete(store: SupabaseFactStore, day, facts: list[Fact], challenge, attempt, answers) -> None:
-    stats = store.student_learning_stats(st.session_state.student_id, day)
-    streak = int(stats.get("current_streak", 0))
-    stars = int(stats.get("stars", 0))
-
-    render_routine_strip("mystery")
-    st.markdown(
-        "<div class='finish-banner'><div class='big'>✅ YOU'RE DONE FOR TODAY!</div>"
-        "<div class='sub'>Daily 10 ✓ &nbsp; · &nbsp; Fix Misses ✓ &nbsp; · &nbsp; Focus Practice ✓</div>"
-        "<div style='margin-top:.45rem'>Your learning work is finished for today.</div></div>",
-        unsafe_allow_html=True,
-    )
-    if streak in {3, 5, 10, 20, 30, 50} or (streak > 0 and streak % 50 == 0):
-        st.success(f"🎉 {streak}-day Learning Streak! · ⭐ {stars} total Daily Stars")
-    elif streak:
-        st.success(f"🔥 {streak}-day Learning Streak · ⭐ {stars} total Daily Stars")
-    else:
-        st.success(f"⭐ Daily Star earned · {stars} total")
-
-    st.markdown("## 🕵️ You earned today's Mystery reward!")
-    render_weekly_mystery_reward(store, day, challenge)
-
-    st.markdown("### ✅ That's it — see you next Challenge day! 👋")
-    st.caption("Everything below is optional. Your required work is complete.")
-    with st.expander("🌱 See My Growth", expanded=False):
-        render_mastery_card(store)
-    with st.expander("📝 Review My Daily 10", expanded=False):
-        for fact, answer in zip(facts, answers):
-            symbol = "✅" if answer.correct else "❌"
-            correct_text = "" if answer.correct else f" · correct answer {answer.correct_answer}"
-            st.markdown(
-                f'<div class="soft-card"><strong>{symbol} {answer.question_number}. {fact.label}</strong><br>'
-                f'You answered <strong>{answer.student_answer}</strong>{correct_text}</div>',
-                unsafe_allow_html=True,
+            feedback_message = st.text_area(
+                "What happened?",
+                max_chars=1200,
+                placeholder="A sentence or two is plenty.",
+                key="beta_feedback_message",
             )
-    if st.button("Extra Practice (optional)", use_container_width=True, type="secondary", on_click=switch_mode, args=("Practice",)):
-        pass
-
-
-def render_classroom_connection_retry(exc: Exception, *, key: str = "classroom_retry") -> None:
-    st.warning("The classroom connection is busy for a moment. Your completed Daily is still saved.")
-    st.caption("Wait a second and try again — you do not need to redo your 10 facts.")
-    if st.button("Try again", use_container_width=True, type="primary", key=key):
-        st.rerun()
-    if str(st.query_params.get("dbcheck", "0")) == "1":
-        st.exception(exc)
-
-
-def render_completed_daily(store: SupabaseFactStore, day, facts: list[Fact], challenge, attempt) -> None:
-    try:
-        answers = store.get_answers(attempt.attempt_id)
-        progress = store.get_or_create_learning_progress(st.session_state.student_id, challenge.challenge_id)
-    except Exception as exc:
-        render_classroom_connection_retry(exc, key="retry_completed_load")
-        return
-
-    # Keep one leaderboard snapshot through Fix Your Misses + Focus Practice.
-    # Every submitted Focus answer reruns Streamlit, so reloading roster + standings
-    # here was making the Top 10 compete with the student's personalized practice.
-    try:
-        leaderboard_context = get_cached_leaderboard_context(
-            store, challenge, refresh=bool(progress.completed_at)
-        )
-    except Exception:
-        leaderboard_context = st.session_state.get(_leaderboard_cache_key(challenge))
-
-    if leaderboard_context is not None:
-        render_daily_result_summary(store, day, challenge, attempt, leaderboard_context=leaderboard_context)
-    else:
-        st.markdown(f"## Daily 10 complete · {day.strftime('%B %d').replace(' 0', ' ')}")
-        st.success("Daily 10 saved ✓")
-        st.caption("The class Top 10 is updating. It will reappear when the classroom connection settles.")
-
-    leaderboard_seen_key = f"student_top10_seen_{st.session_state.student_id}_{challenge.challenge_id}"
-    if leaderboard_context is not None and not st.session_state.get(leaderboard_seen_key):
-        render_leaderboard(
-            store, challenge, highlight_student_id=st.session_state.student_id, context=leaderboard_context
-        )
-        # Show the board once immediately after the Daily. Later Fix/Focus reruns
-        # reuse the cached standings without making students scroll past it again.
-        st.session_state[leaderboard_seen_key] = True
-
-    missed_count = sum(not answer.correct for answer in answers)
-    render_learning_path(progress, missed_count)
-
-    if progress.completed_at is not None:
-        try:
-            render_day_complete(store, day, facts, challenge, attempt, answers)
-        except Exception as exc:
-            render_classroom_connection_retry(exc, key="retry_day_complete")
-        return
-
-    try:
-        if progress.fix_completed_at is None:
-            if render_fix_misses(store, challenge, facts, answers):
-                st.rerun()
-            return
-
-        if progress.focus_completed_at is None:
-            if render_focus_practice(store, day, challenge, answers, progress=progress):
-                st.rerun()
-            return
-
-        store.mark_focus_complete(st.session_state.student_id, challenge.challenge_id)
-        st.rerun()
-    except Exception as exc:
-        render_classroom_connection_retry(exc, key="retry_learning_step")
-        return
-
-
-def render_daily(store: SupabaseFactStore | None) -> None:
-    st.markdown("## Daily Challenge")
-    st.caption("The same balanced 10 facts for everyone today. No right/wrong feedback until the end.")
-
-    if not render_student_sign_in(store):
-        return
-    assert store is not None
-
-    try:
-        day, facts, challenge = ensure_today(store)
-        attempt = store.get_or_create_attempt(st.session_state.student_id, challenge.challenge_id)
-    except Exception as exc:
-        st.error("Today's challenge could not be loaded. Your teacher can check the hidden database diagnostic if needed.")
-        if str(st.query_params.get("dbcheck", "0")) == "1":
-            st.exception(exc)
-        return
-
-    if attempt.completed_at is not None:
-        render_completed_daily(store, day, facts, challenge, attempt)
-        return
-
-    st.markdown(f"### {day.strftime('%A, %B %d').replace(' 0', ' ')}")
-    render_routine_strip("daily")
-    st.caption("Finish the three learning steps to earn today's Mystery reward.")
-    st.markdown(
-        "<div class='private-note'><strong>How today's timing works:</strong> Fact 1 counts toward accuracy, but it is untimed. "
-        "The clock starts the instant you submit Fact 1 and runs quietly in the background. Facts 2–10 then appear one at a time. Accuracy always ranks before speed.</div>",
-        unsafe_allow_html=True,
-    )
-
-    component_result = DAILY_SPRINT_COMPONENT(
-        facts=[{"a": fact.a, "b": fact.b} for fact in facts],
-        attempt_key=f"{st.session_state.student_id}:{challenge.challenge_id}:{attempt.attempt_id}",
-        challenge_version=CHALLENGE_VERSION,
-        default=None,
-        key=f"daily_sprint_{attempt.attempt_id}",
-    )
-
-    if isinstance(component_result, dict) and component_result.get("status") == "complete":
-        try:
-            raw_answers = component_result.get("answers")
-            raw_response_seconds = component_result.get("response_seconds")
-            timed_seconds = float(component_result.get("timed_seconds"))
-            if not isinstance(raw_answers, list) or len(raw_answers) != 10:
-                raise ValueError("Daily component returned an incomplete answer set.")
-            values = [int(value) for value in raw_answers]
-            if not isinstance(raw_response_seconds, list) or len(raw_response_seconds) != 10:
-                raw_response_seconds = [None] * 10
-            response_seconds = [None if value is None else float(value) for value in raw_response_seconds]
-            if any(value < 0 or value > 200 for value in values):
-                raise ValueError("Daily component returned an invalid answer.")
-            store.complete_full_attempt(
-                attempt.attempt_id,
-                list(zip(facts, values)),
-                timed_seconds,
-                response_seconds=response_seconds,
-                completed_at=utc_now(),
-            )
-            st.rerun()
-        except Exception as exc:
-            st.error("Your finished Daily could not be saved. Leave this page open and try once more; your completed answers are still held in this browser.")
-            if str(st.query_params.get("dbcheck", "0")) == "1":
-                st.exception(exc)
-
-    st.caption("A refresh on this device resumes the same Daily run. If a real technology problem occurs, your teacher can reset today's attempt from Student Tools.")
-
-
-# ---------------------------------------------------------------------------
-# Practice
-# ---------------------------------------------------------------------------
-def reset_practice_question() -> None:
-    st.session_state.practice_fact = None
-    st.session_state.practice_result = None
-    st.session_state.practice_retry_correct = False
-    st.session_state.practice_retry_count = 0
-    st.session_state.practice_question_serial = int(st.session_state.get("practice_question_serial", 0)) + 1
-    st.session_state.practice_started_at = None
-
-
-def next_practice_question() -> None:
-    st.session_state.practice_fact = None
-    st.session_state.practice_result = None
-    st.session_state.practice_retry_correct = False
-    st.session_state.practice_retry_count = 0
-    st.session_state.practice_question_serial = int(st.session_state.get("practice_question_serial", 0)) + 1
-    st.session_state.practice_started_at = None
-
-
-def render_practice(store: SupabaseFactStore | None) -> None:
-    st.markdown("## Practice")
-    st.caption("Choose your area of need · unlimited facts · instant teaching after every answer")
-
-    signed_in = student_signed_in() and store is not None
-    if signed_in:
-        try:
-            summary = store.practice_summary(st.session_state.student_id)
-            if summary["attempts"]:
-                st.caption(f"👤 {st.session_state.student_nickname} · {summary['correct']}/{summary['attempts']} correct in saved Practice rounds")
-        except Exception:
-            pass
-    elif not student_signed_in():
-        st.info("You can Practice as a guest. Sign in from Daily Challenge to unlock 🎯 My Focus Facts and save your Practice rounds.")
-
-    options = (["🎯 My Focus Facts"] if signed_in else []) + fact_family_options()
-    focus = st.selectbox("What do you want to practice?", options, key="practice_focus")
-    if st.session_state.practice_focus_last != focus:
-        st.session_state.practice_focus_last = focus
-        reset_practice_question()
-
-    if st.session_state.practice_fact is None:
-        recent = st.session_state.practice_recent[-4:]
-        if focus == "🎯 My Focus Facts" and signed_in:
-            mastery = store.get_mastery(st.session_state.student_id)
-            override = store.get_effective_focus_override(st.session_state.student_id)
-            plan = build_focus_plan(
-                mastery,
-                student_id=st.session_state.student_id,
-                date_key=f"manual-{current_daily_date().isoformat()}",
-                override_family=override,
-            )
-            candidates = [fact for fact in plan if fact.key not in set(recent)] or plan
-            fact = random.choice(candidates)
-        else:
-            fact = practice_fact(focus, random.Random(), avoid=recent)
-        st.session_state.practice_fact = fact.as_dict()
-        st.session_state.practice_started_at = datetime.now(timezone.utc).timestamp()
-    fact = Fact.from_dict(st.session_state.practice_fact)
-
-    if focus == "🎯 My Focus Facts":
-        st.caption("These facts come from your growing mastery profile. The profile learns slowly from your normal Daily + assigned Focus Practice — never from a giant pretest.")
-
-    st.markdown(f'<div class="fact-big">{fact.a} × {fact.b}</div>', unsafe_allow_html=True)
-
-    if st.session_state.practice_result is None:
-        pad_result = render_number_pad(
-            key=f"practice_first_pad_{st.session_state.practice_question_serial}_{fact.a}_{fact.b}"
-        )
-        if pad_result is not None:
-            value, response_seconds = pad_result
-            correct = value == fact.product
-            st.session_state.practice_result = {
-                "answer": value,
-                "correct": correct,
-                "fact": fact.as_dict(),
-            }
-            st.session_state.practice_recent.append(fact.key)
-            st.session_state.practice_recent = st.session_state.practice_recent[-8:]
-            if store is not None and student_signed_in():
-                try:
-                    store.record_practice(
-                        st.session_state.student_id,
-                        focus,
-                        fact,
-                        value,
-                        response_seconds=response_seconds,
-                        activity_type="free_practice",
-                        count_for_mastery=False,
-                    )
-                except Exception:
-                    pass
-            st.rerun()
-        return
-
-    result = st.session_state.practice_result
-    if result["correct"]:
-        st.success(f"✅ Yes! {fact.a} × {fact.b} = {fact.product}")
-    else:
-        st.error(f"Not yet — {fact.a} × {fact.b} = {fact.product}. You answered {result['answer']}.")
-
-    st.markdown("### See the multiplication")
-    render_array(fact)
-    st.markdown(f"<div class='soft-card'><strong>💡 A way to think about it:</strong><br>{html.escape(strategy_tip(fact))}</div>", unsafe_allow_html=True)
-
-    if not result["correct"] and not st.session_state.practice_retry_correct:
-        st.markdown(f"### Now try it again: {fact.label} = ?")
-        pad_result = render_number_pad(
-            key=f"practice_retry_pad_{st.session_state.practice_question_serial}_{st.session_state.practice_retry_count}"
-        )
-        if pad_result is not None:
-            retry_value, _ = pad_result
-            if store is not None and student_signed_in():
-                try:
-                    store.record_practice(
-                        st.session_state.student_id, focus, fact, retry_value,
-                        activity_type="free_practice", is_retry=True, count_for_mastery=False,
-                    )
-                except Exception:
-                    pass
-            if retry_value == fact.product:
-                st.session_state.practice_retry_correct = True
-                st.rerun()
-            else:
-                st.session_state.practice_retry_count = int(st.session_state.get("practice_retry_count", 0)) + 1
-                st.session_state.practice_retry_message = True
-                st.rerun()
-        if st.session_state.pop("practice_retry_message", False):
-            st.error("Not yet — look at the array and strategy, then try that same fact again.")
-        return
-
-    if not result["correct"] and st.session_state.practice_retry_correct:
-        st.success(f"✅ Got it — {fact.a} × {fact.b} = {fact.product}.")
-
-    if st.button("Next Practice Fact →", use_container_width=True, type="primary", on_click=next_practice_question):
-        pass
-    st.caption("Change the menu above anytime to focus on a different fact family.")
-
-
-# ---------------------------------------------------------------------------
-# Teacher dashboard
-# ---------------------------------------------------------------------------
-def teacher_login() -> bool:
-    if st.session_state.teacher_authed:
-        return True
-    if not teacher_password_configured():
-        st.warning("Teacher Dashboard needs TEACHER_PASSWORD in Streamlit Secrets. The deployment guide has the exact setup.")
-        return False
-    st.markdown("## 🔒 Teacher Dashboard")
-    st.caption("This area shows full class results and roster tools. Students only see the Top 10.")
-    with st.form("teacher_login_form"):
-        password = st.text_input("Teacher password", type="password")
-        submit = st.form_submit_button("Open Teacher Dashboard", use_container_width=True, type="primary")
-    if submit:
-        expected = str(st.secrets.get("TEACHER_PASSWORD") or "")
-        if hmac.compare_digest(str(password), expected):
-            st.session_state.teacher_authed = True
-            st.rerun()
-        else:
-            st.error("That teacher password did not match.")
-    return False
-
-
-def render_teacher_today(store: SupabaseFactStore) -> None:
-    st.markdown("### 📊 Today")
-    st.caption("Done means Daily 10 + Fix Your Misses + Focus Practice are complete. The Mystery guess is optional.")
-    classes = store.list_classes()
-    if not classes:
-        st.info("Create your first class in Classes & Rosters.")
-        return
-    class_by_name = {item.class_name: item for item in classes}
-    selected_name = st.selectbox("Class", list(class_by_name), key="teacher_today_class")
-    selected = class_by_name[selected_name]
-    day, facts, challenge = ensure_today(store)
-    status = store.daily_status(selected.class_id, challenge.challenge_id)
-    completed_rows = store.completed_attempts_for_class(selected.class_id, challenge.challenge_id)
-    progress_map = store.class_learning_progress(selected.class_id, challenge.challenge_id)
-    learning_stats = store.class_learning_stats(selected.class_id, day)
-
-    total = len(status)
-    full_complete = sum(
-        bool(progress_map.get(row["student_id"]) and progress_map[row["student_id"]].completed_at)
-        for row in status
-    )
-    not_started = sum(row["status"] == "Not started" for row in status)
-    working = max(0, total - full_complete - not_started)
-    daily_complete = sum(row["status"] == "Complete" for row in status)
-    average_accuracy = (
-        sum(int(row["correct_count"]) for row in completed_rows) / len(completed_rows)
-        if completed_rows else 0
-    )
-    median_time = (
-        float(pd.Series([row["timed_seconds"] for row in completed_rows]).median())
-        if completed_rows else 0
-    )
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("🟢 Done", f"{full_complete}/{total}")
-    c2.metric("🟡 Working", working)
-    c3.metric("⚪ Not started", not_started)
-    c4.metric("Daily 10 finished", f"{daily_complete}/{total}")
-
-    teacher_students = {student.student_id: student for student in store.list_students(selected.class_id)}
-    summary_rows = []
-    performance_rows = []
-    for row in status:
-        sid = row["student_id"]
-        progress = progress_map.get(sid)
-        if progress and progress.completed_at:
-            routine = "🟢 Done"
-        elif row["status"] == "Not started":
-            routine = "⚪ Not started"
-        elif row["status"] != "Complete":
-            routine = "🟡 Daily 10"
-        elif progress and progress.fix_completed_at:
-            routine = "🟡 Focus Practice"
-        else:
-            routine = "🟡 Fix Your Misses"
-        stats = learning_stats.get(sid, {"current_streak": 0, "stars": 0})
-        student_record = teacher_students.get(sid)
-        pin = student_record.pin_code if student_record and student_record.pin_code else "Reset once"
-        summary_rows.append({
-            "Nickname": row["nickname"],
-            "PIN": pin,
-            "Status": routine,
-            "Streak": f"🔥 {stats.get('current_streak', 0)}" if stats.get("current_streak", 0) else "—",
-            "Stars": int(stats.get("stars", 0)),
-        })
-        performance_rows.append({
-            "Nickname": row["nickname"],
-            "PIN": pin,
-            "Daily accuracy": "" if row["correct_count"] is None else f"{int(row['correct_count'])}/10",
-            "Timed sprint": "" if row["timed_seconds"] is None else format_seconds(float(row["timed_seconds"])),
-        })
-    if summary_rows:
-        st.markdown("#### Where everyone is")
-        st.dataframe(pd.DataFrame(summary_rows), hide_index=True, use_container_width=True)
-
-    with st.expander("Teacher-only accuracy & timing", expanded=False):
-        st.caption("Students never see these scores or times. Accuracy ranks first; time only breaks ties.")
-        if completed_rows:
-            st.caption(f"Class average: {average_accuracy:.1f}/10 · median timed sprint: {format_seconds(median_time)}")
-        st.dataframe(pd.DataFrame(performance_rows), hide_index=True, use_container_width=True)
-
-    with st.expander("Student-visible Top 10 preview", expanded=False):
-        st.caption("This is exactly the information students are allowed to see: rank + nickname only.")
-        board = store.leaderboard(selected.class_id, challenge.challenge_id, limit=10)
-        if board:
-            board_frame = pd.DataFrame([{"Rank": row["rank"], "Nickname": row["nickname"]} for row in board])
-            st.dataframe(board_frame, hide_index=True, use_container_width=True)
-        else:
-            st.caption("No completed Daily attempts yet today.")
-
-    with st.expander("Preview today's balanced 10", expanded=False):
-        mix = daily_mix_summary(facts)
-        st.caption(
-            f"Core mix: {mix['easy']} easier retrieval · {mix['medium']} medium · {mix['hard']} harder"
-            + (f" · {mix['extension']} 11/12 extension" if mix["extension"] else " · no 11/12 fact today")
-        )
-        for index, fact in enumerate(facts, start=1):
-            st.write(f"{index}. **{fact.label} = {fact.product}** · {fact.tier}")
-
-def _override_label(value: int | None) -> str:
-    return "Automatic" if value is None else f"{value}s"
-
-
-def _override_value(label: str) -> int | None:
-    return None if label == "Automatic" else int(label.rstrip("s"))
-
-
-def render_teacher_mastery_focus(store: SupabaseFactStore) -> None:
-    st.markdown("### 🎯 Mastery & Focus")
-    st.caption("See what students are learning now. New students begin as Learning — there is no placement test.")
-    classes = store.list_classes()
-    if not classes:
-        st.info("Create a class first.")
-        return
-
-    class_by_name = {item.class_name: item for item in classes}
-    class_name = st.selectbox("Class", list(class_by_name), key="teacher_mastery_class")
-    selected = class_by_name[class_name]
-
-    rows = store.class_mastery_summary(selected.class_id)
-    if not rows:
-        st.info("No students are in this class yet.")
-        return
-    frame = pd.DataFrame(rows)
-    frame["Observed"] = frame["students"] - frame["Unknown"]
-    frame["Need score"] = frame["Focus"] * 2 + frame["Building"]
-
-    observed_needs = frame[(frame["Observed"] > 0) & ((frame["Focus"] > 0) | (frame["Building"] > 0))].copy()
-    st.markdown("#### What this class needs most")
-    if not observed_needs.empty:
-        top = observed_needs.sort_values(["Need score", "Focus", "Building"], ascending=False).head(8)
-        for _, row in top.iterrows():
-            st.write(f"**{row['fact']}** · 🔴 {int(row['Focus'])} Focus · 🟡 {int(row['Building'])} Building · 🟢 {int(row['Fluent'])} Fluent")
-    else:
-        st.info("The app is still gathering evidence. That's intentional — it learns gradually instead of giving students a placement test.")
-
-    st.markdown("#### Full class fact map")
-    heat = frame[["fact", "Fluent", "Building", "Focus", "Unknown"]].copy()
-    heat.columns = ["Fact", "🟢 Fluent", "🟡 Building", "🔴 Focus", "⚪ Learning"]
-    st.dataframe(heat, hide_index=True, use_container_width=True)
-
-    students = store.list_students(selected.class_id)
-    if students:
-        with st.expander("View one student's private fact map", expanded=False):
-            student_by_name = {
-                f"{student.nickname} · PIN {student.pin_code or 'reset once'}": student
-                for student in students
-            }
-            student_label = st.selectbox("Student", list(student_by_name), key="mastery_student_select")
-            student = student_by_name[student_label]
-            mastery = complete_mastery_map(store.get_mastery(student.student_id))
-            individual = []
-            for key in sorted(mastery):
-                row = mastery[key]
-                icon, label = status_for_display(row.status)
-                individual.append({
-                    "Fact": f"{row.a} × {row.b}",
-                    "Status": f"{icon} {label}",
-                    "Evidence": row.evidence_count,
-                    "First-try correct": "—" if not row.evidence_count else f"{row.correct_count}/{row.evidence_count}",
-                })
-            st.dataframe(pd.DataFrame(individual), hide_index=True, use_container_width=True)
-
-    with st.expander("Teacher Focus overrides", expanded=False):
-        st.caption("Leave these on Automatic unless you intentionally want to steer Focus Practice. Student override > class override > everyone > Automatic.")
-        override_options = ["Automatic"] + [f"{value}s" for value in range(2, 11)]
-        current_global = store.get_global_focus_override()
-        global_choice = st.selectbox(
-            "Everyone",
-            override_options,
-            index=override_options.index(_override_label(current_global)),
-            key="global_focus_override_ui",
-        )
-        if st.button("Save everyone focus", use_container_width=True):
-            store.set_global_focus_override(_override_value(global_choice))
-            st.success("Everyone Focus setting saved.")
-            st.rerun()
-
-        current_class = store.get_class_focus_override(selected.class_id)
-        class_choice = st.selectbox(
-            f"{selected.class_name}",
-            override_options,
-            index=override_options.index(_override_label(current_class)),
-            key=f"class_focus_override_{selected.class_id}",
-        )
-        if st.button("Save class focus", use_container_width=True):
-            store.set_class_focus_override(selected.class_id, _override_value(class_choice))
-            st.success("Class Focus setting saved.")
-            st.rerun()
-
-def render_teacher_classes(store: SupabaseFactStore) -> None:
-    st.markdown("### 👥 Classes & Rosters")
-    st.caption("Create classes, add students, view PINs, move students, or clean up accidental accounts.")
-    flash = st.session_state.pop("teacher_roster_flash", None)
-    if flash:
-        kind, message = flash
-        getattr(st, kind)(message)
-
-    classes = store.list_classes(include_inactive=True)
-    with st.expander("➕ Create a class", expanded=not bool(classes)):
-        with st.form("create_class_form", clear_on_submit=True):
-            class_name = st.text_input("New class name", placeholder="Example: Block 1")
-            create = st.form_submit_button("Create class", use_container_width=True)
-        if create:
+            submitted = st.form_submit_button("Send feedback", use_container_width=True)
+        st.caption("Please don't include your PIN or other private information.")
+        if submitted:
             try:
-                record = store.create_class(class_name)
-                st.success(f"Created {record.class_name}.")
-                st.rerun()
-            except (ValueError, NameTaken) as exc:
-                st.error(str(exc))
-            except Exception:
-                st.error("That class could not be created.")
-
-    classes = store.list_classes(include_inactive=True)
-    if not classes:
-        return
-    class_by_name = {item.class_name: item for item in classes}
-    selected_name = st.selectbox("Class to manage", list(class_by_name), key="teacher_manage_class")
-    selected = class_by_name[selected_name]
-    st.caption(f"Class code: {selected.class_code} · {'Active' if selected.active else 'Inactive'}")
-
-    roster = store.list_students(selected.class_id, include_inactive=True)
-
-    with st.expander("➕ Add students", expanded=not bool(roster)):
-        st.caption("Paste nicknames one per line. Each student receives a 4-digit classroom PIN that stays visible to you.")
-        with st.form("bulk_student_form", clear_on_submit=True):
-            pasted = st.text_area("Nicknames", height=180, placeholder="FalconFox\nMathMaster\nBlueSky")
-            create_students = st.form_submit_button("Create students + PINs", use_container_width=True, type="primary")
-        if create_students:
-            names = []
-            seen = set()
-            for line in pasted.splitlines():
-                name = " ".join(line.strip().split())
-                if not name:
-                    continue
-                key = name.casefold()
-                if key not in seen:
-                    names.append(name)
-                    seen.add(key)
-            if not names:
-                st.error("Paste at least one nickname.")
-            else:
-                created = []
-                errors = []
-                for name in names:
-                    pin = generate_pin()
-                    try:
-                        student = store.create_student(selected.class_id, name, pin)
-                        created.append({"Nickname": student.nickname, "PIN": pin, "Class": selected.class_name})
-                    except Exception as exc:
-                        errors.append(f"{name}: {exc}")
-                st.session_state.bulk_created_credentials = {"class_id": selected.class_id, "rows": created}
-                if created:
-                    st.success(f"Created {len(created)} student account{'s' if len(created) != 1 else ''}.")
-                if errors:
-                    st.warning("Some nicknames were skipped: " + " | ".join(errors[:8]))
-
-        created_info = st.session_state.bulk_created_credentials
-        created = created_info.get("rows", []) if isinstance(created_info, dict) and created_info.get("class_id") == selected.class_id else []
-        if created:
-            st.markdown("#### New student PINs")
-            cred_frame = pd.DataFrame(created)
-            st.dataframe(cred_frame, hide_index=True, use_container_width=True)
-            st.download_button(
-                "Download new student PIN sheet (CSV)",
-                cred_frame.to_csv(index=False).encode("utf-8"),
-                file_name="new_student_pins.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
-            if st.button("Clear PIN sheet from screen", use_container_width=True):
-                st.session_state.bulk_created_credentials = None
-                st.rerun()
-
-    roster = store.list_students(selected.class_id, include_inactive=True)
-    st.markdown(f"#### Roster · {len(roster)} students")
-    if not roster:
-        st.info("No students in this class yet.")
-        return
-
-    roster_frame = pd.DataFrame([
-        {
-            "Nickname": student.nickname,
-            "PIN": student.pin_code or "Reset once",
-            "Status": "Active" if student.active else "Inactive",
-        }
-        for student in roster
-    ])
-    st.dataframe(roster_frame, hide_index=True, use_container_width=True)
-
-    missing_pin_students = [student for student in roster if not student.pin_code]
-    if missing_pin_students:
-        st.warning(
-            f"{len(missing_pin_students)} older account{'s' if len(missing_pin_students) != 1 else ''} need one new visible PIN. "
-            "Their old hashed PIN cannot be recovered."
-        )
-        if st.button("Generate visible PINs for older accounts", use_container_width=True):
-            regenerated = []
-            for legacy_student in missing_pin_students:
-                new_pin = generate_pin()
-                store.reset_student_pin(legacy_student.student_id, new_pin)
-                regenerated.append({"Nickname": legacy_student.nickname, "PIN": new_pin, "Class": selected.class_name})
-            st.session_state["legacy_pin_refresh"] = {"class_id": selected.class_id, "rows": regenerated}
-            st.rerun()
-
-    refreshed = st.session_state.get("legacy_pin_refresh")
-    if isinstance(refreshed, dict) and refreshed.get("class_id") == selected.class_id and refreshed.get("rows"):
-        refreshed_frame = pd.DataFrame(refreshed["rows"])
-        st.success("Replacement classroom PINs created. Students must use these new PINs from now on.")
-        st.dataframe(refreshed_frame, hide_index=True, use_container_width=True)
-        st.download_button(
-            "Download replacement PINs (CSV)",
-            refreshed_frame.to_csv(index=False).encode("utf-8"),
-            file_name="replacement_student_pins.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
-
-    st.download_button(
-        "Download roster + PINs",
-        roster_frame.to_csv(index=False).encode("utf-8"),
-        file_name=f"{selected.class_name.replace(' ', '_')}_roster.csv",
-        mime="text/csv",
-        use_container_width=True,
-    )
-
-    with st.expander("🔧 Roster Management", expanded=False):
-        st.caption("Select one student or several. Moving preserves all student history. Delete is permanent.")
-        roster_labels = [
-            f"{student.nickname} · PIN {student.pin_code or 'reset once'}{' (inactive)' if not student.active else ''}"
-            for student in roster
-        ]
-        roster_by_label = {
-            f"{student.nickname} · PIN {student.pin_code or 'reset once'}{' (inactive)' if not student.active else ''}": student
-            for student in roster
-        }
-        selected_roster_labels = st.multiselect(
-            "Select student(s)", roster_labels, key=f"roster_manage_students_{selected.class_id}",
-            placeholder="Choose one or more students",
-        )
-
-        other_classes = [item for item in classes if item.class_id != selected.class_id and item.active]
-        st.markdown("##### Move selected")
-        if other_classes:
-            destination_by_name = {item.class_name: item for item in other_classes}
-            destination_name = st.selectbox("Move to", list(destination_by_name), key=f"roster_move_destination_{selected.class_id}")
-            if st.button("Move selected student(s)", use_container_width=True, disabled=not selected_roster_labels, key=f"roster_bulk_move_{selected.class_id}"):
-                destination = destination_by_name[destination_name]
-                moved = 0
-                errors = []
-                for selected_label in selected_roster_labels:
-                    target = roster_by_label[selected_label]
-                    try:
-                        store.move_student(target.student_id, destination.class_id)
-                        moved += 1
-                    except Exception as exc:
-                        errors.append(f"{target.nickname}: {exc}")
-                st.session_state["teacher_roster_flash"] = (
-                    "warning" if errors else "success",
-                    (f"Moved {moved} student(s). Could not move: " + " | ".join(errors[:8])) if errors
-                    else f"Moved {moved} student(s) from {selected.class_name} to {destination.class_name}.",
+                load_daily_store().submit_feedback(
+                    player_id=st.session_state.get("active_player_id"),
+                    feedback_type=feedback_type,
+                    message=feedback_message,
+                    app_version=APP_RELEASE,
+                    page_mode=str(st.session_state.get("app_mode") or "Unknown"),
                 )
-                st.rerun()
-        else:
-            st.info("Create another active class first, then you can move students into it.")
-
-        st.markdown("##### Delete selected")
-        st.caption("Use only for accidental or duplicate accounts. Student-linked history is removed too.")
-        confirm_bulk_delete = st.checkbox("I understand deletion is permanent.", key=f"roster_bulk_delete_confirm_{selected.class_id}")
-        if st.button(
-            "Delete selected student(s)", use_container_width=True,
-            disabled=not selected_roster_labels or not confirm_bulk_delete, key=f"roster_bulk_delete_{selected.class_id}",
-        ):
-            targets = [roster_by_label[label] for label in selected_roster_labels]
-            try:
-                deleted = store.delete_students([target.student_id for target in targets])
-                st.session_state["teacher_roster_flash"] = ("success", f"Permanently deleted {deleted} student account{'s' if deleted != 1 else ''}.")
-            except Exception as exc:
-                st.session_state["teacher_roster_flash"] = ("warning", f"Bulk delete did not finish: {exc}")
-            st.rerun()
-
-        with st.expander(f"⚠️ Clear this entire roster ({len(roster)} students)"):
-            st.caption(f"Permanently deletes every student currently in {selected.class_name}, but keeps the class itself.")
-            clear_phrase = f"DELETE {selected.class_name}"
-            typed_clear = st.text_input(f"Type {clear_phrase} to confirm", key=f"clear_roster_phrase_{selected.class_id}")
-            if st.button(
-                f"Permanently delete all {len(roster)} students from {selected.class_name}",
-                type="secondary", use_container_width=True, disabled=typed_clear.strip() != clear_phrase, key=f"clear_roster_{selected.class_id}",
-            ):
-                try:
-                    deleted = store.delete_class_students(selected.class_id)
-                    st.session_state["teacher_roster_flash"] = ("success", f"Permanently deleted all {deleted} student accounts from {selected.class_name}. The class itself was kept.")
-                except Exception as exc:
-                    st.session_state["teacher_roster_flash"] = ("warning", f"Roster clear did not finish: {exc}")
-                st.rerun()
-
-def render_teacher_student_tools(store: SupabaseFactStore) -> None:
-    st.markdown("### 🛠️ Student Support")
-    st.caption("Use this area for one-student fixes: PINs, nickname changes, Daily resets, Focus overrides, moves, and account status.")
-    classes = store.list_classes(include_inactive=True)
-    if not classes:
-        st.info("Create a class first.")
-        return
-
-    flash = st.session_state.pop("teacher_roster_flash", None)
-    if flash:
-        kind, message = flash
-        getattr(st, kind)(message)
-
-    class_by_name = {item.class_name: item for item in classes}
-    class_name = st.selectbox("Class", list(class_by_name), key="teacher_tools_class")
-    class_record = class_by_name[class_name]
-    students = store.list_students(class_record.class_id, include_inactive=True)
-    if not students:
-        st.info("This class has no students yet.")
-        return
-    student_by_label = {
-        f"{s.nickname} · PIN {s.pin_code or 'reset once'}{' (inactive)' if not s.active else ''}": s
-        for s in students
-    }
-    label = st.selectbox("Student", list(student_by_label), key="teacher_tools_student")
-    student = student_by_label[label]
-
-    st.info(f"**{student.nickname}** · PIN **{student.pin_code or 'Reset once'}** · {class_record.class_name} · {'Active' if student.active else 'Inactive'}")
-
-    with st.expander("🔑 Nickname & PIN", expanded=True):
-        with st.form("rename_student_form"):
-            new_name = st.text_input("Nickname", value=student.nickname, max_chars=28)
-            rename = st.form_submit_button("Save nickname", use_container_width=True)
-        if rename:
-            try:
-                store.rename_student(student.student_id, new_name)
-                st.success("Nickname updated.")
-                st.rerun()
-            except Exception as exc:
+            except ValueError as exc:
                 st.error(str(exc))
-
-        if student.pin_code:
-            st.markdown(f"**Current classroom PIN: {student.pin_code}**")
-        else:
-            st.warning("This older account needs one replacement PIN before it can be shown here.")
-        if st.button("Generate new PIN", use_container_width=True, key=f"generate_pin_{student.student_id}"):
-            pin = generate_pin()
-            try:
-                store.reset_student_pin(student.student_id, pin)
-                st.session_state["last_reset_pin"] = {"student_id": student.student_id, "nickname": student.nickname, "pin": pin}
-                st.rerun()
-            except Exception:
-                st.error("PIN reset failed.")
-        reset_info = st.session_state.get("last_reset_pin")
-        if reset_info and reset_info.get("student_id") == student.student_id:
-            st.success(f"New PIN for {reset_info['nickname']}: **{reset_info['pin']}**")
-            if st.button("Clear reset message", use_container_width=True, key=f"clear_pin_msg_{student.student_id}"):
-                st.session_state.pop("last_reset_pin", None)
-                st.rerun()
-
-    with st.expander("🧰 Today's Daily troubleshooting", expanded=False):
-        try:
-            _, _, challenge = ensure_today(store)
-            attempt = store.get_attempt_for_student(student.student_id, challenge.challenge_id)
-        except Exception:
-            attempt = None
-            challenge = None
-        if attempt is None:
-            st.caption("No attempt started today.")
-        else:
-            state = "Complete" if attempt.completed_at else "Timer running" if attempt.timed_started_at else "Opened"
-            st.write(f"Current state: **{state}**")
-            st.warning("Reset only for a technology problem or accidental start. It gives the student a fresh Daily attempt.")
-            if st.button("Reset today's Daily attempt", use_container_width=True, key=f"reset_daily_{student.student_id}"):
-                store.reset_daily_attempt(student.student_id, challenge.challenge_id)
-                st.success("Today's attempt was reset.")
-                st.rerun()
-
-    with st.expander("🎯 Personal Focus override", expanded=False):
-        st.caption("Automatic follows this student's evolving mastery. A student setting overrides class/everyone settings.")
-        override_options = ["Automatic"] + [f"{value}s" for value in range(2, 11)]
-        current_override = store.get_student_focus_override(student.student_id)
-        personal_choice = st.selectbox(
-            "Student Focus", override_options, index=override_options.index(_override_label(current_override)),
-            key=f"student_focus_override_{student.student_id}",
-        )
-        if st.button("Save student focus", use_container_width=True, key=f"save_student_focus_{student.student_id}"):
-            store.set_student_focus_override(student.student_id, _override_value(personal_choice))
-            st.success("Student Focus setting saved.")
-            st.rerun()
-
-    with st.expander("↔️ Move or change account status", expanded=False):
-        if len(classes) >= 2:
-            destination_options = [item for item in classes if item.class_id != student.class_id]
-            destination_by_name = {item.class_name: item for item in destination_options}
-            destination_name = st.selectbox("Move to another class", list(destination_by_name), key=f"move_student_destination_{student.student_id}")
-            st.caption("Moving keeps the student's PIN, mastery, Stars, streak, saved work, and Mystery history.")
-            if st.button("Move student", use_container_width=True, key=f"move_student_{student.student_id}"):
-                try:
-                    destination = destination_by_name[destination_name]
-                    store.move_student(student.student_id, destination.class_id)
-                    st.session_state["teacher_roster_flash"] = ("success", f"Moved {student.nickname} to {destination.class_name}.")
-                    st.rerun()
-                except Exception as exc:
-                    st.error(str(exc))
-
-        target_active = not student.active
-        if st.button(("Reactivate student" if target_active else "Deactivate student"), use_container_width=True, key=f"student_active_{student.student_id}"):
-            store.set_student_active(student.student_id, target_active)
-            st.rerun()
-
-    with st.expander("📦 Bulk move shortcut", expanded=False):
-        st.caption("The same bulk move tool also lives in Classes & Rosters → Roster Management.")
-        if len(classes) >= 2:
-            source_by_name = {item.class_name: item for item in classes}
-            source_name = st.selectbox("From class", list(source_by_name), key="bulk_move_source_class")
-            source = source_by_name[source_name]
-            source_students = store.list_students(source.class_id, include_inactive=True)
-            destination_options = [item for item in classes if item.class_id != source.class_id]
-            destination_by_name = {item.class_name: item for item in destination_options}
-            destination_name = st.selectbox("To class", list(destination_by_name), key="bulk_move_destination_class")
-            selected_labels = st.multiselect(
-                "Students to move", [f"{s.nickname} · PIN {s.pin_code or 'reset once'}" for s in source_students], key="bulk_move_students",
-            )
-            source_by_label = {f"{s.nickname} · PIN {s.pin_code or 'reset once'}": s for s in source_students}
-            if st.button("Move selected students", use_container_width=True, disabled=not selected_labels, key="support_bulk_move"):
-                destination = destination_by_name[destination_name]
-                moved = 0
-                errors = []
-                for selected_label in selected_labels:
-                    target = source_by_label[selected_label]
-                    try:
-                        store.move_student(target.student_id, destination.class_id)
-                        moved += 1
-                    except Exception as exc:
-                        errors.append(f"{target.nickname}: {exc}")
-                st.session_state["teacher_roster_flash"] = (
-                    "warning" if errors else "success",
-                    (f"Moved {moved} student(s). Could not move: " + " | ".join(errors[:8])) if errors
-                    else f"Moved {moved} student(s) from {source.class_name} to {destination.class_name}.",
-                )
-                st.rerun()
-        else:
-            st.info("Create another class first.")
-
-    with st.expander("⚠️ Permanently delete this student", expanded=False):
-        st.warning("Permanent: removes the student's account and linked Daily, mastery, reward, and mystery history. Use Move instead if they belong in another class.")
-        confirm_delete = st.checkbox(f"I want to permanently delete {student.nickname}.", key=f"confirm_delete_student_{student.student_id}")
-        if st.button(
-            "Delete student permanently", use_container_width=True, disabled=not confirm_delete, key=f"delete_student_{student.student_id}",
-        ):
-            try:
-                store.delete_student(student.student_id)
-                reset_info = st.session_state.get("last_reset_pin")
-                if reset_info and reset_info.get("student_id") == student.student_id:
-                    st.session_state.pop("last_reset_pin", None)
-                st.session_state["teacher_roster_flash"] = ("success", f"Deleted {student.nickname}.")
-                st.rerun()
             except Exception as exc:
-                st.error(str(exc))
+                st.error("Feedback couldn't be sent right now. Please try again later.")
+                if database_check_enabled():
+                    st.caption(f"Feedback detail: {type(exc).__name__}: {exc}")
+            else:
+                st.success("Thanks — feedback sent!")
 
-def render_teacher_weekly_mystery(store: SupabaseFactStore) -> None:
-    st.markdown("### 🕵️ Weekly Mystery")
-    st.caption("One shared just-for-fun mystery. Monday–Thursday routines earn clues; students may guess once Thursday and once Friday.")
-    day = current_daily_date()
-    try:
-        week_start, record, mystery = ensure_weekly_mystery(store, day)
-        locked = store.weekly_mystery_locked(week_start)
-        stats = store.weekly_mystery_teacher_stats(week_start)
-    except Exception as exc:
-        st.error("The Weekly Mystery tables are not ready. Run RUN_THIS_ONCE_IN_SUPABASE_v2_5.sql once.")
-        if str(st.query_params.get("dbcheck", "0")) == "1":
-            st.exception(exc)
-        return
-
-    st.markdown(f"**Week of {week_start.strftime('%B %d, %Y').replace(' 0', ' ')}**")
-    st.markdown(
-        f"<div class='hero-card'><div class='section-label'>Teacher preview · {html.escape(mystery.category)}</div>"
-        f"<div style='font-size:1.65rem;font-weight:950'>{html.escape(mystery.answer)}</div>"
-        f"<div style='margin-top:.35rem'>{html.escape(mystery.reveal_note)}</div></div>",
-        unsafe_allow_html=True,
-    )
-    for index, clue in enumerate(mystery.clues, start=1):
-        st.write(f"**Clue #{index}:** {clue}")
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Students unlocked", int(stats.get("students_unlocked", 0)))
-    c2.metric("Guesses used", int(stats.get("guesses", 0)))
-    c3.metric("Solved", int(stats.get("correct", 0)))
-
-    if locked:
-        st.info("🔒 This week's mystery is locked because at least one student has already earned a clue.")
-    else:
-        st.success("You can still swap this mystery. It locks automatically when the first student earns a clue.")
-        if st.button("🔄 Pick another mystery", use_container_width=True):
-            try:
-                store.replace_weekly_mystery(week_start, next_mystery_key(record.mystery_key))
-                st.rerun()
-            except Exception as exc:
-                st.error(str(exc))
-
-    with st.expander(f"Mystery bank · {len(MYSTERIES)} curated mysteries", expanded=False):
-        st.caption("Places · animals · foods · sports · science/nature · history/people · music/entertainment · games/toys/objects")
-        st.write("The bank is stored inside the app, so clue delivery never depends on a live internet search.")
+        st.markdown("**Forgot your PIN?**")
+        st.write("PIN recovery isn't available during the beta yet. Contact Mike or the person who invited you for help, and only share your display name — never your PIN.")
 
 
-def render_teacher(store: SupabaseFactStore | None) -> None:
-    if store is None:
-        st.markdown("## Teacher Dashboard")
-        render_db_setup_message()
-        return
-    if not teacher_login():
-        return
+initialize_state()
+initialize_daily_state()
+initialize_player_identity_state()
+_remember_storage_state = render_remember_storage_bridge()
+_restore_remembered_player(_remember_storage_state)
+if _pending_invite_code():
+    st.session_state.app_mode = "Daily Challenge"
+if process_pending_group_invite():
+    st.rerun()
+render_pending_remember_cookie_command()
+# Install near the top so dice taps stay visually anchored on mobile.
+install_dice_scroll_guard()
+install_app_shell_metadata()
+st.markdown("<div id='app-top-anchor'></div>", unsafe_allow_html=True)
+st.markdown("<h1 class='top-title'>🎲 Yahtzee Coach</h1>", unsafe_allow_html=True)
+st.markdown("<div class='subtitle'>Hold Strategy Trainer</div>", unsafe_allow_html=True)
 
-    top_left, top_right = st.columns([5, 1.6])
-    with top_left:
-        st.markdown("## Teacher Dashboard")
-        st.caption("Full class visibility stays here; students only see their class Top 10.")
-    with top_right:
-        if st.button("Lock", use_container_width=True):
-            st.session_state.teacher_authed = False
-            st.rerun()
-
-    st.caption("Start with Today. Use Classes & Rosters for whole-class setup; use Student Support when one student needs help.")
-    today_tab, class_tab, mastery_tab, mystery_tab, tools_tab = st.tabs([
-        "📊 Today", "👥 Classes & Rosters", "🎯 Mastery & Focus", "🕵️ Weekly Mystery", "🛠️ Student Support"
-    ])
-    with today_tab:
-        render_teacher_today(store)
-    with class_tab:
-        render_teacher_classes(store)
-    with mastery_tab:
-        render_teacher_mastery_focus(store)
-    with mystery_tab:
-        render_teacher_weekly_mystery(store)
-    with tools_tab:
-        render_teacher_student_tools(store)
-
-    st.markdown("---")
-    st.caption(f"Teal's Daily Fact Challenge · v{APP_VERSION} · Teacher-only data is never shown on student leaderboards.")
-
-
-# ---------------------------------------------------------------------------
-# Hidden diagnostic
-# ---------------------------------------------------------------------------
-def maybe_render_db_diagnostic(store: SupabaseFactStore | None) -> None:
-    if str(st.query_params.get("dbcheck", "0")) != "1":
-        return
-    with st.expander("Database diagnostic", expanded=False):
-        if store is None:
-            st.error("Supabase secrets are missing or the client could not initialize.")
-            return
-        try:
-            store.health_check()
-            st.success("Database connection is working.")
-            if getattr(store, "url_was_normalized", False):
-                st.info("SUPABASE_URL included /rest/v1 and was automatically normalized for the Python client.")
-        except Exception as exc:
-            st.exception(exc)
-
-
-store = get_store()
-handle_persistent_student_login(store)
-mode = render_header()
-maybe_render_db_diagnostic(store)
+mode = st.radio(
+    "Mode",
+    options=["Daily Challenge", "Practice", "📲 Add to Home Screen"],
+    horizontal=True,
+    key="app_mode",
+    label_visibility="collapsed",
+)
+if mode == "📲 Add to Home Screen":
+    player_note = "Keep Yahtzee Coach one tap away"
+elif mode == "Practice":
+    player_note = "Unlimited hold-strategy practice"
+elif st.session_state.get("active_player_id"):
+    player_note = f"Today's Daily · {st.session_state.get('active_player_name')}"
+else:
+    player_note = "Today's 10-puzzle Daily Challenge"
+st.markdown(f"<div class='mode-note'>{html.escape(player_note)}</div>", unsafe_allow_html=True)
 
 if mode == "Daily Challenge":
-    render_daily(store)
+    render_daily_mode()
 elif mode == "Practice":
-    render_practice(store)
+    render_practice_mode()
 else:
-    render_teacher(store)
+    render_install_mode()
+
+render_help_feedback_footer()
