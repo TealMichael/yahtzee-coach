@@ -1,32 +1,28 @@
-YAHTZEE COACH v43B PHASE 2K.6.1
-Compact Decision Layout
+YAHTZEE COACH v43B PHASE 2K.6.1.1
+Deployment-Safety Hotfix + Compact Decision Layout
 
 NO NEW SUPABASE STEP.
-If Phase 2K.4 is already live, the player_sessions migration is already complete.
 
 UPLOAD:
 1. Upload ALL files in this folder to the root of the GitHub repo.
 2. Commit with:
-   v43B Phase 2K.6.1 - compact the decision screen while keeping the full scorecard visible
+   v43B Phase 2K.6.1.1 - fix mixed-version exact-mode startup crash
 3. Wait for Streamlit to redeploy.
 
 LIVE TEST:
-1. Open a Daily or Practice decision on your phone.
-2. Confirm the Roll line, full scorecard, and all five dice fit together much more comfortably.
-3. Confirm filled scores are always visible; there is no scorecard click/expander.
-4. Confirm the lower scorecard is four columns on phone width.
-5. Confirm Roll 1 / Roll 2 remains obvious.
-6. Play/save normally and confirm remembered login, Daily persistence, and coaching still behave normally.
+1. Confirm the app opens normally with no ImportError.
+2. Open Daily or Practice on your phone.
+3. Confirm the compact Roll line, full scorecard, and dice layout are present.
+4. Play one decision and confirm exact coaching works normally.
 
 WHAT CHANGED:
-- Removed duplicate open-category pills from the decision screen.
-- Full scorecard is always visible directly on the page.
-- Compact scorecard labels and tighter score boxes restore phone density.
-- Upper subtotal / 63 is shown as factual score context.
-- Lower scorecard is four columns on phones.
-- Roll cue and dice prompt are compressed to one line each.
+- Added exact_runtime.py, a deployment-safe exact-policy bridge.
+- app.py no longer imports newly added exact_mode helper names directly.
+- Exact-policy SHA-256 verification remains mandatory.
+- Mixed-version deploys remain exact-only and fail closed; no heuristic coaching is introduced.
 
 WHAT DID NOT CHANGE:
 - No strategy recommendation changed.
-- exact_policy.npz, puzzle_bank.npz, challenge_catalog.npz, yahtzee_engine.py, daily_challenge.py, exact_mode.py, and supabase_daily_store.py are byte-for-byte unchanged from Phase 2K.6.
+- exact_policy.npz, puzzle_bank.npz, challenge_catalog.npz, yahtzee_engine.py, daily_challenge.py, exact_mode.py, and supabase_daily_store.py remain unchanged from Phase 2K.6.1.
+- The Phase 2K.6.1 compact decision layout is unchanged.
 - No database or authentication changes.

@@ -1,3 +1,28 @@
+# Yahtzee Coach v43B Phase 2K.6.1.1 — Deployment-Safety Hotfix
+
+This hotfix repairs a mixed-version startup failure seen immediately after the Phase 2K.6.1 upload. The compact scorecard layout itself was not the cause. Streamlit received the new `app.py` while an older cached/deployed `exact_mode.py` was still being served, so importing the newly added exact-policy helper by name raised an `ImportError` before the app could render.
+
+## v43B Phase 2K.6.1.1 changes
+
+- **The app no longer imports newly added exact-mode helper names directly at startup.** A small `exact_runtime.py` bridge imports only the long-lived exact module and safely adapts to either the current exact-mode file or a temporarily stale one during deployment propagation.
+- **Exact-policy fingerprint verification remains mandatory.** The bridge independently verifies the audited SHA-256 before the policy loads.
+- **Player-facing coaching remains exact-only.** If the newer exact-only report helper is missing, the bridge calls the established exact report builder directly; it never invokes the legacy heuristic fallback.
+- **Policy/load failures still fail closed** with `exact_unavailable` rather than approximate coaching.
+- **The Phase 2K.6.1 compact decision layout is unchanged.** Full scorecard, upper subtotal, compact Roll line, and compact labels remain exactly as designed.
+
+## Supabase
+
+**No new Supabase migration is required.** Upload the full current release to GitHub and let Streamlit redeploy.
+
+## Live-test goal
+
+1. Confirm the app opens normally instead of showing the red ImportError screen.
+2. Open a Daily or Practice decision and inspect the new compact layout.
+3. Confirm Roll stage, full scorecard, and dice remain visible/compact as intended.
+4. Play one decision normally to confirm exact coaching and persistence still work.
+
+---
+
 # Yahtzee Coach v43B Phase 2K.6.1 — Compact Decision Layout
 
 This release keeps the complete strategy-relevant scorecard visible at all times while restoring the compact phone layout. The goal is simple: on a normal phone screen, a player should be able to see the roll stage, every current score/open box, and the decision dice together without opening another panel.

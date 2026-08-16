@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit.components.v1 as components
 
 import yahtzee_engine as yc
-from exact_mode import (
+from exact_runtime import (
     ExactPolicyTable, build_exact_live_report_from_loader, verify_exact_policy_fingerprint,
 )
 from session_learning import build_session_learning_summary
@@ -27,7 +27,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.6.1"
+APP_RELEASE = "v43B Phase 2K.6.1.1"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"

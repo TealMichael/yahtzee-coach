@@ -95,7 +95,7 @@ def main() -> None:
     digest = verify_exact_policy_fingerprint(POLICY_PATH)
     require(digest == EXPECTED_EXACT_POLICY_SHA256, "exact_policy.npz matches the locked audited SHA-256 fingerprint")
 
-    require('APP_RELEASE = "v43B Phase 2K.6.1"' in app, "release label advanced to Phase 2K.6.1")
+    require('APP_RELEASE = "v43B Phase 2K.6.1.1"' in app, "release label advanced to Phase 2K.6.1.1")
     require("verify_exact_policy_fingerprint(EXACT_POLICY_PATH)" in app, "live exact-policy loader verifies the locked fingerprint")
     require("build_exact_live_report_from_loader" in app, "player-facing report path uses the exact-only router")
     require("build_live_report_from_loader" not in app, "player-facing app no longer imports the legacy fallback router")
