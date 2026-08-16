@@ -62,13 +62,13 @@ def run():
     checks.append(("Back navigation is visible during Daily", '"← Back"' in source and "daily_question_index = index - 1" in source))
     checks.append(("Official answers remain exact-only", 'if solver_record.get("source") != "exact"' in source and 'solver_source="exact"' in source))
     checks.append(("Refresh/device resume loads persisted attempt", "store.get_resume_state(" in source and "sync_daily_attempt_from_database" in source))
-    checks.append(("Question 10 goes to hidden-feedback final review", "render_daily_submission_review" in source and "No grades, EV loss, or exact answers are shown yet." in source))
+    checks.append(("Question 10 goes to hidden-feedback final review", "render_daily_submission_review" in source and "No grades, Points Lost, or best answers are shown yet." in source))
     checks.append(("final submit explicitly completes database attempt", "Submit final Daily Challenge" in source and "load_daily_store().complete_attempt(attempt_id)" in source))
     checks.append(("ten saved choices no longer auto-complete on resume", "len(resume_state.answers) == 10 and not resume_state.attempt.complete" not in source))
     checks.append(("official reset control is removed", "Reset today's local demo attempt" not in source))
     checks.append(("cross-player held dice state is cleared", 'startswith(("daily_held_", "daily_dice_pills_"))' in source))
     checks.append(("Practice remains independent", "def render_practice_mode():" in source and "Open Practice without signing in" in source))
-    checks.append(("real social leaderboard remains active", "_cached_group_leaderboard(" in source and "st.dataframe(_leaderboard_frame(board)" in source))
+    checks.append(("real social leaderboard remains active", "_cached_group_daily_snapshot(" in source and "render_leaderboard_cards(board)" in source))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

@@ -23,7 +23,7 @@ def run():
         ("friend group has copy-link control", "🔗 Copy invite link" in app and "clipboard.writeText" in app),
         ("Daily Back button is present", '"← Back"' in app and "daily_question_index = index - 1" in app),
         ("Daily revisions use exact backend method", "load_daily_store().revise_answer(" in app and 'solver_source="exact"' in app),
-        ("ten answers reach a no-feedback final review", "Check your 10 choices" in app and "No grades, EV loss, or exact answers are shown yet." in app),
+        ("ten answers reach a no-feedback final review", "Check your 10 choices" in app and "No grades, Points Lost, or best answers are shown yet." in app),
         ("final submission is explicit and permanent", "🏁 Submit final Daily Challenge" in app and "complete_attempt(attempt_id)" in app),
         ("reference store exposes revise_answer", "def revise_answer(" in store and "Completed Daily attempts are immutable." in store),
         ("Supabase store exposes revise_answer", "def revise_answer(" in supabase_store and '.update(payload)' in supabase_store),

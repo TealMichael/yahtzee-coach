@@ -1,3 +1,45 @@
+# Yahtzee Coach v43B Phase 2K.5 — Performance + Fifth-Grade Clarity
+
+This release is a focused performance and player-clarity pass. It does not add a new game mode or change the exact Yahtzee strategy. Instead, it makes the existing Daily and Practice experience faster to interact with, easier to scan on a phone, and easier for younger players to understand.
+
+## v43B Phase 2K.5 changes
+
+- **Dice taps are now fragment-scoped.** Selecting or unselecting a die reruns only the interactive dice area instead of rebuilding the whole Streamlit app. Full reruns still happen for meaningful navigation actions such as Save & Next, Back, and submitting a Practice hold.
+- **Daily Save & Next uses one Supabase write instead of several read-before-write checks.** The existing PostgreSQL guard trigger remains the authoritative protection for puzzle order, attempt state, puzzle identity, exact-source requirements, and duplicate answers.
+- **Completed Daily social data is batched.** Group members, completed attempts, answers, leaderboard rows, and question statistics are assembled through one snapshot path instead of several overlapping request chains.
+- **Scorecard category names are spelled out.** Player-facing cards now use names such as Three of a Kind, Four of a Kind, Full House, Small Straight, and Large Straight instead of 3K / 4K / FH / SS / LS abbreviations.
+- **Main scoring language is simpler.** Player-facing screens use **Points Lost**, **Best Holds**, and **Best Streak**. Exact expected-value details remain available in Strategy Details for players who want the deeper math.
+- **Daily instructions and progress are quieter.** The repeated percentage/saved-status wording and developer-style “no hint” message are gone. The puzzle screen focuses on the question number, saved count, roll stage, scorecard, and dice.
+- **Practice scenario introductions use simpler language.** Older phrases such as “option value,” “escape valve,” “reroll flexibility,” and “damage-control Yahtzee” were replaced with direct descriptions of what the player should notice.
+- **Final review and leaderboards are phone-friendly cards.** The main player flow no longer relies on wide data tables for these screens.
+- **Review Your 10 now loads one detailed question at a time.** Players choose Q1–Q10 and see only that question's dice, hold comparison, coaching, and optional top-holds detail.
+- The Phase 2K.4 remembered-login/performance work, Phase 2K.4.1 localStorage reliability fix, and Phase 2K.4.2 iPhone autofill fix are all preserved.
+
+## Supabase
+
+**No new Supabase migration is required for Phase 2K.5.** If Phase 2K.4 is already deployed, simply upload this full release. The Phase 2K.4 `player_sessions` SQL remains in the package for clean/fresh installs.
+
+## What is intentionally unchanged
+
+- Exact solver and exact-policy values.
+- Daily puzzle bank, challenge composition, and Daily generator.
+- Practice puzzle generation and exact scoring.
+- One-official-attempt-per-day persistence rules.
+- Friend-group ranking rules and spoiler protections.
+- PIN security and the 30-day remembered-device design.
+
+## Phase 2K.5 live-test goals
+
+1. Tap several dice in Daily and Practice and confirm the page feels steadier/faster while selecting a hold.
+2. Save several Daily answers and notice whether Save & Next feels quicker.
+3. Confirm scorecard categories are easy to understand without abbreviations.
+4. Finish a Daily and check the card-style Final Review and friend leaderboard.
+5. Open **Review Your 10**, switch among several question numbers, and confirm only the selected question's detailed coaching is shown.
+6. Check a few Practice scenarios for simpler pre-puzzle wording.
+7. Confirm remembered login and Returning Player autofill still behave correctly.
+
+---
+
 # Yahtzee Coach v43B Phase 2K.4.2 — Returning Player Autofill Hotfix
 
 This small hotfix corrects the browser autofill semantics on the Returning Player form. Streamlit defaults password-type text inputs to `autocomplete="new-password"` when no value is specified, which can make iPhone/Safari offer to create a new strong password even though the player is signing in to an existing account.

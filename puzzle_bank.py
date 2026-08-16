@@ -31,45 +31,45 @@ CATEGORIES = (
 SCENARIO_PRESENTATION = {
     "Joker / Extra Yahtzee": (
         "Joker Doorway",
-        "An already-scored Yahtzee changes the value of matching dice. Extra-Yahtzee and Joker rules can make a familiar hold play very differently.",
+        "You already scored a Yahtzee. Extra-Yahtzee and Joker rules can make matching dice much more valuable than usual.",
     ),
     "Full House": (
         "Full House Puzzle",
-        "Pairs and matching groups are competing for value. Decide whether preserving the Full House path is worth the reroll flexibility.",
+        "You have matching dice that could build a Full House. Decide whether that path is better than using more fresh dice.",
     ),
     "Straight Structure": (
         "Straight Structure",
-        "Connected dice are carrying option value. Decide which pieces of the straight are actually worth protecting.",
+        "Some of these dice can build a straight. Decide which connected numbers are worth keeping.",
     ),
     "Matching Dice": (
         "Matching Dice Pressure",
-        "A pair, triple, or four-of-a-kind core is available. The scorecard decides how aggressively that matching structure should be protected.",
+        "You have matching dice. Use the scorecard to decide how many of them are worth keeping.",
     ),
     "Upper Bonus": (
         "Upper Bonus Pressure",
-        "The 35-point upper bonus is still live. Balance the open number boxes against stronger lower-section possibilities.",
+        "The 35-point upper bonus is still possible. Decide whether an upper number is worth keeping or another open box is stronger.",
     ),
     "Bonus Secured": (
         "Bonus Banked",
-        "The upper bonus is already secured. You can judge the remaining upper boxes without needing to protect the 63-point threshold.",
+        "You already earned the upper bonus. Choose the hold that helps the open boxes most; you no longer need to protect 63.",
     ),
     "Bonus Is Gone": (
         "Bonus Is Gone",
-        "The upper bonus is mathematically out of reach. Stop paying for bonus pressure that no longer exists and maximize the boxes that remain.",
+        "The upper bonus is no longer possible. Focus only on the boxes you can still score.",
     ),
     "Chance Timing": (
         "Chance Crossroads",
-        "Chance is an important escape valve here. Decide whether high raw dice are worth protecting or whether a stronger structure deserves the reroll.",
+        "Chance is still available as a backup. Decide whether high dice are worth keeping or another pattern has more value.",
     ),
     "Flexible Board": (
         "Open Board Fun",
-        "No single pattern dominates the position. Let the remaining scorecard decide which dice give the strongest mix of scoring paths.",
+        "There is no obvious pattern to chase. Let the open boxes on the scorecard decide which dice are most useful.",
     ),
 }
 
 TRUE_ENDGAME_TITLE = "True Endgame"
 TRUE_ENDGAME_DESCRIPTION = (
-    "Only one or two boxes remain. This is real damage-control Yahtzee: the best hold is determined by the exact destinations still available, not by a generic opening rule."
+    "Only one or two boxes remain. Ignore general rules and keep the dice that give those last boxes the best chance to score."
 )
 
 

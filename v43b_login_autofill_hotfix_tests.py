@@ -17,7 +17,7 @@ def between(start: str, end: str) -> str:
 def main():
     tests = []
 
-    require('APP_RELEASE = "v43B Phase 2K.4.2"', "release label should be Phase 2K.4.2")
+    require('APP_RELEASE = "v43B Phase 2K.5"', "release label should advance while preserving the autofill fix")
     tests.append("release label")
 
     returning = between('with return_tab:', 'with create_tab:')

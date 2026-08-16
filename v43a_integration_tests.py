@@ -43,13 +43,13 @@ def run():
 
     app_text = (ROOT / "app.py").read_text()
     checks.append(("Daily Challenge is first/default mode", 'options=["Daily Challenge", "Practice", "📲 Add to Home Screen"]' in app_text and 'st.session_state.app_mode = "Daily Challenge"' in app_text))
-    checks.append(("daily answers hide strategy hints", 'No strategy label or difficulty hint is shown during the official run.' in app_text))
-    checks.append(("visible segmented Daily progress bar", "daily-progress-percent" in app_text and "Question {index + 1} of 10" in app_text))
+    checks.append(("daily answers hide strategy hints", 'No strategy label or difficulty hint is shown during the official run.' not in app_text and 'Tap the dice you want to keep' in app_text))
+    checks.append(("visible segmented Daily progress bar", "daily-progress-copy" in app_text and "Question {index + 1} of 10" in app_text and "daily-progress-percent" not in app_text))
     checks.append(("intro summary boxes removed", "<div class='review-label'>Format</div>" not in app_text and "<div class='review-label'>Reset</div>" not in app_text))
     checks.append(("Daily results link back to Practice", "Go to open Practice" in app_text and "on_click=_set_app_mode" in app_text and 'args=("Practice",)' in app_text))
     checks.append(("Practice can return to completed leaderboard", ("View today's Daily leaderboard" in app_text or "Daily complete · View leaderboard" in app_text) and "on_click=_set_app_mode" in app_text and 'args=("Daily Challenge",)' in app_text))
     checks.append(("competitive mode rejects heuristic fallback", ('this answer was NOT locked' in app_text or 'choice was NOT saved' in app_text) and 'solver_record.get("source") != "exact"' in app_text))
-    checks.append(("coaching waits until completion", 'Tap any question to see the exact hold and coaching.' in app_text and 'No grades, EV loss, or exact answers are shown yet.' in app_text))
+    checks.append(("coaching waits until completion", 'Choose one question at a time to see the best hold and coaching.' in app_text and 'No grades, Points Lost, or best answers are shown yet.' in app_text))
     checks.append(("persistent Daily removes prototype reset control", "Reset today's local demo attempt" not in app_text and "Today's Daily is complete. Come back tomorrow for a new set." in app_text))
     checks.append(("mobile daily result grid protected", '@media (max-width:640px)' in app_text and '.daily-result-grid { grid-template-columns:repeat(2' in app_text))
 

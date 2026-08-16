@@ -4,9 +4,10 @@ ROOT = Path(__file__).parent
 
 def run():
     app = (ROOT / 'app.py').read_text(encoding='utf-8')
+    fragment_start = app.index('def _practice_choice_fragment():')
     start = app.index('def render_practice_mode():')
     end = app.index('def render_help_feedback_footer():', start)
-    practice = app[start:end]
+    practice = app[fragment_start:end]
     checks = [
         ('Practice has a clean player-facing header', '🎯 Practice' in practice and 'Unlimited practice · instant coaching after every decision' in practice),
         ('Daily crossover is compact', '🏆 Daily complete · View leaderboard' in practice and "daily-rank-banner" not in practice),
@@ -14,7 +15,7 @@ def run():
         ('Scenario remains visible before the decision', 'practice-scenario' in practice and 'practice-description' in practice),
         ('Practice uses the same strong Roll 1/Roll 2 cue', 'daily-roll-stage' in practice and 'roll_label = "First roll"' in practice and 'reroll_word' in practice and 'remaining' in practice),
         ('Scorecard remains above dice decision', practice.find('render_scorecard(scorecard)') < practice.find('Which dice would you keep?')),
-        ('Dice instructions are simplified', 'Tap dice to keep them. Leave all five unselected to reroll everything.' in practice),
+        ('Dice instructions are simplified', 'Tap the dice you want to keep. Leave all five unselected to reroll everything.' in practice),
         ('Primary answer action remains Submit hold', 'Submit hold' in practice),
         ('Coach result remains immediate after submit', 'render_result(st.session_state.report)' in practice),
         ('Next puzzle is the primary post-coaching action', 'Next Practice Puzzle →' in practice and practice.find('Next Practice Puzzle →') < practice.find('See my practice progress')),

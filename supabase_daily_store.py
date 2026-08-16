@@ -654,40 +654,18 @@ class SupabaseDailyStore:
         points_lost: float,
         solver_source: str = "exact",
     ) -> AnswerRecord:
-        attempt = _attempt_from_row(self._require_attempt_row(attempt_id))
-        if attempt.complete:
-            raise AttemptAlreadyComplete("Completed Daily attempts are immutable.")
+        """Save one Daily answer with a single network write.
+
+        Postgres trigger ``guard_daily_answer_insert`` is the authoritative
+        guard for attempt state, order, puzzle identity, exact scoring, and the
+        exact flag. Keeping those checks in the transaction removes several
+        redundant read-before-write round trips from every Save & Next.
+        """
         if str(solver_source) != "exact":
             raise InvalidOfficialAnswer("Official Daily answers must be scored by the exact solver.")
-
         question_number = int(question_number)
         if not 1 <= question_number <= 10:
             raise ValueError("question_number must be 1-10.")
-
-        existing = self._answers_for_attempt(attempt_id)
-        if any(answer.question_number == question_number for answer in existing):
-            raise DuplicateAnswer("That Daily answer is already locked.")
-        expected_question = len(existing) + 1
-        if question_number != expected_question:
-            raise OutOfOrderAnswer(f"Expected question {expected_question}, got {question_number}.")
-
-        challenge_response = (
-            self.client.table("daily_challenges")
-            .select("*")
-            .eq("challenge_id", attempt.challenge_id)
-            .limit(1)
-            .execute()
-        )
-        challenge_row = _first_row(challenge_response)
-        if challenge_row is None:
-            raise DailyStoreError(f"Unknown challenge_id: {attempt.challenge_id}")
-        challenge = _challenge_from_row(challenge_row)
-        expected_puzzle_id = challenge.puzzle_ids[question_number - 1]
-        if str(puzzle_id) != expected_puzzle_id:
-            raise ChallengeMismatch(
-                "Answer puzzle_id does not match the registered Daily Challenge slot."
-            )
-
         loss = float(points_lost)
         if loss < -TIE_TOLERANCE:
             raise ValueError("points_lost cannot be negative.")
@@ -707,11 +685,11 @@ class SupabaseDailyStore:
         except Exception as exc:
             text = _error_text(exc)
             if _is_unique_violation(exc):
-                raise DuplicateAnswer("That Daily answer is already locked.") from exc
-            if "already complete" in text:
+                raise DuplicateAnswer("That Daily answer is already saved.") from exc
+            if "already complete" in text or "completed daily" in text:
                 raise AttemptAlreadyComplete("Completed Daily attempts are immutable.") from exc
             if "expected daily question" in text:
-                raise OutOfOrderAnswer("Daily answers must be locked in order.") from exc
+                raise OutOfOrderAnswer("Daily answers must be saved in order.") from exc
             if "puzzle id does not match" in text:
                 raise ChallengeMismatch(
                     "Answer puzzle_id does not match the registered Daily Challenge slot."
@@ -735,38 +713,16 @@ class SupabaseDailyStore:
         points_lost: float,
         solver_source: str = "exact",
     ) -> AnswerRecord:
-        """Revise a previously saved answer while the attempt is still incomplete."""
-        attempt = _attempt_from_row(self._require_attempt_row(attempt_id))
-        if attempt.complete:
-            raise AttemptAlreadyComplete("Completed Daily attempts are immutable.")
+        """Revise a saved draft with one update request.
+
+        The Phase 2E database trigger is the final guard that blocks completed
+        attempts and validates answer identity/exact scoring.
+        """
         if str(solver_source) != "exact":
             raise InvalidOfficialAnswer("Official Daily answers must be scored by the exact solver.")
-
         question_number = int(question_number)
         if not 1 <= question_number <= 10:
             raise ValueError("question_number must be 1-10.")
-
-        existing = {answer.question_number: answer for answer in self._answers_for_attempt(attempt_id)}
-        if question_number not in existing:
-            raise DailyStoreError("That Daily answer has not been saved yet.")
-
-        challenge_response = (
-            self.client.table("daily_challenges")
-            .select("*")
-            .eq("challenge_id", attempt.challenge_id)
-            .limit(1)
-            .execute()
-        )
-        challenge_row = _first_row(challenge_response)
-        if challenge_row is None:
-            raise DailyStoreError(f"Unknown challenge_id: {attempt.challenge_id}")
-        challenge = _challenge_from_row(challenge_row)
-        expected_puzzle_id = challenge.puzzle_ids[question_number - 1]
-        if str(puzzle_id) != expected_puzzle_id:
-            raise ChallengeMismatch(
-                "Answer puzzle_id does not match the registered Daily Challenge slot."
-            )
-
         loss = float(points_lost)
         if loss < -TIE_TOLERANCE:
             raise ValueError("points_lost cannot be negative.")
@@ -785,6 +741,7 @@ class SupabaseDailyStore:
                 .update(payload)
                 .eq("attempt_id", str(attempt_id))
                 .eq("question_number", question_number)
+                .eq("puzzle_id", str(puzzle_id))
                 .select("*")
                 .execute()
             )
@@ -801,7 +758,7 @@ class SupabaseDailyStore:
             raise
         row = _first_row(response)
         if row is None:
-            raise DailyStoreError("Supabase did not return the revised answer.")
+            raise DailyStoreError("That Daily answer could not be revised.")
         return _answer_from_row(row)
 
     def complete_attempt(self, attempt_id: str) -> AttemptRecord:
@@ -843,6 +800,99 @@ class SupabaseDailyStore:
         return _attempt_from_row(row)
 
     # ---------- Social results ----------
+
+    def group_daily_snapshot(self, group_id: str, challenge_id: str) -> dict:
+        """Return group members, standings, and question stats with batched reads.
+
+        The active group has already been resolved by ``list_groups`` in the
+        app, so this path avoids repeating group/membership/attempt queries for
+        each separate result widget. A completed group Daily needs four reads:
+        memberships, players, attempts, and answers.
+        """
+        memberships = _row_list(
+            self.client.table("group_members")
+            .select("player_id")
+            .eq("group_id", str(group_id))
+            .execute()
+        )
+        player_ids = [str(row["player_id"]) for row in memberships]
+        if not player_ids:
+            return {"members": [], "leaderboard": [], "question_stats": []}
+
+        player_rows = _row_list(
+            self.client.table("players")
+            .select("player_id,display_name,created_at")
+            .in_("player_id", player_ids)
+            .execute()
+        )
+        names = {str(row["player_id"]): str(row["display_name"]) for row in player_rows}
+        members = sorted(
+            [
+                {"player_id": player_id, "display_name": names[player_id]}
+                for player_id in player_ids
+                if player_id in names
+            ],
+            key=lambda row: (row["display_name"].casefold(), row["player_id"]),
+        )
+
+        attempt_rows = _row_list(
+            self.client.table("daily_attempts")
+            .select("*")
+            .in_("player_id", player_ids)
+            .eq("challenge_id", str(challenge_id))
+            .execute()
+        )
+        completed = [_attempt_from_row(row) for row in attempt_rows if row.get("completed_at") is not None]
+        board: list[dict] = []
+        for attempt in completed:
+            display_name = names.get(attempt.player_id)
+            if not display_name:
+                continue
+            board.append({
+                "player_id": attempt.player_id,
+                "display_name": display_name,
+                "total_ev_loss": float(attempt.total_ev_loss or 0.0),
+                "exact_count": int(attempt.exact_count or 0),
+                "worst_miss": float(attempt.worst_miss or 0.0),
+                "best_exact_streak": int(attempt.best_exact_streak or 0),
+                "completed_at": attempt.completed_at,
+            })
+        board.sort(key=lambda item: (
+            round(item["total_ev_loss"], 12),
+            -item["exact_count"],
+            round(item["worst_miss"], 12),
+            item["display_name"].casefold(),
+            item["player_id"],
+        ))
+        for rank, row in enumerate(board, start=1):
+            row["rank"] = rank
+
+        attempt_ids = [attempt.attempt_id for attempt in completed]
+        stats: list[dict] = []
+        if attempt_ids:
+            answer_rows = _row_list(
+                self.client.table("daily_answers")
+                .select("question_number,points_lost,exact")
+                .in_("attempt_id", attempt_ids)
+                .execute()
+            )
+            by_question: dict[int, list[dict]] = {}
+            for row in answer_rows:
+                by_question.setdefault(int(row["question_number"]), []).append(row)
+            for question_number in range(1, 11):
+                answers = by_question.get(question_number, [])
+                if not answers:
+                    continue
+                exact_count = sum(bool(row.get("exact")) for row in answers)
+                stats.append({
+                    "question_number": question_number,
+                    "players": len(answers),
+                    "exact_count": exact_count,
+                    "exact_rate": exact_count / len(answers),
+                    "avg_loss": sum(float(row.get("points_lost") or 0.0) for row in answers) / len(answers),
+                })
+
+        return {"members": members, "leaderboard": board, "question_stats": stats}
 
     def leaderboard(self, group_id: str, challenge_id: str) -> list[dict]:
         self._require_group_row(group_id)

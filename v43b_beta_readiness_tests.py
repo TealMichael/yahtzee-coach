@@ -40,7 +40,7 @@ def run():
         ("feedback table is server-only", 'alter table public.beta_feedback enable row level security' in schema and 'revoke all on table public.beta_feedback from anon, authenticated' in schema),
         ("Daily intro shows participation streak when active", '_daily_streak_copy(streak, completed_today=False)' in app),
         ("completed Daily shows participation streak", '_daily_streak_copy(participation_streak, completed_today=True)' in app),
-        ("exact decision streak is clearly distinguished", "Best Exact Run" in app),
+        ("best-hold streak is clearly distinguished from Daily streak", "Best Streak" in app and "Daily streak" in app),
         ("first finisher state is intentional", "You're the first to finish today!" in app),
         ("partial leaderboard has waiting copy", 'finished · waiting for' in app),
         ("full leaderboard has final-standings copy", "Everyone's in — final standings for today." in app),

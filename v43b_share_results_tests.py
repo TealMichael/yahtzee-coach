@@ -19,9 +19,9 @@ def run():
     checks = [
         ("share square helper exists", "def _share_square(" in app),
         ("share uses four spoiler-free result colors", 'return "🟩"' in app and 'return "🟨"' in app and 'return "🟧"' in app and 'return "🟥"' in app),
-        ("share text reports EV lost and exact count", "EV lost ·" in app and "/10 exact" in app),
+        ("share text reports Points Lost and best-hold count", "Points Lost ·" in app and "/10 best holds" in app),
         ("share text uses two rows of five", 'first_row = "".join(squares[:5])' in app and 'second_row = "".join(squares[5:10])' in app),
-        ("share text includes best exact streak", "Best exact streak" in app),
+        ("share text includes best-hold streak", "Best-hold streak" in app),
         ("share text can include current group rank", "Group rank right now" in app),
         ("share text includes app link inside the text payload", "PUBLIC_APP_URL" in text_block),
         ("result screen renders share card only after completion", "render_daily_share_result(records, summary" in app and "def render_daily_results():" in app),

@@ -1,25 +1,33 @@
-YAHTZEE COACH v43B PHASE 2K.4.2
-Returning Player Autofill Hotfix
+YAHTZEE COACH v43B PHASE 2K.5
+Performance + Fifth-Grade Clarity
 
-NO SUPABASE STEP.
-The Phase 2K.4 player_sessions migration is unchanged.
+NO NEW SUPABASE STEP.
+If Phase 2K.4 is already live, the player_sessions migration is already complete.
 
 UPLOAD:
 1. Upload ALL files in this folder to the root of the GitHub repo.
 2. Commit with:
-   v43B Phase 2K.4.2 - fix iPhone password suggestion on returning login
+   v43B Phase 2K.5 - speed up Daily play and simplify player UI
 3. Wait for Streamlit to redeploy.
 
 LIVE TEST:
-1. If the app auto-signs you in, press Sign out once.
-2. Open Returning Player and tap the PIN field on iPhone/Safari.
-3. Confirm the phone no longer treats this as a new-password field / offers to create a strong new password.
-4. Sign in normally.
-5. Fully close/reopen and confirm 30-day remembered login still works.
-6. Confirm the Phase 2K.4 speed improvement remains.
+1. Tap several dice in Daily and Practice. Dice selection should feel steadier because only the dice interaction reruns.
+2. Save a few Daily choices and check whether Save & Next feels faster.
+3. Confirm the scorecard spells out Three of a Kind, Full House, Small Straight, etc.
+4. Confirm player-facing results use Points Lost / Best Holds / Best Streak.
+5. Finish a Daily and inspect the mobile card-style Final Review and leaderboard.
+6. In Review Your 10, switch among questions and confirm only one detailed review is rendered at a time.
+7. Check Practice scenario intros for simpler wording.
+8. Confirm 30-day remembered login and Returning Player autofill still work.
 
 WHAT CHANGED:
-- Returning Player name is marked as username.
-- Returning Player PIN is marked as current-password instead of Streamlit's default new-password.
-- Create Player PIN fields remain marked new-password.
-- No authentication security, remembered-login, database, strategy, puzzle, scoring, Practice, Daily, social, or coaching logic changed.
+- Daily and Practice dice taps use Streamlit fragments rather than full-app reruns.
+- Daily answer save/edit paths remove redundant Supabase read-before-write calls while keeping the existing database guard triggers.
+- Completed Daily social data uses a batched snapshot path.
+- Scorecard labels are spelled out.
+- Main player language uses Points Lost / Best Holds instead of EV/exact jargon.
+- Daily instructions/progress were simplified.
+- Practice scenario wording was simplified.
+- Final Review and leaderboards use mobile-friendly cards.
+- Completed Daily coaching renders one selected question at a time.
+- Exact solver, policy, puzzle bank, challenge generator, scoring, and ranking rules were not changed.

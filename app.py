@@ -25,7 +25,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.4.2"
+APP_RELEASE = "v43B Phase 2K.5"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
@@ -104,6 +104,12 @@ def _cached_group_question_stats(group_id: str, challenge_id: str):
     return load_daily_store().group_question_stats(str(group_id), str(challenge_id))
 
 
+@st.cache_data(ttl=12, show_spinner=False)
+def _cached_group_daily_snapshot(group_id: str, challenge_id: str):
+    """Fetch members, standings, and question stats in one batched DB path."""
+    return load_daily_store().group_daily_snapshot(str(group_id), str(challenge_id))
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def _cached_participation_streak(player_id: str, current_date: str):
     return load_daily_store().current_participation_streak(str(player_id), str(current_date))
@@ -115,6 +121,7 @@ def _clear_social_caches():
     _cached_group_members.clear()
     _cached_group_leaderboard.clear()
     _cached_group_question_stats.clear()
+    _cached_group_daily_snapshot.clear()
     _cached_participation_streak.clear()
 
 
@@ -180,6 +187,24 @@ CATEGORY_SHORT = {
     "large_straight": "LS",
     "yahtzee": "YTZ",
     "chance": "CH",
+}
+
+# Player-facing scorecard labels favor clarity over abbreviations. The shorter
+# CATEGORY_SHORT names remain available for compact/internal contexts.
+CATEGORY_SCORECARD = {
+    "ones": "Ones",
+    "twos": "Twos",
+    "threes": "Threes",
+    "fours": "Fours",
+    "fives": "Fives",
+    "sixes": "Sixes",
+    "three_of_a_kind": "Three of a Kind",
+    "four_of_a_kind": "Four of a Kind",
+    "full_house": "Full House",
+    "small_straight": "Small Straight",
+    "large_straight": "Large Straight",
+    "yahtzee": "Yahtzee",
+    "chance": "Chance",
 }
 
 UPPER_CATEGORIES = ["ones", "twos", "threes", "fours", "fives", "sixes"]
@@ -372,7 +397,7 @@ st.markdown(
     }
     .score-section-title { font-weight:900; margin:0.45rem 0 0.3rem 0; }
     .score-grid { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:0.32rem; }
-    .score-grid.lower { grid-template-columns:repeat(7, minmax(0,1fr)); }
+    .score-grid.lower { grid-template-columns:repeat(4, minmax(0,1fr)); }
     .score-box {
         border:1px solid rgba(127,127,127,0.22);
         border-radius:12px;
@@ -381,7 +406,7 @@ st.markdown(
         text-align:center;
         min-height:2.85rem;
     }
-    .score-label { font-size:0.68rem; color:#6b7280; margin-bottom:0.1rem; white-space:nowrap; }
+    .score-label { font-size:0.68rem; color:#6b7280; margin-bottom:0.1rem; white-space:normal; line-height:1.08; min-height:1.45rem; display:flex; align-items:end; justify-content:center; }
     .score-value { font-size:0.92rem; font-weight:900; }
     .open-value { color:#188038; }
     .filled-value { color:#3c4043; }
@@ -888,6 +913,27 @@ st.markdown(
         .session-coach-metric-value { font-size:0.92rem; }
     }
 
+
+    .daily-review-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0.42rem; margin:0.5rem 0 0.7rem 0; }
+    .daily-review-choice { border:1px solid rgba(127,127,127,0.20); border-radius:14px; padding:0.55rem 0.62rem; background:#f8fafc; color:#111827 !important; }
+    .daily-review-choice * { color:inherit; }
+    .daily-review-choice-top { display:flex; justify-content:space-between; gap:0.5rem; align-items:center; font-size:0.76rem; font-weight:900; color:#64748b !important; }
+    .daily-review-choice-dice { font-size:1.45rem; line-height:1.1; margin:0.25rem 0; letter-spacing:0.08rem; }
+    .daily-review-choice-hold { font-size:0.84rem; font-weight:800; }
+    .leaderboard-list { display:flex; flex-direction:column; gap:0.38rem; margin:0.45rem 0 0.55rem 0; }
+    .leaderboard-row { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:0.55rem; align-items:center; border:1px solid rgba(127,127,127,0.18); border-radius:13px; padding:0.52rem 0.62rem; background:#f8fafc; color:#111827 !important; }
+    .leaderboard-row.you { border-color:#bfdbfe; background:#eff6ff; }
+    .leaderboard-rank { font-size:0.94rem; font-weight:950; min-width:2.1rem; text-align:center; }
+    .leaderboard-name { min-width:0; font-weight:900; line-height:1.15; }
+    .leaderboard-name span { display:block; font-size:0.69rem; font-weight:700; color:#64748b !important; margin-top:0.1rem; }
+    .leaderboard-score { text-align:right; font-size:0.78rem; line-height:1.2; color:#64748b !important; }
+    .leaderboard-score b { display:block; color:#111827 !important; font-size:0.93rem; }
+    @media (max-width:640px) {
+        .daily-review-grid { grid-template-columns:1fr; }
+        .score-grid.lower { grid-template-columns:repeat(2, minmax(0,1fr)); }
+        .score-box { min-height:3.05rem; }
+    }
+
     /* v41 — result hierarchy and mobile-first coaching polish. */
     .progress-rail {
         display:grid;
@@ -1178,7 +1224,7 @@ def render_session_coach(records):
     if not summary["ready"]:
         needed = summary["rounds_needed"]
         st.caption(
-            f"🎯 Session Coach is learning your patterns — {summary['rounds']}/5 exact rounds complete"
+            f"🎯 Session Coach is learning your patterns — {summary['rounds']}/5 practice rounds complete"
             + (f" ({needed} more to unlock the first summary)." if needed else ".")
         )
         return
@@ -1193,7 +1239,7 @@ def render_session_coach(records):
         lines.append(
             f"<div class='session-coach-line'><span class='session-coach-tag'>Strength</span>"
             f"<b>{strength['skill']}</b> — {strength['strong_count']} of {strength['attempts']} decisions "
-            f"were exact or within 0.75 expected points of exact.</div>"
+            f"were the best hold or within 0.75 points of the best.</div>"
         )
     else:
         lines.append(
@@ -1225,10 +1271,10 @@ def render_session_coach(records):
     st.markdown(
         "<div class='session-coach'>"
         "<div class='session-coach-title'>🎯 Session Coach</div>"
-        "<div class='muted'>A session-only pattern summary based on exact expected-value decisions. "
+        "<div class='muted'>A session-only pattern summary based on your hold decisions. "
         "It waits for repeated evidence before calling something a strength or weakness.</div>"
         "<div class='session-coach-metrics'>"
-        f"<div class='session-coach-metric'><div class='session-coach-metric-label'>Exact rounds</div><div class='session-coach-metric-value'>{summary['rounds']}</div></div>"
+        f"<div class='session-coach-metric'><div class='session-coach-metric-label'>Rounds</div><div class='session-coach-metric-value'>{summary['rounds']}</div></div>"
         f"<div class='session-coach-metric'><div class='session-coach-metric-label'>Best-hold rate</div><div class='session-coach-metric-value'>{optimal_pct}%</div></div>"
         f"<div class='session-coach-metric'><div class='session-coach-metric-label'>Avg pts lost</div><div class='session-coach-metric-value'>{avg_loss:.2f}</div></div>"
         "</div>"
@@ -1240,7 +1286,7 @@ def render_session_coach(records):
 
 def score_box_html(category, scorecard):
     value = scorecard.get(category)
-    label = CATEGORY_SHORT.get(category, CATEGORY_DISPLAY.get(category, category))
+    label = CATEGORY_SCORECARD.get(category, CATEGORY_DISPLAY.get(category, category))
     if value is None:
         value_html = "<span class='open-value'>OPEN</span>"
     else:
@@ -1254,8 +1300,8 @@ def score_grid_html(scorecard, categories, lower=False):
 
 
 def open_chips_html(scorecard):
-    open_upper = [CATEGORY_SHORT[c] for c in UPPER_CATEGORIES if scorecard.get(c) is None]
-    open_lower = [CATEGORY_SHORT[c] for c in LOWER_CATEGORIES if scorecard.get(c) is None]
+    open_upper = [CATEGORY_SCORECARD[c] for c in UPPER_CATEGORIES if scorecard.get(c) is None]
+    open_lower = [CATEGORY_SCORECARD[c] for c in LOWER_CATEGORIES if scorecard.get(c) is None]
     chips = [f"<span class='open-chip'>{label}</span>" for label in (open_upper + open_lower)]
     if not chips:
         return "<span class='muted'>No open categories found.</span>"
@@ -1554,18 +1600,19 @@ def parse_float_text(text):
 
 
 def result_distance_text(lost_text, grade):
+    """Student-facing distance from the best hold; exact EV stays in Strategy details."""
     lost_value = parse_float_text(lost_text)
     if lost_value is None:
-        return "Exact strategy comparison available below."
+        return "Your strategy comparison is below."
     if lost_value <= 1e-5:
-        return "Exact best play — no expected game points given up."
+        return "Best hold — you gave up 0.00 points."
     if lost_value <= 0.25:
-        return f"Only {lost_value:.2f} expected game points from exact — essentially a near tie."
+        return f"Only {lost_value:.2f} points lost — almost tied with the best hold."
     if lost_value <= 0.75:
-        return f"{lost_value:.2f} expected game points from exact — a small strategic edge."
+        return f"{lost_value:.2f} points lost — a small difference worth noticing."
     if lost_value <= 2.50:
-        return f"{lost_value:.2f} expected game points from exact — worth learning from, but the idea had merit."
-    return f"{lost_value:.2f} expected game points from exact — this adjustment matters a lot over time."
+        return f"{lost_value:.2f} points lost — your idea had merit, but there was a better path."
+    return f"{lost_value:.2f} points lost — this change can matter a lot over time."
 
 
 def render_session_progress(history, solver_records):
@@ -1631,7 +1678,7 @@ def render_practice_momentum(records):
     badge_html = "".join(
         f"<span class='earned-chip'>{badge['icon']} {badge['name']}</span>"
         for badge in progress["badges"]
-    ) or "<span class='muted'>No achievements yet — the first exact best hold unlocks Bullseye.</span>"
+    ) or "<span class='muted'>No achievements yet — your first best hold unlocks Bullseye.</span>"
 
     st.markdown(
         "<div class='mastery-card'>"
@@ -1700,7 +1747,7 @@ def render_result(report):
     st.markdown(
         "<div class='hold-compare'>"
         f"<div class='hold-card'><div class='hold-card-label'>You kept</div><div class='hold-card-value'>{your_choice or '—'}</div></div>"
-        f"<div class='hold-card best'><div class='hold-card-label'>Exact best hold</div><div class='hold-card-value'>{optimal_choice or '—'}</div></div>"
+        f"<div class='hold-card best'><div class='hold-card-label'>Best hold</div><div class='hold-card-value'>{optimal_choice or '—'}</div></div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -1782,7 +1829,6 @@ st.markdown(
     .daily-progress-copy { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-bottom:0.18rem; }
     .daily-progress-copy b { font-size:0.92rem; }
     .daily-progress-copy span { color:#6b7280; font-size:0.78rem; font-weight:700; }
-    .daily-progress-percent { color:#6b7280; font-size:0.72rem; text-align:right; margin-bottom:0.58rem; }
     .daily-lock-note { color:#6b7280; font-size:0.78rem; text-align:center; margin:0.3rem 0 0.15rem 0; }
     .daily-flash { border:1px solid #bbf7d0; background:#f0fdf4; color:#166534 !important; border-radius:12px; padding:0.46rem 0.62rem; font-weight:800; font-size:0.82rem; margin:0.3rem 0; }
     .daily-roll-stage {
@@ -2691,16 +2737,17 @@ def render_friend_group_hub(*, expanded: bool = False):
 
 
 def _real_group_context():
-    """Return active group, members, completed leaderboard, and per-question stats."""
+    """Return active group and one batched social snapshot for today's Daily."""
     groups = _load_player_groups()
     active = _select_active_group(groups)
     if active is None:
         return None, [], [], []
-    members = _cached_group_members(active.group_id)
-    board = _cached_group_leaderboard(active.group_id, st.session_state.daily_set_id)
+    snapshot = _cached_group_daily_snapshot(active.group_id, st.session_state.daily_set_id)
+    members = list(snapshot.get("members", []))
+    board = [dict(row) for row in snapshot.get("leaderboard", [])]
     for row in board:
         row["is_user"] = row.get("player_id") == st.session_state.get("active_player_id")
-    stats = _cached_group_question_stats(active.group_id, st.session_state.daily_set_id)
+    stats = list(snapshot.get("question_stats", []))
     return active, members, board, stats
 
 
@@ -2739,13 +2786,11 @@ def render_daily_progress(index: int, saved: int, *, complete: bool = False):
             css = ""
         dots.append(f"<div class='daily-dot {css}' title='Question {i + 1}'></div>")
     question_text = "Challenge complete" if complete else ("Review your 10" if saved >= 10 else f"Question {index + 1} of 10")
-    percent = min(100, max(0, int(round((saved / 10) * 100))))
-    status_text = "10/10 submitted" if complete else f"{saved}/10 saved"
+    status_text = "Finished" if complete else f"{saved} saved"
     st.markdown(
         "<div class='daily-progress-copy'>"
         f"<b>{question_text}</b><span>{status_text}</span>"
-        "</div><div class='daily-progress'>" + "".join(dots) + "</div>"
-        f"<div class='daily-progress-percent'>{percent}% saved</div>",
+        "</div><div class='daily-progress'>" + "".join(dots) + "</div>",
         unsafe_allow_html=True,
     )
 
@@ -2803,7 +2848,7 @@ def render_daily_intro():
         "<div class='daily-kicker'>🎲 Daily Challenge</div>"
         f"<div class='daily-title'>{_daily_date_label(date_key)}</div>"
         "<div class='daily-rule'><b>10 hold decisions. Same challenge for everyone.</b><br>"
-        "Lose as few expected game points as possible. You can review and change your choices before you submit, and coaching unlocks only after the Daily is finished.<br>"
+        "Try to make the best hold on each puzzle. Lower <b>Points Lost</b> is better. You can review your choices before you submit, and coaching unlocks when you finish.<br>"
         "<span style='font-size:.80rem'>5 Roll 1 · 5 Roll 2 · new challenge at midnight Eastern</span></div>"
         "</div>",
         unsafe_allow_html=True,
@@ -2818,9 +2863,9 @@ def render_daily_intro():
     if groups:
         active = render_group_selector(groups, key="daily_intro_group_selector")
         try:
-            store = load_daily_store()
-            member_count = len(_cached_group_members(active.group_id))
-            finished_count = len(_cached_group_leaderboard(active.group_id, st.session_state.daily_set_id))
+            snapshot = _cached_group_daily_snapshot(active.group_id, st.session_state.daily_set_id)
+            member_count = len(snapshot.get("members", []))
+            finished_count = len(snapshot.get("leaderboard", []))
         except Exception:
             member_count = 0
             finished_count = 0
@@ -2853,7 +2898,7 @@ def render_daily_intro():
             "- **One Daily each day:** everyone gets the same 10 decisions.\n"
             "- **Your choices save automatically:** leave and come back without losing your place.\n"
             "- **Review before submitting:** use Back or the final review to fix accidental taps.\n"
-            "- **No hints during the run:** grades, exact answers, and coaching appear only after you finish.\n"
+            "- **No hints during the run:** grades, best answers, and coaching appear only after you finish.\n"
             "- **Friends:** completed players appear on your group's leaderboard.\n"
             "- **Reset:** a new challenge begins at midnight Eastern."
         )
@@ -2965,56 +3010,21 @@ def _save_daily_choice(index: int, selected_hold) -> bool:
     return True
 
 
-def render_daily_question():
+@st.fragment
+def _daily_choice_fragment():
+    """Only rerun the dice controls when a player taps a die."""
     challenges = st.session_state.daily_challenges
     answers = st.session_state.daily_answers
     index = int(st.session_state.daily_question_index)
-    index = max(0, min(index, len(challenges) - 1))
-    st.session_state.daily_question_index = index
-
     challenge = challenges[index]
-    saved_count = len(answers)
-    render_daily_progress(index, saved_count)
-    flash = st.session_state.get("daily_flash", "")
-    if flash:
-        st.markdown(f"<div class='daily-flash'>✓ {flash}</div>", unsafe_allow_html=True)
-        st.session_state.daily_flash = ""
+    dice = challenge["dice"]
 
-    st.markdown(
-        "<div class='soft-card'>"
-        f"<span class='scenario-pill'>Daily {index + 1}/10</span>"
-        "<div class='muted'>No strategy label or difficulty hint is shown during the official run.</div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    render_scorecard(challenge["scorecard"])
-    roll_number = int(challenge["roll_number"])
-    if roll_number == 1:
-        roll_stage_class = "roll-1"
-        roll_stage_title = "🔵 ROLL 1 · First roll"
-        roll_stage_sub = "2 rerolls remaining"
-    else:
-        roll_stage_class = "roll-2"
-        roll_stage_title = "🟢 ROLL 2 · Second roll"
-        roll_stage_sub = "1 reroll remaining"
-    st.markdown(
-        f"<div class='daily-roll-stage {roll_stage_class}'>"
-        f"<div class='daily-roll-stage-title'>{roll_stage_title}</div>"
-        f"<div class='daily-roll-stage-sub'>{roll_stage_sub}</div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown("<div class='section-label'>Tap dice to hold</div>", unsafe_allow_html=True)
-    st.markdown(
-        "<div class='dice-help'>Your choice is saved when you move forward. You can use Back and revise any saved answer until final submission; no coaching is revealed.</div>",
-        unsafe_allow_html=True,
-    )
+    st.markdown("<div class='section-label'>Tap the dice you want to keep</div>", unsafe_allow_html=True)
+    st.caption("Your choice saves when you move forward. You can come back and change it before final submit.")
 
     held_key, pills_key = _daily_widget_keys(index)
     if held_key not in st.session_state:
         st.session_state[held_key] = _saved_hold_indices(index)
-    dice = challenge["dice"]
     selected_indices = st.pills(
         "Daily dice to hold",
         options=list(range(len(dice))),
@@ -3073,13 +3083,48 @@ def render_daily_question():
             st.session_state.daily_ready_to_submit = False
             st.session_state.daily_question_index = index + 1
             st.session_state.daily_flash = f"Answer {index + 1} saved."
+        # A save changes the whole Daily flow, so intentionally leave the fragment.
         st.rerun()
+
+
+def render_daily_question():
+    challenges = st.session_state.daily_challenges
+    answers = st.session_state.daily_answers
+    index = int(st.session_state.daily_question_index)
+    index = max(0, min(index, len(challenges) - 1))
+    st.session_state.daily_question_index = index
+
+    challenge = challenges[index]
+    render_daily_progress(index, len(answers))
+    flash = st.session_state.get("daily_flash", "")
+    if flash:
+        st.markdown(f"<div class='daily-flash'>✓ {flash}</div>", unsafe_allow_html=True)
+        st.session_state.daily_flash = ""
+
+    render_scorecard(challenge["scorecard"])
+    roll_number = int(challenge["roll_number"])
+    if roll_number == 1:
+        roll_stage_class = "roll-1"
+        roll_stage_title = "🔵 ROLL 1 · First roll"
+        roll_stage_sub = "2 rerolls remaining"
+    else:
+        roll_stage_class = "roll-2"
+        roll_stage_title = "🟢 ROLL 2 · Second roll"
+        roll_stage_sub = "1 reroll remaining"
+    st.markdown(
+        f"<div class='daily-roll-stage {roll_stage_class}'>"
+        f"<div class='daily-roll-stage-title'>{roll_stage_title}</div>"
+        f"<div class='daily-roll-stage-sub'>{roll_stage_sub}</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    _daily_choice_fragment()
 
     st.markdown(
         "<div class='daily-lock-note'>Your choices stay private and editable until you submit. After that, your result is final.</div>",
         unsafe_allow_html=True,
     )
-
 
 def render_daily_submission_review():
     """Show all 10 chosen holds without feedback, then let the player final-submit."""
@@ -3095,23 +3140,24 @@ def render_daily_submission_review():
         "<div class='daily-hero'>"
         "<div class='daily-kicker'>Final review</div>"
         "<div class='daily-title'>Check your 10 choices</div>"
-        "<div class='daily-rule'><b>No grades, EV loss, or exact answers are shown yet.</b><br>"
+        "<div class='daily-rule'><b>No grades, Points Lost, or best answers are shown yet.</b><br>"
         "Edit anything you entered by mistake. Once you submit, your result is final.</div>"
         "</div>",
         unsafe_allow_html=True,
     )
 
-    review_rows = []
+    review_cards = []
     for i, answer in enumerate(answers, start=1):
         challenge = answer["challenge"]
         dice_faces = " ".join(DICE_FACE.get(int(die), str(die)) for die in challenge.get("dice", []))
-        review_rows.append({
-            "Q": i,
-            "Roll": challenge.get("roll_number"),
-            "Dice": dice_faces,
-            "Your hold": hold_label(answer.get("selected_hold", [])),
-        })
-    st.dataframe(pd.DataFrame(review_rows), hide_index=True, use_container_width=True)
+        review_cards.append(
+            "<div class='daily-review-choice'>"
+            f"<div class='daily-review-choice-top'><span>Q{i}</span><span>Roll {challenge.get('roll_number')}</span></div>"
+            f"<div class='daily-review-choice-dice'>{dice_faces}</div>"
+            f"<div class='daily-review-choice-hold'>Kept: {hold_label(answer.get('selected_hold', []))}</div>"
+            "</div>"
+        )
+    st.markdown("<div class='daily-review-grid'>" + "".join(review_cards) + "</div>", unsafe_allow_html=True)
 
     edit_question = st.selectbox(
         "Need to fix one?",
@@ -3154,6 +3200,7 @@ def render_daily_submission_review():
 
 
 def _leaderboard_frame(board):
+    """Dataframe form retained for exports/tests; player UI uses cards below."""
     rows = []
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
     for item in board:
@@ -3162,11 +3209,28 @@ def _leaderboard_frame(board):
         rows.append({
             "Rank": f"{medals.get(rank, '')} {rank}".strip(),
             "Player": name,
-            "EV Lost": f"{item['total_ev_loss']:.2f}",
-            "Exact": f"{item['exact_count']}/10",
-            "Worst miss": f"{item['worst_miss']:.2f}",
+            "Points Lost": f"{item['total_ev_loss']:.2f}",
+            "Best Holds": f"{item['exact_count']}/10",
         })
     return pd.DataFrame(rows)
+
+
+def render_leaderboard_cards(board):
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    cards = []
+    for item in board:
+        rank = int(item["rank"])
+        you_class = " you" if item.get("is_user") else ""
+        you_note = "<span>You</span>" if item.get("is_user") else ""
+        cards.append(
+            f"<div class='leaderboard-row{you_class}'>"
+            f"<div class='leaderboard-rank'>{medals.get(rank, '')} {rank}</div>"
+            f"<div class='leaderboard-name'>{html.escape(str(item['display_name']))}{you_note}</div>"
+            f"<div class='leaderboard-score'><b>{float(item['total_ev_loss']):.2f}</b>Points Lost · {int(item['exact_count'])}/10 best</div>"
+            "</div>"
+        )
+    st.markdown("<div class='leaderboard-list'>" + "".join(cards) + "</div>", unsafe_allow_html=True)
+    st.caption("Ties: more best holds, then the smaller biggest miss.")
 
 
 def _share_square(points_lost: float) -> str:
@@ -3189,15 +3253,15 @@ def build_daily_share_text(records, summary, rank=None, completed_count=0):
     date_label = _daily_date_label(st.session_state.daily_date_key)
     lines = [
         f"🎲 Yahtzee Coach Daily — {date_label}",
-        f"{summary['total_ev_loss']:.2f} EV lost · {summary['exact_count']}/10 exact",
+        f"{summary['total_ev_loss']:.2f} Points Lost · {summary['exact_count']}/10 best holds",
         first_row,
         second_row,
-        f"🔥 Best exact streak: {summary['best_exact_streak']}",
+        f"🔥 Best-hold streak: {summary['best_exact_streak']}",
     ]
     if rank is not None and int(completed_count or 0) > 0:
         lines.append(f"🏆 Group rank right now: #{int(rank)} of {int(completed_count)}")
     lines.extend([
-        "🟩 exact · 🟨 essentially optimal · 🟧 close · 🟥 miss",
+        "🟩 best · 🟨 almost best · 🟧 close · 🟥 miss",
         PUBLIC_APP_URL,
     ])
     return "\n".join(lines)
@@ -3215,7 +3279,7 @@ def render_daily_share_result(records, summary, rank=None, completed_count=0):
           <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;font-weight:800;color:#64748b;">Your Daily · Spoiler-free</div>
           <div style="font-size:28px;line-height:1.18;letter-spacing:2px;margin:7px 0 1px 0;">{first_row}</div>
           <div style="font-size:28px;line-height:1.18;letter-spacing:2px;">{second_row}</div>
-          <div style="font-size:12px;color:#64748b;margin-top:8px;">🟩 exact · 🟨 essentially optimal · 🟧 close · 🟥 miss</div>
+          <div style="font-size:12px;color:#64748b;margin-top:8px;">🟩 best · 🟨 almost best · 🟧 close · 🟥 miss</div>
           <div style="display:flex;gap:10px;margin-top:12px;">
             <button id="shareDaily" style="flex:1;border:1px solid #166534;background:#166534;color:white;border-radius:10px;padding:10px 12px;font-weight:800;cursor:pointer;">📤 Share result</button>
             <button id="copyDaily" style="flex:1;border:1px solid #cbd5e1;background:white;color:#0f172a;border-radius:10px;padding:10px 12px;font-weight:800;cursor:pointer;">📋 Copy score</button>
@@ -3276,50 +3340,57 @@ def render_daily_share_result(records, summary, rank=None, completed_count=0):
         st.code(share_text, language=None)
 
 
-def _daily_review_item(answer):
-    challenge = answer["challenge"]
+def _render_daily_review_body(answer):
     record = answer["solver_record"]
+    challenge = answer["challenge"]
     report = answer["report"]
-    number = int(challenge.get("daily_number", 0))
     loss = float(record.get("points_lost", 0.0) or 0.0)
-    grade = extract_line(report, "Grade:") or ("A+" if loss <= 1e-9 else "—")
-    lesson_items = extract_section(report, "Teaching takeaway:")
-    lesson = lesson_items[0] if lesson_items else record.get("lesson_title", "")
-    label = f"Q{number} · {grade} · {loss:.2f} pts lost · {challenge.get('scenario_name', 'Strategy Review')}"
-    with st.expander(label, expanded=False):
-        st.caption(
-            f"{challenge.get('stage', '')} · {challenge.get('difficulty', '')} · Roll {challenge.get('roll_number')} · {challenge.get('skill_tag', '')}"
-        )
-        dice_faces = " ".join(DICE_FACE.get(int(die), str(die)) for die in challenge.get("dice", []))
-        st.markdown(f"<div class='daily-dice-line'>{dice_faces}</div>", unsafe_allow_html=True)
-        st.markdown("**Scorecard at the decision**")
-        st.markdown("<div class='score-section-title'>Upper</div>", unsafe_allow_html=True)
-        st.markdown(score_grid_html(challenge["scorecard"], UPPER_CATEGORIES), unsafe_allow_html=True)
-        st.markdown("<div class='score-section-title'>Lower</div>", unsafe_allow_html=True)
-        st.markdown(score_grid_html(challenge["scorecard"], LOWER_CATEGORIES, lower=True), unsafe_allow_html=True)
-        st.markdown(
-            "<div class='review-summary'>"
-            f"<div class='review-box'><div class='review-label'>You kept</div><div class='review-value'>{record.get('user_hold', '—')}</div></div>"
-            f"<div class='review-box'><div class='review-label'>Exact best</div><div class='review-value'>{record.get('optimal_hold', '—')}</div></div>"
-            f"<div class='review-box'><div class='review-label'>Hold rank</div><div class='review-value'>#{record.get('hold_rank', '—')} of {record.get('legal_hold_count', '—')}</div></div>"
-            f"<div class='review-box'><div class='review-label'>EV lost</div><div class='review-value'>{loss:.2f}</div></div>"
-            "</div>",
-            unsafe_allow_html=True,
-        )
-        simple_why_items = extract_section(report, "Simple why:")
-        simple_why = simple_why_items[0] if simple_why_items else record.get("simple_why", "")
-        if simple_why:
-            st.markdown(f"**💡 Why this wins:** {simple_why}")
-        if lesson:
-            st.markdown(f"**🧠 Remember:** {lesson}")
-        idea = record.get("adjustment", "")
-        if idea:
-            st.markdown(f"**Try this instead:** {idea}")
-        top_holds = extract_section(report, "Top exact holds:")
-        if top_holds:
-            st.markdown("**Top exact holds**")
+    grade = record.get("grade", "") or extract_line(report, "Grade:")
+    lesson = record.get("lesson", "") or record.get("lesson_title", "")
+    st.caption(
+        f"{challenge.get('stage', '')} · Roll {challenge.get('roll_number')} · {challenge.get('skill_tag', '')}"
+    )
+    dice_faces = " ".join(DICE_FACE.get(int(die), str(die)) for die in challenge.get("dice", []))
+    st.markdown(f"<div class='daily-dice-line'>{dice_faces}</div>", unsafe_allow_html=True)
+    st.markdown("**Scorecard at the decision**")
+    st.markdown("<div class='score-section-title'>Upper</div>", unsafe_allow_html=True)
+    st.markdown(score_grid_html(challenge["scorecard"], UPPER_CATEGORIES), unsafe_allow_html=True)
+    st.markdown("<div class='score-section-title'>Lower</div>", unsafe_allow_html=True)
+    st.markdown(score_grid_html(challenge["scorecard"], LOWER_CATEGORIES, lower=True), unsafe_allow_html=True)
+    st.markdown(
+        "<div class='review-summary'>"
+        f"<div class='review-box'><div class='review-label'>You kept</div><div class='review-value'>{record.get('user_hold', '—')}</div></div>"
+        f"<div class='review-box'><div class='review-label'>Best hold</div><div class='review-value'>{record.get('optimal_hold', '—')}</div></div>"
+        f"<div class='review-box'><div class='review-label'>Hold rank</div><div class='review-value'>#{record.get('hold_rank', '—')} of {record.get('legal_hold_count', '—')}</div></div>"
+        f"<div class='review-box'><div class='review-label'>Points Lost</div><div class='review-value'>{loss:.2f}</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    simple_why_items = extract_section(report, "Simple why:")
+    simple_why = simple_why_items[0] if simple_why_items else record.get("simple_why", "")
+    if simple_why:
+        st.markdown(f"**💡 Why this wins:** {simple_why}")
+    if lesson:
+        st.markdown(f"**🧠 Remember:** {lesson}")
+    idea = record.get("adjustment", "")
+    if idea:
+        st.markdown(f"**Try this instead:** {idea}")
+    top_holds = extract_section(report, "Top exact holds:")
+    if top_holds:
+        with st.expander("See the top 3 holds", expanded=False):
             st.markdown("".join(f"<div class='top-hold-line'>{line}</div>" for line in top_holds[:3]), unsafe_allow_html=True)
 
+
+def _daily_review_item(answer):
+    """Compatibility wrapper for a single compact review expander."""
+    record = answer["solver_record"]
+    challenge = answer["challenge"]
+    number = int(challenge.get("daily_number") or 0)
+    loss = float(record.get("points_lost", 0.0) or 0.0)
+    grade = record.get("grade", "") or extract_line(answer["report"], "Grade:")
+    label = f"Q{number} · {grade} · {loss:.2f} points lost"
+    with st.expander(label, expanded=False):
+        _render_daily_review_body(answer)
 
 def render_daily_results():
     answers = st.session_state.daily_answers
@@ -3353,10 +3424,10 @@ def render_daily_results():
     )
     st.markdown(
         "<div class='daily-result-grid'>"
-        f"<div class='daily-result-box'><div class='daily-result-label'>EV Lost</div><div class='daily-result-value'>{summary['total_ev_loss']:.2f}</div><div class='daily-result-sub'>lower is better</div></div>"
-        f"<div class='daily-result-box'><div class='daily-result-label'>Exact</div><div class='daily-result-value'>{summary['exact_count']}/10</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Points Lost</div><div class='daily-result-value'>{summary['total_ev_loss']:.2f}</div><div class='daily-result-sub'>lower is better</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Best Holds</div><div class='daily-result-value'>{summary['exact_count']}/10</div></div>"
         f"<div class='daily-result-box'><div class='daily-result-label'>Group Rank</div><div class='daily-result-value'>{rank_value}</div></div>"
-        f"<div class='daily-result-box'><div class='daily-result-label'>Best Exact Run</div><div class='daily-result-value'>🔥 {summary['best_exact_streak']}</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Best Streak</div><div class='daily-result-value'>🔥 {summary['best_exact_streak']}</div></div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -3386,7 +3457,7 @@ def render_daily_results():
             )
         elif rank is not None:
             st.markdown(
-                f"<div class='daily-rank-banner'><b>You're #{rank} of {completed} today.</b><br>Lowest total EV lost leads the group.</div>",
+                f"<div class='daily-rank-banner'><b>You're #{rank} of {completed} today.</b><br>Lowest Points Lost leads the group.</div>",
                 unsafe_allow_html=True,
             )
         if total_members > 1 and completed < total_members:
@@ -3395,7 +3466,7 @@ def render_daily_results():
         elif total_members > 1 and completed >= total_members:
             st.caption("Everyone's in — final standings for today.")
         if board:
-            st.dataframe(_leaderboard_frame(board), hide_index=True, use_container_width=True)
+            render_leaderboard_cards(board)
 
         toughest = story.get("toughest")
         easiest = story.get("easiest")
@@ -3404,14 +3475,14 @@ def render_daily_results():
             q = toughest["question_number"]
             challenge = challenges[q - 1]
             exact_copy = (
-                "Nobody got it exact."
+                "Nobody found the best hold."
                 if toughest["exact_count"] == 0
-                else f"{toughest['exact_count']}/{toughest['players']} exact."
+                else f"{toughest['exact_count']}/{toughest['players']} found the best hold."
             )
             story_cards.append(
                 "<div class='group-story-card'><div class='story-kicker'>😈 Today's Killer</div>"
                 f"<div class='story-title'>Q{q} · {challenge.get('scenario_name', '')}</div>"
-                f"<div class='story-copy'>{exact_copy} Avg loss: {toughest['avg_loss']:.2f}.</div></div>"
+                f"<div class='story-copy'>{exact_copy} Avg Points Lost: {toughest['avg_loss']:.2f}.</div></div>"
             )
         if easiest:
             q = easiest["question_number"]
@@ -3419,14 +3490,14 @@ def render_daily_results():
             unanimous = easiest["exact_count"] == easiest["players"]
             headline = "🎯 Everyone Nailed It" if unanimous else "🎯 Most Solved"
             exact_copy = (
-                f"All {easiest['players']} players exact."
+                f"All {easiest['players']} players found the best hold."
                 if unanimous
-                else f"{easiest['exact_count']}/{easiest['players']} exact."
+                else f"{easiest['exact_count']}/{easiest['players']} found the best hold."
             )
             story_cards.append(
                 f"<div class='group-story-card'><div class='story-kicker'>{headline}</div>"
                 f"<div class='story-title'>Q{q} · {challenge.get('scenario_name', '')}</div>"
-                f"<div class='story-copy'>{exact_copy} Avg loss: {easiest['avg_loss']:.2f}.</div></div>"
+                f"<div class='story-copy'>{exact_copy} Avg Points Lost: {easiest['avg_loss']:.2f}.</div></div>"
             )
         if story_cards:
             st.markdown("<div class='group-story-grid'>" + "".join(story_cards) + "</div>", unsafe_allow_html=True)
@@ -3435,9 +3506,14 @@ def render_daily_results():
         st.caption("Create or join a friend group to compare Daily results on a shared leaderboard.")
 
     st.markdown("### Review Your 10")
-    st.caption("Tap any question to see the exact hold and coaching.")
-    for answer in answers:
-        _daily_review_item(answer)
+    st.caption("Choose one question at a time to see the best hold and coaching.")
+    review_number = st.selectbox(
+        "Question to review",
+        options=list(range(1, 11)),
+        format_func=lambda q: f"Question {q} · {float(records[q - 1].get('points_lost', 0.0) or 0.0):.2f} Points Lost",
+        key="daily_result_review_question",
+    )
+    _render_daily_review_body(answers[int(review_number) - 1])
 
     st.caption("🔒 Today's Daily is complete. Come back tomorrow for a new set.")
 
@@ -3472,16 +3548,68 @@ def render_daily_mode():
     if st.session_state.get("daily_ready_to_submit"):
         render_daily_submission_review()
         return
-    st.caption(
-        f"🎲 Daily in progress · {_daily_date_label(st.session_state.daily_date_key)} · "
-        f"{len(st.session_state.daily_answers)}/10 saved · You can leave, come back, or use Back before submitting."
-    )
+    st.caption("Your Daily progress saves automatically.")
     render_daily_question()
+
+
+@st.fragment
+def _practice_choice_fragment():
+    """Keep dice taps local to the puzzle controls instead of rerunning the whole app."""
+    challenge = st.session_state.challenge
+    round_id = st.session_state.round_id
+    dice = challenge["dice"]
+    scorecard = challenge["scorecard"]
+    roll_number = challenge["roll_number"]
+    answer_submitted = st.session_state.report is not None
+
+    held_key = f"held_indices_{round_id}"
+    if held_key not in st.session_state:
+        st.session_state[held_key] = []
+    selected_indices = st.pills(
+        "Dice to hold",
+        options=list(range(len(dice))),
+        default=st.session_state.get(held_key, []),
+        format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
+        selection_mode="multi",
+        key=f"dice_pills_{round_id}",
+        label_visibility="collapsed",
+        disabled=answer_submitted,
+    )
+    selected_indices = list(selected_indices or [])
+    st.session_state[held_key] = sorted(selected_indices)
+    selected_hold = selected_hold_from_indices(dice, selected_indices)
+    st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
+
+    if not answer_submitted:
+        if st.button("Submit hold", type="primary", use_container_width=True, key=f"practice_submit_{round_id}"):
+            report, solver_record = build_live_report(dice, scorecard, selected_hold, roll_number)
+            st.session_state.report = report
+            st.session_state.history.append({
+                "scenario": challenge.get("scenario_name", ""),
+                "roll": roll_number,
+                "dice": str(dice),
+                "choice": hold_label(selected_hold),
+                "optimal": extract_line(report, "Optimal choice:"),
+                "grade": extract_line(report, "Grade:"),
+            })
+            solver_record["scenario"] = challenge.get("scenario_name", "")
+            solver_record["bank_version"] = challenge.get("bank_version", "")
+            solver_record["skill_tag"] = challenge.get("skill_tag", "")
+            solver_record["difficulty"] = challenge.get("difficulty", "")
+            solver_record["stage"] = challenge.get("stage", "")
+            solver_record["bonus_status"] = challenge.get("bonus_status", "")
+            solver_record["challenge_id"] = challenge.get("challenge_id", "")
+            solver_record["timestamp_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            before_solver_history = list(st.session_state.solver_history)
+            st.session_state.solver_history.append(solver_record)
+            st.session_state.new_badges = newly_unlocked_badges(before_solver_history, st.session_state.solver_history)
+            st.session_state.scroll_to_result = True
+            st.session_state.scroll_to_top = False
+            st.rerun()
 
 
 def render_practice_mode():
     challenge = st.session_state.challenge
-    round_id = st.session_state.round_id
     history = st.session_state.history
 
     st.markdown(
@@ -3517,9 +3645,7 @@ def render_practice_mode():
         st.session_state.scroll_to_top = False
 
     roll_number = challenge["roll_number"]
-    dice = challenge["dice"]
     scorecard = challenge["scorecard"]
-    answer_submitted = st.session_state.report is not None
     rolls_remaining = int(challenge.get("rolls_remaining", 3 - roll_number))
 
     st.markdown(
@@ -3545,58 +3671,10 @@ def render_practice_mode():
         unsafe_allow_html=True,
     )
 
-    st.markdown("<div class='section-label practice-score-label'>Your scorecard</div>", unsafe_allow_html=True)
     render_scorecard(scorecard)
     st.markdown("<div class='practice-question'>Which dice would you keep?</div>", unsafe_allow_html=True)
-    st.markdown(
-        "<div class='dice-help'>Tap dice to keep them. Leave all five unselected to reroll everything.</div>",
-        unsafe_allow_html=True,
-    )
-
-    held_key = f"held_indices_{round_id}"
-    if held_key not in st.session_state:
-        st.session_state[held_key] = []
-    selected_indices = st.pills(
-        "Dice to hold",
-        options=list(range(len(dice))),
-        default=st.session_state.get(held_key, []),
-        format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
-        selection_mode="multi",
-        key=f"dice_pills_{round_id}",
-        label_visibility="collapsed",
-        disabled=answer_submitted,
-    )
-    selected_indices = list(selected_indices or [])
-    st.session_state[held_key] = sorted(selected_indices)
-    selected_hold = selected_hold_from_indices(dice, selected_indices)
-    st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
-
-    if not answer_submitted:
-        if st.button("Submit hold", type="primary", use_container_width=True):
-            report, solver_record = build_live_report(dice, scorecard, selected_hold, roll_number)
-            st.session_state.report = report
-            st.session_state.history.append({
-                "scenario": challenge.get("scenario_name", ""),
-                "roll": roll_number,
-                "dice": str(dice),
-                "choice": hold_label(selected_hold),
-                "optimal": extract_line(report, "Optimal choice:"),
-                "grade": extract_line(report, "Grade:"),
-            })
-            solver_record["scenario"] = challenge.get("scenario_name", "")
-            solver_record["bank_version"] = challenge.get("bank_version", "")
-            solver_record["skill_tag"] = challenge.get("skill_tag", "")
-            solver_record["difficulty"] = challenge.get("difficulty", "")
-            solver_record["stage"] = challenge.get("stage", "")
-            solver_record["bonus_status"] = challenge.get("bonus_status", "")
-            solver_record["challenge_id"] = challenge.get("challenge_id", "")
-            solver_record["timestamp_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-            before_solver_history = list(st.session_state.solver_history)
-            st.session_state.solver_history.append(solver_record)
-            st.session_state.new_badges = newly_unlocked_badges(before_solver_history, st.session_state.solver_history)
-            st.session_state.scroll_to_result = True
-            st.session_state.scroll_to_top = False
-            st.rerun()
+    st.caption("Tap the dice you want to keep. Leave all five unselected to reroll everything.")
+    _practice_choice_fragment()
 
     if st.session_state.report:
         render_result(st.session_state.report)
@@ -3671,7 +3749,7 @@ if process_pending_group_invite():
     st.rerun()
 render_pending_remember_cookie_command()
 # Install near the top so dice taps stay visually anchored on mobile.
-install_dice_scroll_guard()
+# Dice taps are fragment-scoped in Phase 2K.5, so the old full-rerun scroll guard is no longer needed.
 install_app_shell_metadata()
 st.markdown("<div id='app-top-anchor'></div>", unsafe_allow_html=True)
 st.markdown("<h1 class='top-title'>🎲 Yahtzee Coach</h1>", unsafe_allow_html=True)
