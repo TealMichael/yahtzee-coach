@@ -18,7 +18,7 @@ def run():
         ("Practice leaderboard return uses callback", 'key="practice_to_daily_results"' in app and 'args=("Daily Challenge",)' in app),
         ("unsigned Practice no longer mutates widget state inline", 'if st.button("Open Practice without signing in"' not in app),
         ("completed Daily no longer mutates widget state inline", 'st.session_state.app_mode = "Practice"\n        st.rerun()' not in app),
-        ("Roll clarity remains intact", 'ROLL 1 · First roll' in app and '2 rerolls remaining' in app and 'ROLL 2 · Second roll' in app and '1 reroll remaining' in app),
+        ("Roll clarity remains intact", '🔵 ROLL 1 · First roll · 2 rerolls left' in app and '🟢 ROLL 2 · Second roll · 1 reroll left' in app),
     ]
 
     failed = [name for name, ok in checks if not ok]

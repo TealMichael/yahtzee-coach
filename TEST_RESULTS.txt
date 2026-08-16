@@ -1,63 +1,45 @@
-Yahtzee Coach v43B Phase 2K.5 test summary
+Yahtzee Coach v43B Phase 2K.6.1 test summary
 
-NEW PERFORMANCE + FIFTH-GRADE CLARITY REGRESSION
-- Phase 2K.5 performance/clarity suite: 24/24 passed
-- Daily and Practice dice selectors are fragment-scoped
-- Old full-rerun dice scroll guard is no longer installed
-- Daily save/revise paths no longer perform redundant read-before-write Supabase calls
-- Existing database insert/update guard triggers remain authoritative
-- Completed Daily social data uses the batched group snapshot path
-- Full player-facing scorecard labels are present
-- Main player result language uses Points Lost / Best Holds / Best Streak
-- Daily percent/redundant progress language removed
-- Developer-facing no-hint message removed from the official puzzle screen
-- Final Review and leaderboard render mobile-friendly cards
-- Completed Review Your 10 renders one selected detailed question at a time
-- Practice scenario jargon removed/replaced with simpler language
-- Exact-only official scoring and exact-policy routing protections preserved
+NEW COMPACT DECISION LAYOUT
+- Phase 2K.6.1 compact-layout suite: 14/14 checks passed
+- Full scorecard remains always visible; no expander/click required
+- Duplicate open-category chip row removed from live scorecard
+- Upper scorecard stays 3 columns on phone width
+- Lower scorecard stays 4 columns on phone width
+- Compact labels verified while full names remain available for coaching
+- Upper subtotal / 63 is shown without adding strategy coaching
+- Roll stage is a compact one-line cue
+- Daily and Practice dice prompts are one short line
 
-BROAD REGRESSION
-- 33 current automated test suites passed across the final validation passes.
-- Daily challenge: 11/11 passed
-- Published strategy: 15/15 passed
-- Strategy regression: 26/26 passed
-- Player identity: 14/14 passed
-- Persistent Daily UI: 19/19 passed
-- Social groups: 14/14 passed
-- Sharing: 18/18 passed
-- Practice UI cleanup: 15/15 passed
+FULL REGRESSION
+- All 35 current automated test suites passed individually after the final layout changes
+- Phase 2K.5 performance/clarity: 24/24 passed
+- Phase 2K.6 math hardening: all checks passed
+- Roll clarity: 10/10 passed
 - Practice navigation hotfix: 8/8 passed
+- Practice UI cleanup: 15/15 passed
+- Persistent Daily UI: 19/19 passed
 - Remembered-login reliability: 17/17 passed
 - Persistent-login/performance: 21/21 passed
 - Login autofill hotfix: 10/10 passed
-- Roll clarity: 10/10 passed
-- Beta readiness: 19/19 passed
-- Coaching clarity: 12/12 passed
-- Coaching-language audit passed across 840 real exact-policy positions and 18 coaching families
+- Social groups: 14/14 passed
+- Sharing: 18/18 passed
+- Daily challenge, identity, persistence, beta readiness, UI cleanup, usability, coaching, and puzzle-bank suites all passed
+- Coaching-language audit again passed across 840 real exact-policy positions / 18 coaching families
 
-EXPANDED EXACT VALIDATION
-- 3,669,120 legal hold values audited
-- 20,000 exact public analyses/value lookups
-- 840/840 representative expanded-bank reports routed through exact mode
-- 20,000/20,000 generated Practice rounds exact
+MATH / STRATEGY PROTECTION
+- Exact-policy SHA-256 remains:
+  cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b
+- Phase 2K.6 start-of-game gold-standard expectation remains 254.5877272
+- Published exact-position and dead-upper-bonus safeguards remain active
 
-LOCKED STRATEGY / DATA VERIFICATION
-Byte-for-byte unchanged from Phase 2K.4.2:
-- exact_mode.py
-- yahtzee_engine.py
-- daily_challenge.py
+BYTE-FOR-BYTE UNCHANGED FROM PHASE 2K.6
 - exact_policy.npz
 - puzzle_bank.npz
 - challenge_catalog.npz
-- daily_store.py
-- v43b_schema.sql
-- v43b_phase2e_migration.sql
-- v43b_phase2k4_persistent_login_migration.sql
+- yahtzee_engine.py
+- daily_challenge.py
+- exact_mode.py
+- supabase_daily_store.py
 
-INTENTIONAL SOURCE CHANGES
-- app.py: fragment-scoped interaction, clearer player language, card layouts, one-question review
-- supabase_daily_store.py: fewer redundant network reads and batched group snapshot
-- puzzle_bank.py: presentation text only; scenario selection/generation logic unchanged
-- regression tests updated/added for the intentional UI and performance architecture
-
-No new Supabase migration is required for Phase 2K.5.
+No new Supabase migration is required for Phase 2K.6.1.

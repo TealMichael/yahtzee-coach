@@ -1,3 +1,78 @@
+# Yahtzee Coach v43B Phase 2K.6.1 — Compact Decision Layout
+
+This release keeps the complete strategy-relevant scorecard visible at all times while restoring the compact phone layout. The goal is simple: on a normal phone screen, a player should be able to see the roll stage, every current score/open box, and the decision dice together without opening another panel.
+
+## v43B Phase 2K.6.1 changes
+
+- **The full scorecard is always visible.** No extra tap or collapsed scorecard is introduced; filled scores remain part of every decision.
+- **Removed the duplicate green open-category chip row.** The scorecard itself already shows which boxes are open and, more importantly, the actual scores in filled boxes.
+- **Restored compact scorecard labels.** Upper cards use `1s`–`6s`; Lower uses readable short labels such as `3 Kind`, `4 Kind`, `Full H.`, `Sm Str.`, and `Lg Str.` while full category names remain in coaching/explanations.
+- **Mobile Lower scorecard is back to four columns.** Seven lower boxes fit in two compact rows instead of four tall rows.
+- **Scorecard cards use tighter padding and height** so the full board takes substantially less vertical space.
+- **Upper subtotal is surfaced as `Upper: X / 63`.** This is only arithmetic already visible in the scorecard; it does not tell the player whether to chase or abandon the bonus.
+- **Roll stage is one compact high-visibility line**, e.g. `ROLL 1 · First roll · 2 rerolls left`, preserving the blue/green Roll 1/Roll 2 distinction.
+- **Dice instructions are one short line:** `Which dice would you keep? Tap to select.`
+- Daily now presents the roll stage immediately before the scorecard; Practice uses the same compact decision hierarchy.
+
+## Supabase
+
+**No new Supabase migration is required for Phase 2K.6.1.** If Phase 2K.4 is already deployed, simply upload this full release.
+
+## What is intentionally unchanged
+
+- Exact solver, exact policy, and every recommended hold.
+- Exact-policy fingerprint and Phase 2K.6 fail-closed math hardening.
+- Daily puzzle bank, challenge catalog, Daily generator/composition, and scoring rules.
+- Supabase persistence/social code and the Phase 2K.4 performance improvements.
+- 30-day remembered login and iPhone Returning Player autofill fix.
+- Coaching-language families and Points Lost math.
+
+## Phase 2K.6.1 live-test goals
+
+1. Open a Daily or Practice decision on a phone.
+2. Confirm the roll stage, complete scorecard, and all five decision dice are visible together or with only minimal natural scrolling.
+3. Confirm every filled score is visible without opening a panel.
+4. Check that the abbreviated scorecard labels remain immediately understandable.
+5. Confirm Roll 1 / Roll 2 is still impossible to miss.
+6. Play/save normally and confirm no strategy or persistence behavior changed.
+
+---
+
+# Yahtzee Coach v43B Phase 2K.6 — Exact Strategy Math Hardening
+
+This release does **not** change any recommended Yahtzee hold or regenerate the exact policy. It hardens the app around the already-audited exact strategy so player-facing Daily and Practice coaching can never silently substitute the older heuristic coach.
+
+## v43B Phase 2K.6 changes
+
+- **Daily and Practice are now exact-only.** If the exact policy cannot load or a puzzle is not covered, the app refuses to grade/coach the decision instead of silently substituting heuristic advice.
+- **Practice no longer falls back to the old heuristic-era puzzle generator** if the expanded exact Practice bank fails to load. It shows a retry message instead.
+- **The exact policy is fingerprint-locked.** `exact_policy.npz` must match the audited SHA-256 `cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b`; otherwise exact coaching fails closed.
+- **A start-of-game gold-standard regression was added.** The packaged policy reconstructs an expected optimal starting score of **254.587727**, matching the published ~254.59 optimal benchmark.
+- **Published exact-position benchmarks are now checked directly against `exact_policy.npz`**, including the well-known 11666, 11346, and 11236 decisions.
+- The live beta dead-upper-bonus regression remains protected: `1,1,3,3,6` on Roll 1 with the bonus mathematically dead still prefers **keep 6**, with **keep 3,3 about 1.94 points behind**.
+- The existing float32 policy remains unchanged. The audit still identifies 3,135 tied-best state/roll records within the app's `1e-5` tie tolerance; tied alternatives remain treated as 0 Points Lost.
+
+## Supabase
+
+**No new Supabase migration is required for Phase 2K.6.** If Phase 2K.4 is already deployed, simply upload this full release.
+
+## What is intentionally unchanged
+
+- Every exact-policy value and recommended hold.
+- `exact_policy.npz`, `puzzle_bank.npz`, and `challenge_catalog.npz`.
+- Daily puzzle generation/composition.
+- The Yahtzee engine's historical heuristic code (it remains available only for legacy regression tooling, not player-facing Daily/Practice routing).
+- Friend groups, persistence, remembered login, scoring/ranking rules, UI, and coaching-language families.
+
+## Phase 2K.6 live-test goals
+
+1. Play a few Daily and Practice decisions normally; recommendations/results should look unchanged.
+2. Confirm Practice still opens quickly and gives normal instant coaching.
+3. Confirm Daily still saves/resumes normally.
+4. No player should ever see heuristic advice if the exact policy is unavailable; the app should instead show an exact-strategy-unavailable message.
+
+---
+
 # Yahtzee Coach v43B Phase 2K.5 — Performance + Fifth-Grade Clarity
 
 This release is a focused performance and player-clarity pass. It does not add a new game mode or change the exact Yahtzee strategy. Instead, it makes the existing Daily and Practice experience faster to interact with, easier to scan on a phone, and easier for younger players to understand.

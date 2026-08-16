@@ -2,13 +2,14 @@ from __future__ import annotations
 
 """Fast exact-policy lookup and personalized coach-report generation for Yahtzee Coach v42.5.
 
-The heavy dynamic-programming solve is performed offline.  The live app only
-loads a compact policy table and performs indexed lookups.  If a scorecard is
-not present in the packaged policy, the Streamlit app falls back to the legacy
-heuristic coach rather than failing.
+The heavy dynamic-programming solve is performed offline. The live app only
+loads a compact policy table and performs indexed lookups. Player-facing Daily
+and Practice coaching require the exact policy; the legacy fallback helpers at
+the bottom of this module remain only for historical compatibility/tests.
 """
 
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
 from time import perf_counter
 from typing import Mapping, Sequence
@@ -22,6 +23,33 @@ CATEGORIES: tuple[str, ...] = (
 )
 
 TIE_TOLERANCE = 1e-5
+
+# Known-good v43B exact-policy artifact. Any intentional policy regeneration
+# must update this fingerprint explicitly after the math audit passes.
+EXPECTED_EXACT_POLICY_SHA256 = "cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b"
+
+
+def exact_policy_sha256(path: str | Path) -> str:
+    path = Path(path)
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_exact_policy_fingerprint(
+    path: str | Path,
+    expected: str = EXPECTED_EXACT_POLICY_SHA256,
+) -> str:
+    """Fail closed if the packaged exact policy is not the audited artifact."""
+    actual = exact_policy_sha256(path)
+    if actual.lower() != str(expected).lower():
+        raise RuntimeError(
+            "Exact policy integrity check failed. "
+            f"Expected {expected}, got {actual}."
+        )
+    return actual
 
 
 def canonical(values: Sequence[int]) -> tuple[int, ...]:
@@ -1286,6 +1314,57 @@ def build_exact_report(
     return "\n".join(report), metadata
 
 
+def build_exact_live_report(
+    policy: ExactPolicyTable,
+    *,
+    dice: Sequence[int],
+    scorecard: Mapping[str, int | None],
+    user_hold: Sequence[int],
+    roll_number: int,
+) -> tuple[str, dict]:
+    """Exact-only player-facing report router. Never substitutes heuristic advice."""
+    try:
+        return build_exact_report(
+            policy,
+            dice=dice,
+            scorecard=scorecard,
+            user_hold=user_hold,
+            roll_number=roll_number,
+        )
+    except Exception as exc:
+        return "", {
+            "source": "exact_unavailable",
+            "available": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+
+def build_exact_live_report_from_loader(
+    policy_loader,
+    *,
+    dice: Sequence[int],
+    scorecard: Mapping[str, int | None],
+    user_hold: Sequence[int],
+    roll_number: int,
+) -> tuple[str, dict]:
+    """Exact-only router that fails closed if the policy cannot load."""
+    try:
+        policy = policy_loader()
+    except Exception as exc:
+        return "", {
+            "source": "exact_unavailable",
+            "available": False,
+            "error": f"policy_load_error: {type(exc).__name__}: {exc}",
+        }
+    return build_exact_live_report(
+        policy,
+        dice=dice,
+        scorecard=scorecard,
+        user_hold=user_hold,
+        roll_number=roll_number,
+    )
+
+
 def build_live_report_with_fallback(
     policy: ExactPolicyTable,
     *,
@@ -1295,10 +1374,10 @@ def build_live_report_with_fallback(
     roll_number: int,
     legacy_report_factory,
 ) -> tuple[str, dict]:
-    """Exact-first report router with a safe legacy fallback.
+    """Legacy compatibility router. The player-facing app does not call this.
 
-    Kept outside Streamlit so the exact/fallback integration can be tested
-    exhaustively without launching the web app.
+    Kept only so older regression tooling can compare historic behavior.
+    New Daily/Practice code must use build_exact_live_report instead.
     """
     try:
         return build_exact_report(
@@ -1326,7 +1405,7 @@ def build_live_report_from_loader(
     roll_number: int,
     legacy_report_factory,
 ) -> tuple[str, dict]:
-    """Exact-first router that also survives policy-file load failures."""
+    """Legacy compatibility loader. The player-facing app does not call this."""
     try:
         policy = policy_loader()
     except Exception as exc:

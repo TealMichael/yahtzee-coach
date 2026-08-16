@@ -9,7 +9,9 @@ import pandas as pd
 import streamlit.components.v1 as components
 
 import yahtzee_engine as yc
-from exact_mode import ExactPolicyTable, build_live_report_from_loader
+from exact_mode import (
+    ExactPolicyTable, build_exact_live_report_from_loader, verify_exact_policy_fingerprint,
+)
 from session_learning import build_session_learning_summary
 from practice_progress import build_practice_progress, newly_unlocked_badges
 from puzzle_bank import generate_practice_challenge as generate_expanded_practice_challenge
@@ -25,7 +27,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.5"
+APP_RELEASE = "v43B Phase 2K.6.1"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
@@ -189,20 +191,21 @@ CATEGORY_SHORT = {
     "chance": "CH",
 }
 
-# Player-facing scorecard labels favor clarity over abbreviations. The shorter
-# CATEGORY_SHORT names remain available for compact/internal contexts.
+# The live decision scorecard must stay compact enough that the full game state
+# and the dice can share one phone screen. Full category names remain available
+# everywhere else through CATEGORY_DISPLAY.
 CATEGORY_SCORECARD = {
-    "ones": "Ones",
-    "twos": "Twos",
-    "threes": "Threes",
-    "fours": "Fours",
-    "fives": "Fives",
-    "sixes": "Sixes",
-    "three_of_a_kind": "Three of a Kind",
-    "four_of_a_kind": "Four of a Kind",
-    "full_house": "Full House",
-    "small_straight": "Small Straight",
-    "large_straight": "Large Straight",
+    "ones": "1s",
+    "twos": "2s",
+    "threes": "3s",
+    "fours": "4s",
+    "fives": "5s",
+    "sixes": "6s",
+    "three_of_a_kind": "3 Kind",
+    "four_of_a_kind": "4 Kind",
+    "full_house": "Full H.",
+    "small_straight": "Sm Str.",
+    "large_straight": "Lg Str.",
     "yahtzee": "Yahtzee",
     "chance": "Chance",
 }
@@ -235,7 +238,8 @@ EXACT_POLICY_PATH = Path(__file__).with_name("exact_policy.npz")
 
 @st.cache_resource(show_spinner=False)
 def load_exact_policy():
-    """Load the precomputed exact policy once per Streamlit process."""
+    """Load only the audited exact-policy artifact; fail closed on any mismatch."""
+    verify_exact_policy_fingerprint(EXACT_POLICY_PATH)
     return ExactPolicyTable(EXACT_POLICY_PATH)
 
 
@@ -251,16 +255,13 @@ def solver_debug_enabled():
 
 
 def build_live_report(dice, scorecard, selected_hold, roll_number):
-    """Use exact strategy when available; safely fall back to the legacy coach."""
-    return build_live_report_from_loader(
+    """Player-facing coaching is exact-only; never substitute heuristic advice."""
+    return build_exact_live_report_from_loader(
         load_exact_policy,
         dice=dice,
         scorecard=scorecard,
         user_hold=selected_hold,
         roll_number=roll_number,
-        legacy_report_factory=lambda d, s, h, r: yc.coach_report_for_user_hold_by_roll_number(
-            d, s, h, roll_number=r
-        ),
     )
 
 
@@ -271,14 +272,14 @@ def render_solver_panel(records):
 
     with st.expander("Exact solver diagnostics", expanded=False):
         st.caption(
-            "Exact mode is the primary strategy engine. The legacy coach is used only if an exact lookup fails."
+            "Daily and Practice require the audited exact policy. Heuristic fallback is disabled."
         )
         if not records:
             st.info("No submitted puzzles in this session yet.")
             return
 
         exact_count = sum(item.get("source") == "exact" for item in records)
-        fallback_count = sum(item.get("source") == "legacy_fallback" for item in records)
+        unavailable_count = sum(item.get("source") == "exact_unavailable" for item in records)
         exact_records = [item for item in records if item.get("source") == "exact"]
         avg_lookup = (
             sum(float(item.get("lookup_ms", 0.0)) for item in exact_records) / len(exact_records)
@@ -287,7 +288,7 @@ def render_solver_panel(records):
 
         col1, col2, col3 = st.columns(3)
         col1.metric("Exact", exact_count)
-        col2.metric("Fallbacks", fallback_count)
+        col2.metric("Unavailable", unavailable_count)
         col3.metric("Avg exact lookup", f"{avg_lookup:.3f} ms")
 
         frame = pd.DataFrame(records)
@@ -385,29 +386,37 @@ st.markdown(
     .session-label { color:#6b7280; font-size:0.78rem; margin-bottom:0.1rem; }
     .session-value { font-size:1.24rem; font-weight:900; line-height:1.1; }
 
-    .open-chip-row { display:flex; flex-wrap:wrap; gap:0.28rem; margin:0.2rem 0 0.45rem 0; }
-    .open-chip {
-        border-radius:999px;
-        background:#e6f4ea;
-        border:1px solid #ceead6;
-        color:#137333;
-        font-size:0.76rem;
-        font-weight:800;
-        padding:0.2rem 0.46rem;
+    .scorecard-heading {
+        display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem;
+        margin:0.34rem 0 0.12rem 0;
     }
-    .score-section-title { font-weight:900; margin:0.45rem 0 0.3rem 0; }
-    .score-grid { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:0.32rem; }
+    .scorecard-heading-main {
+        color:#6b7280; font-size:0.74rem; text-transform:uppercase;
+        letter-spacing:0.055em; font-weight:900;
+    }
+    .scorecard-heading-sub { color:#64748b; font-size:0.70rem; font-weight:800; }
+    .score-section-head {
+        display:flex; justify-content:space-between; align-items:baseline;
+        font-weight:900; margin:0.20rem 0 0.12rem 0; font-size:0.82rem;
+    }
+    .score-section-note { color:#64748b; font-size:0.68rem; font-weight:800; }
+    .score-grid { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:0.22rem; }
     .score-grid.lower { grid-template-columns:repeat(4, minmax(0,1fr)); }
     .score-box {
         border:1px solid rgba(127,127,127,0.22);
-        border-radius:12px;
-        padding:0.38rem 0.2rem;
+        border-radius:10px;
+        padding:0.22rem 0.12rem;
         background:rgba(255,255,255,0.78);
         text-align:center;
-        min-height:2.85rem;
+        min-height:2.15rem;
+        display:flex; flex-direction:column; justify-content:center;
     }
-    .score-label { font-size:0.68rem; color:#6b7280; margin-bottom:0.1rem; white-space:normal; line-height:1.08; min-height:1.45rem; display:flex; align-items:end; justify-content:center; }
-    .score-value { font-size:0.92rem; font-weight:900; }
+    .score-label {
+        font-size:0.63rem; color:#6b7280; margin-bottom:0.03rem;
+        white-space:nowrap; line-height:1.0; min-height:0;
+        display:block;
+    }
+    .score-value { font-size:0.84rem; font-weight:900; line-height:1.05; }
     .open-value { color:#188038; }
     .filled-value { color:#3c4043; }
 
@@ -900,11 +909,11 @@ st.markdown(
         .session-strip { grid-template-columns:repeat(2, minmax(0, 1fr)); }
         .session-box { padding:0.52rem 0.35rem; }
         .session-value { font-size:1.08rem; }
-        .score-grid { grid-template-columns:repeat(3, minmax(0,1fr)); }
-        .score-grid.lower { grid-template-columns:repeat(4, minmax(0,1fr)); }
-        .score-box { min-height:2.65rem; padding:0.32rem 0.16rem; }
-        .score-label { font-size:0.66rem; }
-        .score-value { font-size:0.86rem; }
+        .score-grid { grid-template-columns:repeat(3, minmax(0,1fr)); gap:0.20rem; }
+        .score-grid.lower { grid-template-columns:repeat(4, minmax(0,1fr)); gap:0.20rem; }
+        .score-box { min-height:2.05rem; padding:0.18rem 0.08rem; border-radius:9px; }
+        .score-label { font-size:0.61rem; }
+        .score-value { font-size:0.81rem; }
         .grade-badge { font-size:1.8rem; min-width:4rem; }
         .result-mini { grid-template-columns:1fr; }
         .idea-grid { grid-template-columns:1fr; }
@@ -930,8 +939,7 @@ st.markdown(
     .leaderboard-score b { display:block; color:#111827 !important; font-size:0.93rem; }
     @media (max-width:640px) {
         .daily-review-grid { grid-template-columns:1fr; }
-        .score-grid.lower { grid-template-columns:repeat(2, minmax(0,1fr)); }
-        .score-box { min-height:3.05rem; }
+        .score-grid.lower { grid-template-columns:repeat(4, minmax(0,1fr)); }
     }
 
     /* v41 — result hierarchy and mobile-first coaching polish. */
@@ -1429,16 +1437,15 @@ def new_round(scroll_to_top=False):
             avoid_recent_scenarios=recent_scenarios[-4:],
             avoid_recent_signatures=recent_signatures[-8:],
         )
-    except Exception:
-        # Safety fallback: v42's original practice deck remains available if the
-        # expanded bank cannot load for any reason.
-        try:
-            challenge = yc.generate_practice_challenge(
-                avoid_recent_scenarios=recent_scenarios[-4:],
-                avoid_recent_signatures=recent_signatures[-8:],
-            )
-        except TypeError:
-            challenge = yc.generate_practice_challenge()
+        st.session_state.practice_bank_error = None
+    except Exception as exc:
+        # Fail closed: do not silently swap in the older heuristic-era practice deck.
+        st.session_state.challenge = None
+        st.session_state.practice_bank_error = f"{type(exc).__name__}: {exc}"
+        st.session_state.report = None
+        st.session_state.scroll_to_result = False
+        st.session_state.scroll_to_top = scroll_to_top
+        return False
 
     st.session_state.challenge = challenge
 
@@ -1456,6 +1463,7 @@ def new_round(scroll_to_top=False):
     st.session_state.new_badges = []
     # Reset held dice for the new round.
     st.session_state[f"held_indices_{st.session_state.round_id}"] = []
+    return True
 
 
 def initialize_state():
@@ -1480,13 +1488,18 @@ def initialize_state():
 
 
 def render_scorecard(scorecard):
-    st.markdown("<div class='section-label'>Current scorecard</div>", unsafe_allow_html=True)
-    st.markdown(open_chips_html(scorecard), unsafe_allow_html=True)
-    with st.expander("Full scorecard", expanded=True):
-        st.markdown("<div class='score-section-title'>Upper</div>", unsafe_allow_html=True)
-        st.markdown(score_grid_html(scorecard, UPPER_CATEGORIES), unsafe_allow_html=True)
-        st.markdown("<div class='score-section-title'>Lower</div>", unsafe_allow_html=True)
-        st.markdown(score_grid_html(scorecard, LOWER_CATEGORIES, lower=True), unsafe_allow_html=True)
+    """Render the complete decision scorecard without hiding strategy-relevant scores."""
+    upper_total = sum(int(scorecard.get(category) or 0) for category in UPPER_CATEGORIES)
+    st.markdown(
+        "<div class='scorecard-heading'>"
+        "<span class='scorecard-heading-main'>Scorecard</span>"
+        f"<span class='scorecard-heading-sub'>Upper: {upper_total} / 63</span>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(score_grid_html(scorecard, UPPER_CATEGORIES), unsafe_allow_html=True)
+    st.markdown("<div class='score-section-head'><span>Lower</span></div>", unsafe_allow_html=True)
+    st.markdown(score_grid_html(scorecard, LOWER_CATEGORIES, lower=True), unsafe_allow_html=True)
 
 
 
@@ -1832,17 +1845,17 @@ st.markdown(
     .daily-lock-note { color:#6b7280; font-size:0.78rem; text-align:center; margin:0.3rem 0 0.15rem 0; }
     .daily-flash { border:1px solid #bbf7d0; background:#f0fdf4; color:#166534 !important; border-radius:12px; padding:0.46rem 0.62rem; font-weight:800; font-size:0.82rem; margin:0.3rem 0; }
     .daily-roll-stage {
-        border-radius:16px;
-        padding:0.68rem 0.78rem;
-        margin:0.38rem 0 0.52rem 0;
+        border-radius:13px;
+        padding:0.38rem 0.58rem;
+        margin:0.26rem 0 0.30rem 0;
         text-align:center;
         border:2px solid transparent;
-        box-shadow:0 2px 8px rgba(0,0,0,0.04);
+        box-shadow:0 1px 5px rgba(0,0,0,0.035);
     }
     .daily-roll-stage.roll-1 { background:#eff6ff; border-color:#93c5fd; color:#1d4ed8 !important; }
     .daily-roll-stage.roll-2 { background:#f0fdf4; border-color:#86efac; color:#15803d !important; }
-    .daily-roll-stage-title { font-size:1.08rem; font-weight:950; letter-spacing:.015em; line-height:1.05; }
-    .daily-roll-stage-sub { font-size:.82rem; font-weight:800; margin-top:.18rem; opacity:.9; }
+    .daily-roll-stage-title { font-size:0.92rem; font-weight:950; letter-spacing:.008em; line-height:1.05; }
+    .daily-roll-stage-sub { display:none; }
     .daily-result-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.4rem; margin:0.6rem 0; }
     .daily-result-box { border:1px solid rgba(127,127,127,.22); border-radius:15px; background:#f8fafc; padding:0.58rem 0.42rem; text-align:center; color:#111827 !important; }
     .daily-result-label { color:#6b7280 !important; font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.035em; }
@@ -3019,8 +3032,7 @@ def _daily_choice_fragment():
     challenge = challenges[index]
     dice = challenge["dice"]
 
-    st.markdown("<div class='section-label'>Tap the dice you want to keep</div>", unsafe_allow_html=True)
-    st.caption("Your choice saves when you move forward. You can come back and change it before final submit.")
+    st.markdown("<div class='practice-question'>Which dice would you keep? <span class='muted'>Tap to select.</span></div>", unsafe_allow_html=True)
 
     held_key, pills_key = _daily_widget_keys(index)
     if held_key not in st.session_state:
@@ -3101,16 +3113,15 @@ def render_daily_question():
         st.markdown(f"<div class='daily-flash'>✓ {flash}</div>", unsafe_allow_html=True)
         st.session_state.daily_flash = ""
 
-    render_scorecard(challenge["scorecard"])
     roll_number = int(challenge["roll_number"])
     if roll_number == 1:
         roll_stage_class = "roll-1"
-        roll_stage_title = "🔵 ROLL 1 · First roll"
-        roll_stage_sub = "2 rerolls remaining"
+        roll_stage_title = "🔵 ROLL 1 · First roll · 2 rerolls left"
+        roll_stage_sub = ""
     else:
         roll_stage_class = "roll-2"
-        roll_stage_title = "🟢 ROLL 2 · Second roll"
-        roll_stage_sub = "1 reroll remaining"
+        roll_stage_title = "🟢 ROLL 2 · Second roll · 1 reroll left"
+        roll_stage_sub = ""
     st.markdown(
         f"<div class='daily-roll-stage {roll_stage_class}'>"
         f"<div class='daily-roll-stage-title'>{roll_stage_title}</div>"
@@ -3118,6 +3129,7 @@ def render_daily_question():
         "</div>",
         unsafe_allow_html=True,
     )
+    render_scorecard(challenge["scorecard"])
 
     _daily_choice_fragment()
 
@@ -3583,6 +3595,9 @@ def _practice_choice_fragment():
     if not answer_submitted:
         if st.button("Submit hold", type="primary", use_container_width=True, key=f"practice_submit_{round_id}"):
             report, solver_record = build_live_report(dice, scorecard, selected_hold, roll_number)
+            if solver_record.get("source") != "exact":
+                st.error("Exact strategy is temporarily unavailable. This puzzle was not graded. Please try another puzzle.")
+                return
             st.session_state.report = report
             st.session_state.history.append({
                 "scenario": challenge.get("scenario_name", ""),
@@ -3609,7 +3624,7 @@ def _practice_choice_fragment():
 
 
 def render_practice_mode():
-    challenge = st.session_state.challenge
+    challenge = st.session_state.get("challenge")
     history = st.session_state.history
 
     st.markdown(
@@ -3619,6 +3634,30 @@ def render_practice_mode():
         "</div>",
         unsafe_allow_html=True,
     )
+
+    if challenge is None:
+        st.error("Exact Practice is temporarily unavailable. No heuristic coaching will be substituted.")
+        if st.button("Try loading a Practice puzzle again", type="primary", use_container_width=True):
+            new_round(scroll_to_top=False)
+            st.rerun()
+        if solver_debug_enabled() and st.session_state.get("practice_bank_error"):
+            st.caption(st.session_state.get("practice_bank_error"))
+        return
+
+    # Before showing a Practice puzzle, prove that the audited exact policy can
+    # evaluate this exact scorecard/roll. If not, fail closed rather than coach
+    # from the legacy heuristic engine.
+    try:
+        exact_policy = load_exact_policy()
+        exact_policy.best_hold(challenge["scorecard"], challenge["dice"], challenge["roll_number"])
+    except Exception as exc:
+        st.error("Exact strategy is temporarily unavailable. No heuristic coaching will be substituted.")
+        if st.button("Try another exact Practice puzzle", type="primary", use_container_width=True):
+            new_round(scroll_to_top=False)
+            st.rerun()
+        if solver_debug_enabled():
+            st.caption(f"{type(exc).__name__}: {exc}")
+        return
 
     if st.session_state.get("daily_completed") and len(st.session_state.get("daily_answers", [])) >= 10:
         st.button(
@@ -3664,16 +3703,14 @@ def render_practice_mode():
     st.markdown(
         f"""
         <div class='daily-roll-stage {roll_class}'>
-            <div class='daily-roll-stage-title'>🎲 ROLL {roll_number} · {roll_label}</div>
-            <div class='daily-roll-stage-sub'>{rolls_remaining} {reroll_word} remaining</div>
+            <div class='daily-roll-stage-title'>🎲 ROLL {roll_number} · {roll_label} · {rolls_remaining} {reroll_word} left</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
     render_scorecard(scorecard)
-    st.markdown("<div class='practice-question'>Which dice would you keep?</div>", unsafe_allow_html=True)
-    st.caption("Tap the dice you want to keep. Leave all five unselected to reroll everything.")
+    st.markdown("<div class='practice-question'>Which dice would you keep? <span class='muted'>Tap to select.</span></div>", unsafe_allow_html=True)
     _practice_choice_fragment()
 
     if st.session_state.report:

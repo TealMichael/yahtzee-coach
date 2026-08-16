@@ -15,7 +15,7 @@ def run():
         ('Scenario remains visible before the decision', 'practice-scenario' in practice and 'practice-description' in practice),
         ('Practice uses the same strong Roll 1/Roll 2 cue', 'daily-roll-stage' in practice and 'roll_label = "First roll"' in practice and 'reroll_word' in practice and 'remaining' in practice),
         ('Scorecard remains above dice decision', practice.find('render_scorecard(scorecard)') < practice.find('Which dice would you keep?')),
-        ('Dice instructions are simplified', 'Tap the dice you want to keep. Leave all five unselected to reroll everything.' in practice),
+        ('Dice instructions are simplified', "Which dice would you keep? <span class='muted'>Tap to select.</span>" in practice),
         ('Primary answer action remains Submit hold', 'Submit hold' in practice),
         ('Coach result remains immediate after submit', 'render_result(st.session_state.report)' in practice),
         ('Next puzzle is the primary post-coaching action', 'Next Practice Puzzle →' in practice and practice.find('Next Practice Puzzle →') < practice.find('See my practice progress')),

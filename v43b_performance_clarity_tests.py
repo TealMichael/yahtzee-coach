@@ -23,7 +23,7 @@ def run():
     score_box = section(app, "def score_box_html", "def score_grid_html")
 
     checks = [
-        ("release is Phase 2K.5", 'APP_RELEASE = "v43B Phase 2K.5"' in app),
+        ("release is Phase 2K.6.1", 'APP_RELEASE = "v43B Phase 2K.6.1"' in app),
         ("Daily dice controls are fragment-scoped", "@st.fragment\ndef _daily_choice_fragment" in app),
         ("Practice dice controls are fragment-scoped", "@st.fragment\ndef _practice_choice_fragment" in app),
         ("old full-rerun dice guard is no longer installed", app.count("install_dice_scroll_guard()") == 1),
@@ -35,8 +35,8 @@ def run():
         ("database update trigger remains authoritative", "guard_daily_answer_update" in phase2e and "Completed Daily answers cannot be changed" in phase2e),
         ("batched group result snapshot exists", "def group_daily_snapshot" in store),
         ("live result UI uses batched group snapshot", "_cached_group_daily_snapshot" in app and 'snapshot.get("question_stats"' in app),
-        ("full scorecard spells out lower categories", '"three_of_a_kind": "Three of a Kind"' in app and '"small_straight": "Small Straight"' in app and "CATEGORY_SCORECARD.get" in score_box),
-        ("lower scorecard uses readable mobile grid", ".score-grid.lower { grid-template-columns:repeat(2" in app),
+        ("decision scorecard uses compact readable labels", '"three_of_a_kind": "3 Kind"' in app and '"small_straight": "Sm Str."' in app and "CATEGORY_SCORECARD.get" in score_box),
+        ("lower scorecard stays four columns on mobile", app.count(".score-grid.lower { grid-template-columns:repeat(4") >= 2),
         ("main Daily metric says Points Lost", "Points Lost" in results and "EV Lost" not in results),
         ("main Daily result says Best Holds", "Best Holds" in results and "Best Streak" in results),
         ("Daily puzzle removes developer-facing no-hint card", "No strategy label or difficulty hint is shown during the official run." not in app),

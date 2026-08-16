@@ -43,7 +43,7 @@ def run():
 
     app_text = (ROOT / "app.py").read_text()
     checks.append(("Daily Challenge is first/default mode", 'options=["Daily Challenge", "Practice", "📲 Add to Home Screen"]' in app_text and 'st.session_state.app_mode = "Daily Challenge"' in app_text))
-    checks.append(("daily answers hide strategy hints", 'No strategy label or difficulty hint is shown during the official run.' not in app_text and 'Tap the dice you want to keep' in app_text))
+    checks.append(("daily answers hide strategy hints", 'No strategy label or difficulty hint is shown during the official run.' not in app_text and 'Which dice would you keep?' in app_text))
     checks.append(("visible segmented Daily progress bar", "daily-progress-copy" in app_text and "Question {index + 1} of 10" in app_text and "daily-progress-percent" not in app_text))
     checks.append(("intro summary boxes removed", "<div class='review-label'>Format</div>" not in app_text and "<div class='review-label'>Reset</div>" not in app_text))
     checks.append(("Daily results link back to Practice", "Go to open Practice" in app_text and "on_click=_set_app_mode" in app_text and 'args=("Practice",)' in app_text))
