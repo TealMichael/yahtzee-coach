@@ -1,3 +1,28 @@
+# Yahtzee Coach v43B Phase 2K.8.2 — Share Placement Hotfix
+
+This is a surgical UI hotfix on top of Phase 2K.8.1. The spoiler-free share feature is unchanged; it is simply moved to a more natural and visible location directly beneath the player's personal Daily result summary.
+
+## v43B Phase 2K.8.2 changes
+
+- **Share today’s result now appears immediately below the personal result hero** and before Daily Standings.
+- The intended flow is now: **Your Result → Share → Daily Standings → Group Insights → Your 10 Grades → Peek at a Friend’s Picks → Invite/manage friends.**
+- **The share card itself is unchanged:** same spoiler-free grid, same native Share / Copy result behavior, same text payload, and same group-rank information.
+- **Nothing else in the completed-Daily UI was changed.** The cleaned-up leaderboard, Group Insights, compact personal grades, lightweight friend peek, and yesterday podium all remain exactly as in Phase 2K.8.1.
+- **No strategy, persistence, login, leaderboard-ranking, puzzle, or database behavior changed.**
+
+## Supabase
+
+**No new Supabase migration is required.** Phase 2K.4 remains the latest required database migration.
+
+## Phase 2K.8.2 live-test goal
+
+1. Finish a Daily and confirm **📤 Share today's result** is easy to find immediately beneath your result summary.
+2. Confirm Daily Standings still follows directly after Share.
+3. Confirm the existing share text/grid behaves exactly as before.
+4. Confirm Group Insights, Your 10 Grades, friend peek, and invite/manage remain in their Phase 2K.8.1 positions.
+
+---
+
 # Yahtzee Coach v43B Phase 2K.8.1 — Daily Results Social UI Cleanup
 
 This hotfix keeps the new Phase 2K.8 yesterday-podium feature but completely cleans up the completed-Daily social/results screen before the next Daily. The goal is simple: **standings first, group story second, your own grades third, optional friend curiosity last.**

@@ -27,7 +27,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.8.1"
+APP_RELEASE = "v43B Phase 2K.8.2"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
@@ -3824,6 +3824,10 @@ def render_daily_results():
     if streak_copy:
         st.caption(streak_copy)
 
+    # Share belongs with the player's result: see how you did, share it, then see the group.
+    with st.expander("📤 Share today's result", expanded=False):
+        render_daily_share_result(records, summary, rank=rank, completed_count=len(board))
+
     # 1. Daily standings — clean scoreboard first, with no review controls inside it.
     st.markdown("### 🏆 Daily Standings")
     if active_group is not None:
@@ -3887,10 +3891,6 @@ def render_daily_results():
     st.caption("Tap a question to open the full coaching for that decision.")
     for answer in answers:
         _daily_review_item(answer)
-
-    # Sharing stays available, but no longer interrupts the standings/review hierarchy.
-    with st.expander("📤 Share today's result", expanded=False):
-        render_daily_share_result(records, summary, rank=rank, completed_count=len(board))
 
     # 4. Optional social curiosity — deliberately separated at the bottom.
     if active_group is not None and board:

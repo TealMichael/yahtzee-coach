@@ -31,7 +31,7 @@ def run():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
 
     checks = [
-        ('APP_RELEASE = "v43B Phase 2K.8.1"' in app, "release advances to Phase 2K.8"),
+        ('APP_RELEASE = "v43B Phase 2K.8.2"' in app, "release advances to Phase 2K.8"),
         ("Yesterday's Final Standings" in app, "new-day recap is clearly labeled as final standings"),
         ("_previous_daily_date_key" in app and "timedelta(days=1)" in app, "recap resolves the prior Eastern Daily date"),
         ("_challenge_set_id_for_date(yesterday)" in app, "yesterday's deterministic challenge id is used for standings"),

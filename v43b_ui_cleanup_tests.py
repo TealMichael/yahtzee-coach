@@ -35,7 +35,7 @@ def run():
         ("Daily intro removes prototype/version badges", "prototype-badge" not in intro and "v43B" not in intro and "official attempt" not in intro),
         ("completed hero removes saved/progress implementation chatter", "Challenge ID" not in results and "10/10 submitted" not in results and "100% saved" not in results),
         ("completed social hierarchy is standings then insights then own grades", standings_pos < insights_pos < review_pos),
-        ("sharing and friend peek stay below own grades", review_pos < share_pos < peek_pos < manage_pos),
+        ("share sits with the result while friend peek stays below own grades", share_pos < standings_pos < insights_pos < review_pos < peek_pos < manage_pos),
         ("Your 10 Grades is above Invite & manage friends", review_pos < manage_pos and "👥 Invite & manage friends" in app),
         ("share card is compact by default", "Preview shared result" in share and "white-space:normal" not in share),
         ("completed lock copy is human-facing", "Today's Daily is complete. Come back tomorrow for a new set." in results),
