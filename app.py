@@ -1,7 +1,7 @@
 import re
 import html
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import streamlit as st
@@ -27,11 +27,12 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.6.1.1"
+APP_RELEASE = "v43B Phase 2K.8"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
+YESTERDAY_RESULTS_STORAGE_PREFIX = "yc_yesterday_results_seen_v1"
 REMEMBER_DEVICE_DAYS = 30
 REMEMBER_COOKIE_MAX_AGE = REMEMBER_DEVICE_DAYS * 24 * 60 * 60
 APP_ICON_192_PATH = Path(__file__).with_name("home_icon_192.png")
@@ -80,6 +81,43 @@ _remember_storage_component = st.components.v2.component(
 )
 
 
+# Phase 2K.8: remember whether this player has already viewed the previous day's
+# final standings on this browser. This is intentionally browser-local rather
+# than a new Supabase table: it prevents repeated ceremonies during ordinary
+# reopen/refresh behavior without changing any gameplay or scoring schema.
+_yesterday_results_storage_component = st.components.v2.component(
+    "yahtzee_yesterday_results_storage",
+    html="<span aria-hidden='true'></span>",
+    css=":host { display: none !important; height: 0 !important; }",
+    js=r"""
+    export default function({ data, setStateValue }) {
+      const key = data?.storage_key || "";
+      const action = data?.action || "read";
+      const value = data?.value || "";
+      const nonce = data?.nonce || "";
+      let stored = "";
+      try {
+        if (key) {
+          if (action === "set" && value) {
+            window.localStorage.setItem(key, value);
+          } else if (action === "delete") {
+            window.localStorage.removeItem(key);
+          }
+          stored = window.localStorage.getItem(key) || "";
+        }
+      } catch (err) {
+        stored = "";
+      }
+      setStateValue("payload", JSON.stringify({
+        value: stored,
+        ready: true,
+        ack: nonce
+      }));
+    }
+    """,
+)
+
+
 @st.cache_resource(show_spinner=False)
 def load_daily_store():
     """Create the v43B Supabase store from private Streamlit secrets."""
@@ -112,6 +150,14 @@ def _cached_group_daily_snapshot(group_id: str, challenge_id: str):
     return load_daily_store().group_daily_snapshot(str(group_id), str(challenge_id))
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_group_player_daily_review(group_id: str, challenge_id: str, viewer_player_id: str, target_player_id: str):
+    """Fetch one completed friend's immutable Daily choices after the viewer finishes."""
+    return load_daily_store().group_player_daily_review(
+        str(group_id), str(challenge_id), str(viewer_player_id), str(target_player_id)
+    )
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def _cached_participation_streak(player_id: str, current_date: str):
     return load_daily_store().current_participation_streak(str(player_id), str(current_date))
@@ -124,6 +170,7 @@ def _clear_social_caches():
     _cached_group_leaderboard.clear()
     _cached_group_question_stats.clear()
     _cached_group_daily_snapshot.clear()
+    _cached_group_player_daily_review.clear()
     _cached_participation_streak.clear()
 
 
@@ -191,24 +238,10 @@ CATEGORY_SHORT = {
     "chance": "CH",
 }
 
-# The live decision scorecard must stay compact enough that the full game state
-# and the dice can share one phone screen. Full category names remain available
-# everywhere else through CATEGORY_DISPLAY.
-CATEGORY_SCORECARD = {
-    "ones": "1s",
-    "twos": "2s",
-    "threes": "3s",
-    "fours": "4s",
-    "fives": "5s",
-    "sixes": "6s",
-    "three_of_a_kind": "3 Kind",
-    "four_of_a_kind": "4 Kind",
-    "full_house": "Full H.",
-    "small_straight": "Sm Str.",
-    "large_straight": "Lg Str.",
-    "yahtzee": "Yahtzee",
-    "chance": "Chance",
-}
+# The decision scorecard uses the original short Yahtzee labels. Testers found
+# them easy to understand, and the shorter labels let the actual score numbers
+# stay larger while Roll + full scorecard + dice remain visible together.
+CATEGORY_SCORECARD = dict(CATEGORY_SHORT)
 
 UPPER_CATEGORIES = ["ones", "twos", "threes", "fours", "fives", "sixes"]
 LOWER_CATEGORIES = [
@@ -404,19 +437,19 @@ st.markdown(
     .score-grid.lower { grid-template-columns:repeat(4, minmax(0,1fr)); }
     .score-box {
         border:1px solid rgba(127,127,127,0.22);
-        border-radius:10px;
-        padding:0.22rem 0.12rem;
+        border-radius:11px;
+        padding:0.27rem 0.14rem;
         background:rgba(255,255,255,0.78);
         text-align:center;
-        min-height:2.15rem;
+        min-height:2.45rem;
         display:flex; flex-direction:column; justify-content:center;
     }
     .score-label {
-        font-size:0.63rem; color:#6b7280; margin-bottom:0.03rem;
+        font-size:0.68rem; color:#6b7280; margin-bottom:0.04rem;
         white-space:nowrap; line-height:1.0; min-height:0;
         display:block;
     }
-    .score-value { font-size:0.84rem; font-weight:900; line-height:1.05; }
+    .score-value { font-size:1.02rem; font-weight:950; line-height:1.05; }
     .open-value { color:#188038; }
     .filled-value { color:#3c4043; }
 
@@ -911,9 +944,9 @@ st.markdown(
         .session-value { font-size:1.08rem; }
         .score-grid { grid-template-columns:repeat(3, minmax(0,1fr)); gap:0.20rem; }
         .score-grid.lower { grid-template-columns:repeat(4, minmax(0,1fr)); gap:0.20rem; }
-        .score-box { min-height:2.05rem; padding:0.18rem 0.08rem; border-radius:9px; }
-        .score-label { font-size:0.61rem; }
-        .score-value { font-size:0.81rem; }
+        .score-box { min-height:2.45rem; padding:0.26rem 0.12rem; border-radius:10px; }
+        .score-label { font-size:0.68rem; }
+        .score-value { font-size:1.02rem; }
         .grade-badge { font-size:1.8rem; min-width:4rem; }
         .result-mini { grid-template-columns:1fr; }
         .idea-grid { grid-template-columns:1fr; }
@@ -937,6 +970,15 @@ st.markdown(
     .leaderboard-name span { display:block; font-size:0.69rem; font-weight:700; color:#64748b !important; margin-top:0.1rem; }
     .leaderboard-score { text-align:right; font-size:0.78rem; line-height:1.2; color:#64748b !important; }
     .leaderboard-score b { display:block; color:#111827 !important; font-size:0.93rem; }
+    .friend-review-summary { display:grid; grid-template-columns:1fr 1fr; gap:0.46rem; margin:0.48rem 0 0.62rem 0; }
+    .friend-review-card { border:1px solid rgba(127,127,127,0.20); border-radius:14px; padding:0.56rem 0.64rem; background:#f8fafc; color:#111827 !important; }
+    .friend-review-card.you { background:#eff6ff; border-color:#bfdbfe; }
+    .friend-review-name { font-size:0.82rem; font-weight:950; margin-bottom:0.18rem; }
+    .friend-review-metric { font-size:0.78rem; color:#64748b !important; line-height:1.35; }
+    .friend-review-metric b { color:#111827 !important; }
+    .friend-question-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:0.3rem; margin:0.42rem 0 0.62rem 0; }
+    .friend-question-chip { border:1px solid rgba(127,127,127,0.18); border-radius:10px; padding:0.34rem 0.2rem; text-align:center; background:#fff; color:#111827 !important; font-size:0.72rem; line-height:1.2; }
+    .friend-question-chip b { display:block; margin-top:0.08rem; font-size:0.78rem; }
     @media (max-width:640px) {
         .daily-review-grid { grid-template-columns:1fr; }
         .score-grid.lower { grid-template-columns:repeat(4, minmax(0,1fr)); }
@@ -1863,6 +1905,11 @@ st.markdown(
     .daily-result-sub { color:#6b7280 !important; font-size:0.66rem; margin-top:0.04rem; }
     .daily-rank-banner { border:1px solid #fde68a; background:#fffbeb; border-radius:17px; padding:0.72rem 0.78rem; margin:0.5rem 0; color:#78350f !important; }
     .daily-rank-banner b { font-size:1.02rem; }
+    .yesterday-podium { border:1px solid #facc15; background:linear-gradient(135deg,#fffbeb,#fff7ed); border-radius:20px; padding:0.9rem 0.86rem; margin:0.58rem 0 0.68rem 0; text-align:center; color:#78350f !important; box-shadow:0 8px 24px rgba(120,53,15,.08); }
+    .yesterday-podium .medal { font-size:3.25rem; line-height:1; margin-bottom:.22rem; }
+    .yesterday-podium .title { font-size:1.28rem; font-weight:950; color:#78350f !important; }
+    .yesterday-podium .copy { margin-top:.18rem; font-size:.88rem; color:#92400e !important; }
+    .yesterday-final-note { border:1px solid rgba(127,127,127,.2); background:#f8fafc; border-radius:15px; padding:.66rem .72rem; margin:.5rem 0; color:#334155 !important; }
     .group-story-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.42rem; margin:0.48rem 0; }
     .group-story-card { border:1px solid rgba(127,127,127,.2); border-radius:15px; padding:0.62rem 0.68rem; background:#fff; color:#111827 !important; }
     .group-story-card .story-kicker { color:#6b7280 !important; font-size:0.68rem; font-weight:900; text-transform:uppercase; letter-spacing:.04em; }
@@ -1938,6 +1985,8 @@ def initialize_player_identity_state():
         st.session_state.player_auth_flash = ""
     if "active_group_id" not in st.session_state:
         st.session_state.active_group_id = None
+    if "friend_review_player_id" not in st.session_state:
+        st.session_state.friend_review_player_id = None
     if "group_flash" not in st.session_state:
         st.session_state.group_flash = ""
     if "active_device_token" not in st.session_state:
@@ -1950,6 +1999,14 @@ def initialize_player_identity_state():
         st.session_state.remember_storage_command = None
     if "remember_storage_nonce" not in st.session_state:
         st.session_state.remember_storage_nonce = 0
+    if "yesterday_result_seen_command" not in st.session_state:
+        st.session_state.yesterday_result_seen_command = None
+    if "yesterday_result_seen_nonce" not in st.session_state:
+        st.session_state.yesterday_result_seen_nonce = 0
+    if "yesterday_result_storage_state" not in st.session_state:
+        st.session_state.yesterday_result_storage_state = {"value": "", "ready": False}
+    if "yesterday_balloons_date" not in st.session_state:
+        st.session_state.yesterday_balloons_date = None
 
 
 def _browser_remember_cookie() -> str:
@@ -2018,6 +2075,68 @@ def render_remember_storage_bridge() -> dict:
             st.caption(f"Remembered-login browser detail: {type(exc).__name__}: {exc}")
         # Cookie restore remains as a compatibility fallback.
         return {"token": "", "ready": True}
+
+
+
+def _yesterday_results_storage_key() -> str:
+    player_id = str(st.session_state.get("active_player_id") or "").strip()
+    return f"{YESTERDAY_RESULTS_STORAGE_PREFIX}_{player_id}" if player_id else ""
+
+
+def _next_yesterday_result_nonce() -> str:
+    st.session_state.yesterday_result_seen_nonce = int(st.session_state.get("yesterday_result_seen_nonce", 0)) + 1
+    return str(st.session_state.yesterday_result_seen_nonce)
+
+
+def _queue_yesterday_result_seen(date_key: str):
+    """Persist that this browser/player has acknowledged yesterday's final standings."""
+    st.session_state.yesterday_result_seen_command = {
+        "action": "set",
+        "value": str(date_key),
+        "nonce": _next_yesterday_result_nonce(),
+    }
+
+
+def render_yesterday_result_storage_bridge() -> dict:
+    """Read/write the per-player last ceremony date through browser localStorage."""
+    storage_key = _yesterday_results_storage_key()
+    if not storage_key:
+        state = {"value": "", "ready": True}
+        st.session_state.yesterday_result_storage_state = state
+        return state
+    command = st.session_state.get("yesterday_result_seen_command") or {}
+    action = str(command.get("action") or "read")
+    value = str(command.get("value") or "")
+    nonce = str(command.get("nonce") or "")
+    default_payload = json.dumps({"value": "", "ready": False, "ack": ""})
+    try:
+        result = _yesterday_results_storage_component(
+            data={
+                "storage_key": storage_key,
+                "action": action,
+                "value": value,
+                "nonce": nonce,
+            },
+            default={"payload": default_payload},
+            on_payload_change=lambda: None,
+            key=f"yesterday_result_storage_bridge_{st.session_state.get('active_player_id')}",
+        )
+        payload_raw = getattr(result, "payload", default_payload) or default_payload
+        payload = json.loads(str(payload_raw))
+        if nonce and str(payload.get("ack") or "") == nonce:
+            st.session_state.yesterday_result_seen_command = None
+        state = {
+            "value": str(payload.get("value") or "").strip(),
+            "ready": bool(payload.get("ready")),
+        }
+    except Exception as exc:
+        if database_check_enabled():
+            st.caption(f"Yesterday-results browser detail: {type(exc).__name__}: {exc}")
+        # Fail open: a browser that blocks localStorage may show the recap again
+        # on a future fresh session, but gameplay must remain available.
+        state = {"value": "", "ready": True}
+    st.session_state.yesterday_result_storage_state = state
+    return state
 
 
 def render_pending_remember_cookie_command():
@@ -2104,6 +2223,9 @@ def _activate_player(player, *, created: bool = False):
         st.session_state.active_group_id = None
         st.session_state.group_flash = ""
         st.session_state.pop("friend_group_selector", None)
+        st.session_state.yesterday_result_seen_command = None
+        st.session_state.yesterday_result_storage_state = {"value": "", "ready": False}
+        st.session_state.yesterday_balloons_date = None
     st.session_state.active_player_id = player.player_id
     st.session_state.active_player_name = player.display_name
     st.session_state.daily_display_name = player.display_name
@@ -2127,6 +2249,9 @@ def _sign_out_player():
     st.session_state.active_group_id = None
     st.session_state.group_flash = ""
     st.session_state.pop("friend_group_selector", None)
+    st.session_state.yesterday_result_seen_command = None
+    st.session_state.yesterday_result_storage_state = {"value": "", "ready": False}
+    st.session_state.yesterday_balloons_date = None
     _reset_daily_local_attempt(current_daily_date_key())
     st.session_state.daily_display_name = "You"
 
@@ -2854,6 +2979,126 @@ def _daily_streak_copy(streak: int, *, completed_today: bool) -> str:
     return f"🔥 {streak}-{suffix} streak alive — finish today's Daily to keep it going"
 
 
+
+def _previous_daily_date_key(date_key: str) -> str:
+    """Return the prior calendar day for the shared Eastern Daily clock."""
+    current = datetime.strptime(str(date_key), "%Y-%m-%d").date()
+    return (current - timedelta(days=1)).isoformat()
+
+
+def _challenge_set_id_for_date(date_key: str) -> str:
+    challenges = get_daily_challenges(str(date_key))
+    return challenge_set_id(str(date_key), challenges)
+
+
+def _find_player_rank(board) -> int | None:
+    player_id = str(st.session_state.get("active_player_id") or "")
+    for row in board:
+        if str(row.get("player_id") or "") == player_id:
+            try:
+                return int(row.get("rank") or 0) or None
+            except Exception:
+                return None
+    return None
+
+
+def _start_today_from_yesterday_recap():
+    st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
+    if start_persistent_daily_attempt():
+        _queue_yesterday_result_seen(st.session_state.daily_date_key)
+        st.rerun()
+
+
+def render_yesterday_final_standings_if_needed() -> bool:
+    """Show yesterday's final group standings once before an unstarted new Daily.
+
+    Returns True when the recap (or its browser-storage loading state) owns the
+    screen, so the normal Daily intro should not render underneath it.
+    """
+    today = st.session_state.daily_date_key
+    storage_state = st.session_state.get("yesterday_result_storage_state") or {}
+    if str(storage_state.get("value") or "") == today:
+        return False
+
+    groups = _load_player_groups()
+    if not groups:
+        return False
+
+    yesterday = _previous_daily_date_key(today)
+    yesterday_set_id = _challenge_set_id_for_date(yesterday)
+    snapshots = {}
+    eligible_groups = []
+    for group in groups:
+        try:
+            snapshot = _cached_group_daily_snapshot(group.group_id, yesterday_set_id)
+        except Exception:
+            continue
+        snapshots[group.group_id] = snapshot
+        if snapshot.get("leaderboard"):
+            eligible_groups.append(group)
+
+    if not eligible_groups:
+        return False
+
+    if not bool(storage_state.get("ready")):
+        st.caption("Loading yesterday's final standings…")
+        return True
+
+    active = render_group_selector(eligible_groups, key="yesterday_final_group_selector")
+    snapshot = snapshots.get(active.group_id) or {}
+    board = [dict(row) for row in snapshot.get("leaderboard", [])]
+    members = list(snapshot.get("members", []))
+    if not board:
+        return False
+
+    rank = _find_player_rank(board)
+    medals = {1: ("🥇", "GOLD", "1st"), 2: ("🥈", "SILVER", "2nd"), 3: ("🥉", "BRONZE", "3rd")}
+    podium = rank in medals and len(members) > 1
+
+    st.markdown(
+        "<div class='daily-hero'>"
+        "<div class='daily-kicker'>🏆 Yesterday's Final Standings</div>"
+        f"<div class='daily-title'>{_daily_date_label(yesterday)}</div>"
+        f"<div class='daily-rule'><b>{html.escape(active.group_name)}</b> is final. See where everyone landed before today's 10 begin.</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    if podium:
+        medal, medal_name, place = medals[rank]
+        if st.session_state.get("yesterday_balloons_date") != today:
+            st.balloons()
+            st.session_state.yesterday_balloons_date = today
+        st.markdown(
+            "<div class='yesterday-podium'>"
+            f"<div class='medal'>{medal}</div>"
+            f"<div class='title'>{medal_name}! You finished {place} yesterday!</div>"
+            f"<div class='copy'>Nice run, {html.escape(st.session_state.get('active_player_name') or 'Player')}. Your medal is locked in.</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+    elif rank is not None:
+        st.markdown(
+            f"<div class='yesterday-final-note'><b>You finished #{rank} of {len(board)} yesterday.</b><br>Here's the final board.</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "<div class='yesterday-final-note'><b>You didn't record a finish yesterday.</b><br>You can still see how your group finished before starting today's challenge.</div>",
+            unsafe_allow_html=True,
+        )
+
+    render_leaderboard_cards(board, allow_review=False)
+    if st.button(
+        "🎲 Start today's Daily Challenge",
+        type="primary",
+        use_container_width=True,
+        key="yesterday_final_start_today",
+    ):
+        _start_today_from_yesterday_recap()
+    return True
+
+
 def render_daily_intro():
     date_key = st.session_state.daily_date_key
     st.markdown(
@@ -3227,22 +3472,46 @@ def _leaderboard_frame(board):
     return pd.DataFrame(rows)
 
 
-def render_leaderboard_cards(board):
+def _open_friend_review(player_id: str):
+    st.session_state.friend_review_player_id = str(player_id)
+
+
+def _close_friend_review():
+    st.session_state.friend_review_player_id = None
+
+
+def render_leaderboard_cards(board, *, allow_review=False):
+    """Render standings; after completion, finished friend names become review buttons."""
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
-    cards = []
+    active_player_id = str(st.session_state.get("active_player_id") or "")
     for item in board:
-        rank = int(item["rank"])
-        you_class = " you" if item.get("is_user") else ""
-        you_note = "<span>You</span>" if item.get("is_user") else ""
-        cards.append(
-            f"<div class='leaderboard-row{you_class}'>"
-            f"<div class='leaderboard-rank'>{medals.get(rank, '')} {rank}</div>"
-            f"<div class='leaderboard-name'>{html.escape(str(item['display_name']))}{you_note}</div>"
-            f"<div class='leaderboard-score'><b>{float(item['total_ev_loss']):.2f}</b>Points Lost · {int(item['exact_count'])}/10 best</div>"
-            "</div>"
+        rank = int(item.get("rank") or 0)
+        player_id = str(item.get("player_id") or "")
+        display_name = str(item.get("display_name") or "Player")
+        is_you = player_id == active_player_id
+        left, middle, right = st.columns([0.16, 0.48, 0.36], vertical_alignment="center", gap="small")
+        left.markdown(f"**{medals.get(rank, '')} {rank}**")
+        if allow_review and not is_you:
+            middle.button(
+                display_name,
+                key=f"review_friend_{player_id}_{st.session_state.daily_set_id}",
+                type="tertiary",
+                use_container_width=True,
+                on_click=_open_friend_review,
+                args=(player_id,),
+                help=f"Review {display_name}'s 10 Daily choices",
+            )
+        else:
+            you_note = " (You)" if is_you else ""
+            middle.markdown(f"**{html.escape(display_name)}**{you_note}")
+        right.markdown(
+            f"<div class='leaderboard-score'><b>{float(item['total_ev_loss']):.2f}</b>"
+            f"Points Lost · {int(item['exact_count'])}/10 best</div>",
+            unsafe_allow_html=True,
         )
-    st.markdown("<div class='leaderboard-list'>" + "".join(cards) + "</div>", unsafe_allow_html=True)
     st.caption("Ties: more best holds, then the smaller biggest miss.")
+    if allow_review and any(str(item.get("player_id") or "") != active_player_id for item in board):
+        st.caption("Tap a finished friend's name to see how they played all 10 questions.")
 
 
 def _share_square(points_lost: float) -> str:
@@ -3352,7 +3621,7 @@ def render_daily_share_result(records, summary, rank=None, completed_count=0):
         st.code(share_text, language=None)
 
 
-def _render_daily_review_body(answer):
+def _render_daily_review_body(answer, *, subject_name="You"):
     record = answer["solver_record"]
     challenge = answer["challenge"]
     report = answer["report"]
@@ -3371,7 +3640,7 @@ def _render_daily_review_body(answer):
     st.markdown(score_grid_html(challenge["scorecard"], LOWER_CATEGORIES, lower=True), unsafe_allow_html=True)
     st.markdown(
         "<div class='review-summary'>"
-        f"<div class='review-box'><div class='review-label'>You kept</div><div class='review-value'>{record.get('user_hold', '—')}</div></div>"
+        f"<div class='review-box'><div class='review-label'>{html.escape(str(subject_name))} kept</div><div class='review-value'>{record.get('user_hold', '—')}</div></div>"
         f"<div class='review-box'><div class='review-label'>Best hold</div><div class='review-value'>{record.get('optimal_hold', '—')}</div></div>"
         f"<div class='review-box'><div class='review-label'>Hold rank</div><div class='review-value'>#{record.get('hold_rank', '—')} of {record.get('legal_hold_count', '—')}</div></div>"
         f"<div class='review-box'><div class='review-label'>Points Lost</div><div class='review-value'>{loss:.2f}</div></div>"
@@ -3403,6 +3672,108 @@ def _daily_review_item(answer):
     label = f"Q{number} · {grade} · {loss:.2f} points lost"
     with st.expander(label, expanded=False):
         _render_daily_review_body(answer)
+
+def _rebuild_friend_daily_answers(review_payload):
+    """Rebuild exact local coaching for a completed friend's immutable DB answers."""
+    rows = list(review_payload.get("answers", []))
+    challenges = st.session_state.daily_challenges
+    if len(rows) != 10:
+        raise ChallengeMismatch("That completed Daily does not have all 10 saved answers.")
+    rebuilt = []
+    for row in sorted(rows, key=lambda item: int(item.get("question_number") or 0)):
+        q = int(row.get("question_number") or 0)
+        if not 1 <= q <= 10:
+            raise ChallengeMismatch("Friend Daily question number is invalid.")
+        challenge = challenges[q - 1]
+        if str(challenge.get("challenge_id", "")) != str(row.get("puzzle_id", "")):
+            raise ChallengeMismatch("Friend Daily answer does not match today's puzzle order.")
+        selected_hold = [int(value) for value in row.get("chosen_hold", [])]
+        report, solver_record = build_live_report(
+            challenge["dice"], challenge["scorecard"], selected_hold, challenge["roll_number"]
+        )
+        if solver_record.get("source") != "exact":
+            raise InvalidOfficialAnswer("Exact strategy is required to review a friend's Daily.")
+        rebuilt_loss = float(solver_record.get("points_lost", 0.0) or 0.0)
+        if abs(rebuilt_loss - float(row.get("points_lost", 0.0) or 0.0)) > 1e-6:
+            raise ChallengeMismatch("Friend Daily score does not match the locked exact policy.")
+        rebuilt.append(_daily_solver_record(challenge, solver_record, selected_hold, report))
+    return rebuilt
+
+
+def _render_friend_daily_review(active_group, board, own_answers):
+    target_id = str(st.session_state.get("friend_review_player_id") or "")
+    if not target_id or active_group is None:
+        return
+    active_player_id = str(st.session_state.get("active_player_id") or "")
+    if target_id == active_player_id:
+        st.session_state.friend_review_player_id = None
+        return
+    target_board = next((item for item in board if str(item.get("player_id") or "") == target_id), None)
+    if target_board is None:
+        st.session_state.friend_review_player_id = None
+        return
+    try:
+        payload = _cached_group_player_daily_review(
+            active_group.group_id,
+            st.session_state.daily_set_id,
+            active_player_id,
+            target_id,
+        )
+        friend_answers = _rebuild_friend_daily_answers(payload)
+    except Exception as exc:
+        st.warning("That friend's Daily review couldn't be loaded right now.")
+        if database_check_enabled():
+            st.caption(f"Friend review detail: {type(exc).__name__}: {exc}")
+        return
+
+    friend_name = str(payload.get("display_name") or target_board.get("display_name") or "Friend")
+    own_records = [answer["solver_record"] for answer in own_answers]
+    friend_records = [answer["solver_record"] for answer in friend_answers]
+    own_summary = summarize_attempt(own_records)
+    friend_summary = summarize_attempt(friend_records)
+    different = sum(
+        sorted(int(v) for v in own_answers[i].get("selected_hold", []))
+        != sorted(int(v) for v in friend_answers[i].get("selected_hold", []))
+        for i in range(10)
+    )
+    losses = [float(record.get("points_lost", 0.0) or 0.0) for record in friend_records]
+    biggest_q = max(range(10), key=lambda i: losses[i]) + 1
+    biggest_loss = max(losses) if losses else 0.0
+
+    st.markdown(f"### 🔎 {html.escape(friend_name)}'s Daily")
+    st.markdown(
+        "<div class='friend-review-summary'>"
+        "<div class='friend-review-card you'><div class='friend-review-name'>You</div>"
+        f"<div class='friend-review-metric'><b>{own_summary['total_ev_loss']:.2f}</b> Points Lost · <b>{own_summary['exact_count']}/10</b> best holds</div></div>"
+        f"<div class='friend-review-card'><div class='friend-review-name'>{html.escape(friend_name)}</div>"
+        f"<div class='friend-review-metric'><b>{friend_summary['total_ev_loss']:.2f}</b> Points Lost · <b>{friend_summary['exact_count']}/10</b> best holds</div></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    choice_word = "choice" if different == 1 else "choices"
+    if biggest_loss <= 1e-9:
+        st.caption(f"You made different {choice_word} on {different} of 10 questions. {friend_name} found a best hold on all 10.")
+    else:
+        st.caption(
+            f"You made different {choice_word} on {different} of 10 questions. "
+            f"{friend_name}'s biggest miss was Q{biggest_q} ({biggest_loss:.2f} Points Lost)."
+        )
+
+    chips = []
+    for q, loss in enumerate(losses, start=1):
+        result = "✅ Best" if loss <= 1e-9 else f"{loss:.2f} lost"
+        chips.append(f"<div class='friend-question-chip'>Q{q}<b>{result}</b></div>")
+    st.markdown("<div class='friend-question-grid'>" + "".join(chips) + "</div>", unsafe_allow_html=True)
+
+    review_q = st.selectbox(
+        f"Question from {friend_name}'s Daily",
+        options=list(range(1, 11)),
+        format_func=lambda q: f"Question {q} · {losses[q - 1]:.2f} Points Lost",
+        key=f"friend_review_question_{target_id}",
+    )
+    _render_daily_review_body(friend_answers[int(review_q) - 1], subject_name=friend_name)
+    st.button("Close friend review", key=f"close_friend_review_{target_id}", on_click=_close_friend_review)
+
 
 def render_daily_results():
     answers = st.session_state.daily_answers
@@ -3478,7 +3849,8 @@ def render_daily_results():
         elif total_members > 1 and completed >= total_members:
             st.caption("Everyone's in — final standings for today.")
         if board:
-            render_leaderboard_cards(board)
+            render_leaderboard_cards(board, allow_review=True)
+            _render_friend_daily_review(active_group, board, answers)
 
         toughest = story.get("toughest")
         easiest = story.get("easiest")
@@ -3552,6 +3924,8 @@ def render_daily_mode():
     if not sync_daily_attempt_from_database():
         return
     if not st.session_state.daily_started:
+        if render_yesterday_final_standings_if_needed():
+            return
         render_daily_intro()
         return
     if st.session_state.daily_completed:
@@ -3780,6 +4154,7 @@ initialize_daily_state()
 initialize_player_identity_state()
 _remember_storage_state = render_remember_storage_bridge()
 _restore_remembered_player(_remember_storage_state)
+render_yesterday_result_storage_bridge()
 if _pending_invite_code():
     st.session_state.app_mode = "Daily Challenge"
 if process_pending_group_invite():

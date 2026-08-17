@@ -23,7 +23,7 @@ def run():
     score_box = section(app, "def score_box_html", "def score_grid_html")
 
     checks = [
-        ("release is Phase 2K.6.1.1", 'APP_RELEASE = "v43B Phase 2K.6.1.1"' in app),
+        ("release is Phase 2K.8", 'APP_RELEASE = "v43B Phase 2K.8"' in app),
         ("Daily dice controls are fragment-scoped", "@st.fragment\ndef _daily_choice_fragment" in app),
         ("Practice dice controls are fragment-scoped", "@st.fragment\ndef _practice_choice_fragment" in app),
         ("old full-rerun dice guard is no longer installed", app.count("install_dice_scroll_guard()") == 1),
@@ -35,7 +35,7 @@ def run():
         ("database update trigger remains authoritative", "guard_daily_answer_update" in phase2e and "Completed Daily answers cannot be changed" in phase2e),
         ("batched group result snapshot exists", "def group_daily_snapshot" in store),
         ("live result UI uses batched group snapshot", "_cached_group_daily_snapshot" in app and 'snapshot.get("question_stats"' in app),
-        ("decision scorecard uses compact readable labels", '"three_of_a_kind": "3 Kind"' in app and '"small_straight": "Sm Str."' in app and "CATEGORY_SCORECARD.get" in score_box),
+        ("decision scorecard restores original compact labels", "CATEGORY_SCORECARD = dict(CATEGORY_SHORT)" in app and '"three_of_a_kind": "3K"' in app and '"small_straight": "SS"' in app and "CATEGORY_SCORECARD.get" in score_box),
         ("lower scorecard stays four columns on mobile", app.count(".score-grid.lower { grid-template-columns:repeat(4") >= 2),
         ("main Daily metric says Points Lost", "Points Lost" in results and "EV Lost" not in results),
         ("main Daily result says Best Holds", "Best Holds" in results and "Best Streak" in results),
@@ -43,7 +43,7 @@ def run():
         ("Daily progress removes redundant percent", "daily-progress-percent" not in app and 'status_text = "Finished" if complete else f"{saved} saved"' in app),
         ("final review uses cards instead of a dataframe", "daily-review-choice" in submission and "st.dataframe" not in submission),
         ("completed review renders one selected question", 'key="daily_result_review_question"' in results and "_render_daily_review_body(answers[int(review_number) - 1])" in results and "_daily_review_item(answer)" not in results),
-        ("leaderboard uses mobile-friendly cards", "render_leaderboard_cards(board)" in results and "st.dataframe(_leaderboard_frame(board)" not in results),
+        ("leaderboard uses mobile-friendly review rows", "render_leaderboard_cards(board, allow_review=True)" in results and "st.dataframe(_leaderboard_frame(board)" not in results),
         ("Practice scenario copy avoids old jargon", all(term not in puzzle for term in ["carrying option value", "escape valve here", "reroll flexibility", "damage-control Yahtzee", "exact destinations"])),
         ("exact solver remains the required official scorer", 'if solver_record.get("source") != "exact"' in app and 'solver_source="exact"' in app),
         ("exact policy file remains unchanged in routing", 'EXACT_POLICY_PATH = Path(__file__).with_name("exact_policy.npz")' in app),

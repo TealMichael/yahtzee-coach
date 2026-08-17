@@ -1,3 +1,86 @@
+# Yahtzee Coach v43B Phase 2K.8 — Yesterday’s Final Standings + Podium Ceremony
+
+This release builds directly on the unuploaded Phase 2K.7 scorecard/friend-review patch and adds a new next-day payoff for the Daily Challenge. When a signed-in player returns on a new day, the app can show the prior day’s **final friend-group standings before today’s Daily begins**. Gold, silver, and bronze finishers get a small medal ceremony with balloons, then one clear button starts today’s puzzle set.
+
+## v43B Phase 2K.8 changes
+
+- **Yesterday’s final standings now appear before an unstarted new Daily.** The app reconstructs yesterday’s deterministic Daily challenge ID and reads the already-saved completed attempts from the same real group leaderboard used on the results screen.
+- **Top-three finishers get a podium ceremony:** 🥇 Gold, 🥈 Silver, or 🥉 Bronze, with Streamlit’s balloon animation and a locked-in final-place message.
+- **The complete final leaderboard is shown beneath the ceremony.** Players outside the top three still see their final place and the finished board.
+- **Players who did not finish yesterday are handled gracefully.** They can still see how their group finished before starting today.
+- **Solo groups do not award a one-person medal.** The recap can still exist, but podium celebration requires a group with more than one member.
+- **One button starts today’s Daily directly from the recap.** There is no extra second “Start” screen after yesterday’s results.
+- **The recap acknowledgement is browser-local and player-specific.** Once the player starts today’s Daily, that browser remembers the ceremony for that player/date so ordinary refreshes or reopenings do not replay it.
+- **No new Supabase table or migration is required.** The feature reuses `daily_attempts`, existing group membership data, and the current browser `localStorage` capability already used by remembered login.
+- **Phase 2K.7 remains fully included:** readable compact scorecard labels/boxes and completed-friend Daily reviews are still part of this full release.
+
+## What is intentionally unchanged
+
+- Exact solver, exact policy, and every recommended hold / Points Lost value.
+- `exact_policy.npz`, `puzzle_bank.npz`, and `challenge_catalog.npz`.
+- Daily puzzle generator/composition and Practice puzzle generation.
+- One-official-attempt-per-day persistence rules.
+- Group ranking and tie-break rules.
+- 30-day remembered login, sharing, friend reviews, and spoiler protections.
+
+## Supabase
+
+**No new Supabase migration is required for Phase 2K.8.** Phase 2K.4 remains the latest required database migration. The `RUN_THIS_ONCE_IN_SUPABASE_Phase2K4.sql` file remains included only for a fresh/clean setup.
+
+## Phase 2K.8 live-test goals
+
+1. Use a player in a friend group that had at least one completed Daily yesterday and open the app before starting today’s Daily.
+2. Confirm yesterday’s final board appears first.
+3. With a player who finished 1st, 2nd, or 3rd in a multi-member group, confirm the correct medal and balloons appear.
+4. Confirm a non-podium finisher sees the correct final place without the medal ceremony.
+5. Confirm a player who did not finish yesterday still sees the final group board cleanly.
+6. Press **Start today’s Daily Challenge** and confirm Question 1 begins immediately.
+7. Refresh/reopen on that same browser after starting today and confirm yesterday’s ceremony does not replay.
+8. Confirm Phase 2K.7 scorecard readability and completed-friend review behavior are still present.
+
+---
+
+# Yahtzee Coach v43B Phase 2K.7 — Scorecard Readability + Friend Daily Reviews
+
+This release responds directly to live tester feedback. The decision screen keeps the compact one-screen hierarchy that is working, but restores the original short Yahtzee scorecard labels and makes the score boxes/numbers slightly larger. It also adds a new social review feature: after you finish your own Daily, you can tap a completed friend's name and inspect exactly how they played all 10 questions.
+
+## v43B Phase 2K.7 changes
+
+- **The live scorecard returns to the original short labels:** `1s`–`6s`, `3K`, `4K`, `FH`, `SS`, `LS`, `YTZ`, and `CH`.
+- **Score boxes and score values are slightly larger than Phase 2K.6.1.** The shorter labels create the room; the full scorecard remains visible without an extra click.
+- **The one-screen decision hierarchy is preserved:** compact Roll stage → complete scorecard → dice. The duplicate open-category chip row remains removed.
+- **Upper subtotal remains visible as `Upper: X / 63`.** It is factual score information only and does not pre-coach whether the player should chase the bonus.
+- **Completed friend names are now reviewable from the Daily leaderboard.** After finishing your own Daily, tap a finished friend's name to open their result.
+- **Friend review begins with a You-vs-Friend comparison** showing Points Lost, best holds, how many of the 10 choices were different, and the friend's biggest miss.
+- **All 10 friend decisions are summarized at a glance.** Each question shows whether the friend found a best hold or how many Points Lost they gave up.
+- **Choose any friend question for the full review:** dice, scorecard at the decision, what the friend kept, exact best hold, hold rank, Points Lost, Why this wins, Remember, and the exact top-holds detail.
+- **Spoiler protection is enforced in the persistence layer.** A player cannot retrieve another member's detailed choices until the viewer has completed their own Daily, and unfinished friends remain private.
+- **Friend reviews use the same audited exact-policy coaching as your own Review Your 10.** Saved friend Points Lost are rechecked against the locked exact policy before the review is shown.
+
+## Supabase
+
+**No new Supabase migration is required.** The existing `daily_attempts`, `daily_answers`, `players`, and `group_members` data already contains everything needed for friend review. Phase 2K.4 remains the latest required database migration.
+
+## What is intentionally unchanged
+
+- `exact_policy.npz`, `puzzle_bank.npz`, and `challenge_catalog.npz`.
+- Exact-policy SHA-256 and Phase 2K.6 fail-closed math hardening.
+- Every recommended Yahtzee hold and every Points Lost value.
+- Daily puzzle generator/composition and Practice puzzle generation.
+- 30-day remembered login, login-autofill fix, and performance caching.
+- Group ranking rules and pre-completion spoiler protections.
+
+## Phase 2K.7 live-test goals
+
+1. On a phone, confirm the scorecard is easier to read while Roll + full scorecard + all five dice still fit together as well as the current layout.
+2. Finish today's Daily and tap a completed friend's name in the group leaderboard.
+3. Confirm the comparison correctly shows both totals and how many decisions were different.
+4. Open several friend questions and confirm their chosen hold, exact best hold, Points Lost, and coaching match the shared Daily position.
+5. Confirm a friend who has not finished cannot be reviewed.
+6. Confirm the exact solver, Daily saving/resume, Practice, remembered login, and sharing behave normally.
+
+---
+
 # Yahtzee Coach v43B Phase 2K.6.1.1 — Deployment-Safety Hotfix
 
 This hotfix repairs a mixed-version startup failure seen immediately after the Phase 2K.6.1 upload. The compact scorecard layout itself was not the cause. Streamlit received the new `app.py` while an older cached/deployed `exact_mode.py` was still being served, so importing the newly added exact-policy helper by name raised an `ImportError` before the app could render.

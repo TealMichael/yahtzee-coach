@@ -68,7 +68,7 @@ def run():
     checks.append(("official reset control is removed", "Reset today's local demo attempt" not in source))
     checks.append(("cross-player held dice state is cleared", 'startswith(("daily_held_", "daily_dice_pills_"))' in source))
     checks.append(("Practice remains independent", "def render_practice_mode():" in source and "Open Practice without signing in" in source))
-    checks.append(("real social leaderboard remains active", "_cached_group_daily_snapshot(" in source and "render_leaderboard_cards(board)" in source))
+    checks.append(("real social leaderboard remains active", "_cached_group_daily_snapshot(" in source and "render_leaderboard_cards(board, allow_review=True)" in source))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

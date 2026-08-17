@@ -1,28 +1,32 @@
-YAHTZEE COACH v43B PHASE 2K.6.1.1
-Deployment-Safety Hotfix + Compact Decision Layout
+YAHTZEE COACH v43B PHASE 2K.8
+Yesterday's Final Standings + Podium Ceremony
 
 NO NEW SUPABASE STEP.
+This full release already includes the unuploaded Phase 2K.7 scorecard + friend-review changes.
 
 UPLOAD:
-1. Upload ALL files in this folder to the root of the GitHub repo.
+1. Upload ALL files inside UPLOAD_TO_GITHUB to the root of the GitHub repo.
 2. Commit with:
-   v43B Phase 2K.6.1.1 - fix mixed-version exact-mode startup crash
+   v43B Phase 2K.8 - add yesterday standings and podium ceremony
 3. Wait for Streamlit to redeploy.
 
-LIVE TEST:
-1. Confirm the app opens normally with no ImportError.
-2. Open Daily or Practice on your phone.
-3. Confirm the compact Roll line, full scorecard, and dice layout are present.
-4. Play one decision and confirm exact coaching works normally.
+LIVE TEST — YESTERDAY'S FINAL STANDINGS:
+1. Sign in with a player whose friend group had completed results yesterday.
+2. Before starting today's Daily, confirm Yesterday's Final Standings appears.
+3. Confirm the final board uses the same Points Lost ranking as the normal Daily leaderboard.
+4. If that player finished 1st/2nd/3rd in a multi-member group, confirm Gold/Silver/Bronze and balloons appear.
+5. If the player finished outside the top three, confirm their final rank appears without balloons.
+6. If the player did not finish yesterday, confirm the screen says so without an error and still shows the group board.
+7. Press Start today's Daily Challenge and confirm Question 1 begins immediately.
+8. Refresh/reopen on that same browser after starting today; yesterday's ceremony should not replay.
 
-WHAT CHANGED:
-- Added exact_runtime.py, a deployment-safe exact-policy bridge.
-- app.py no longer imports newly added exact_mode helper names directly.
-- Exact-policy SHA-256 verification remains mandatory.
-- Mixed-version deploys remain exact-only and fail closed; no heuristic coaching is introduced.
+LIVE TEST — PHASE 2K.7 STILL INCLUDED:
+1. Confirm the compact scorecard uses 3K, 4K, FH, SS, LS, YTZ, CH and the slightly larger boxes/numbers.
+2. Finish today's Daily and tap a completed friend's name to confirm friend-review details still work.
 
 WHAT DID NOT CHANGE:
-- No strategy recommendation changed.
-- exact_policy.npz, puzzle_bank.npz, challenge_catalog.npz, yahtzee_engine.py, daily_challenge.py, exact_mode.py, and supabase_daily_store.py remain unchanged from Phase 2K.6.1.
-- The Phase 2K.6.1 compact decision layout is unchanged.
-- No database or authentication changes.
+- No Yahtzee strategy recommendation changed.
+- No exact-policy, puzzle-bank, challenge-catalog, Daily-generator, or Practice-generator changes.
+- No group ranking/tie-break change.
+- No new database migration.
+- Remembered login, speed improvements, sharing, persistence, and spoiler protections remain in place.

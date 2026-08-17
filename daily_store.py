@@ -250,6 +250,8 @@ class DailyStore(Protocol):
     def complete_attempt(self, attempt_id: str) -> AttemptRecord: ...
     def leaderboard(self, group_id: str, challenge_id: str) -> list[dict]: ...
     def group_question_stats(self, group_id: str, challenge_id: str) -> list[dict]: ...
+    def group_player_daily_review(self, group_id: str, challenge_id: str,
+                                  viewer_player_id: str, target_player_id: str) -> dict: ...
     def current_participation_streak(self, player_id: str, current_date: str) -> int: ...
     def submit_feedback(self, *, player_id: str | None, feedback_type: str, message: str,
                         app_version: str, page_mode: str) -> FeedbackRecord: ...
@@ -628,6 +630,50 @@ class InMemoryDailyStore:
                 "avg_loss": sum(answer.points_lost for answer in answers) / len(answers),
             })
         return rows
+
+    def group_player_daily_review(self, group_id: str, challenge_id: str,
+                                  viewer_player_id: str, target_player_id: str) -> dict:
+        """Return one completed group member's immutable answers after viewer completion."""
+        if group_id not in self.groups:
+            raise GroupNotFound(group_id)
+        member_ids = {player_id for row_group_id, player_id in self.group_members if row_group_id == group_id}
+        viewer_player_id = str(viewer_player_id)
+        target_player_id = str(target_player_id)
+        if viewer_player_id not in member_ids or target_player_id not in member_ids:
+            raise GroupNotFound("Both players must belong to this friend group.")
+        viewer_attempt_id = self.attempt_id_by_player_challenge.get((viewer_player_id, challenge_id))
+        if not viewer_attempt_id or not self.attempts[viewer_attempt_id].complete:
+            raise DailyStoreError("Finish your own Daily before reviewing a friend's choices.")
+        target_attempt_id = self.attempt_id_by_player_challenge.get((target_player_id, challenge_id))
+        if not target_attempt_id or not self.attempts[target_attempt_id].complete:
+            raise DailyStoreError("That player has not finished this Daily yet.")
+        target_attempt = self.attempts[target_attempt_id]
+        target = self.players[target_player_id]
+        answers = self._answers_for_attempt(target_attempt_id)
+        if len(answers) != 10:
+            raise DailyStoreError("That completed Daily does not have all 10 answers.")
+        return {
+            "player_id": target_player_id,
+            "display_name": target.display_name,
+            "summary": {
+                "total_ev_loss": float(target_attempt.total_ev_loss or 0.0),
+                "exact_count": int(target_attempt.exact_count or 0),
+                "worst_miss": float(target_attempt.worst_miss or 0.0),
+                "best_exact_streak": int(target_attempt.best_exact_streak or 0),
+            },
+            "answers": [
+                {
+                    "question_number": answer.question_number,
+                    "puzzle_id": answer.puzzle_id,
+                    "chosen_hold": list(answer.chosen_hold),
+                    "optimal_hold": list(answer.optimal_hold),
+                    "points_lost": float(answer.points_lost),
+                    "exact": bool(answer.exact),
+                    "solver_source": answer.solver_source,
+                }
+                for answer in answers
+            ],
+        }
 
     def current_participation_streak(self, player_id: str, current_date: str) -> int:
         self._require_player(player_id)

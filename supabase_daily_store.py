@@ -1000,6 +1000,87 @@ class SupabaseDailyStore:
             })
         return stats
 
+    def group_player_daily_review(self, group_id: str, challenge_id: str,
+                                  viewer_player_id: str, target_player_id: str) -> dict:
+        """Return one completed friend's immutable Daily choices after viewer completion.
+
+        This is intentionally separate from ``group_daily_snapshot`` so detailed
+        answers are never fetched during the pre-Daily completion-count view.
+        """
+        self._require_group_row(group_id)
+        viewer_player_id = str(viewer_player_id)
+        target_player_id = str(target_player_id)
+        membership_rows = _row_list(
+            self.client.table("group_members")
+            .select("player_id")
+            .eq("group_id", str(group_id))
+            .in_("player_id", [viewer_player_id, target_player_id])
+            .execute()
+        )
+        member_ids = {str(row["player_id"]) for row in membership_rows}
+        if viewer_player_id not in member_ids or target_player_id not in member_ids:
+            raise GroupNotFound("Both players must belong to this friend group.")
+
+        attempt_rows = _row_list(
+            self.client.table("daily_attempts")
+            .select("*")
+            .in_("player_id", [viewer_player_id, target_player_id])
+            .eq("challenge_id", str(challenge_id))
+            .execute()
+        )
+        attempts = {}
+        for row in attempt_rows:
+            attempt = _attempt_from_row(row)
+            attempts[attempt.player_id] = attempt
+        viewer_attempt = attempts.get(viewer_player_id)
+        target_attempt = attempts.get(target_player_id)
+        if viewer_attempt is None or not viewer_attempt.complete:
+            raise DailyStoreError("Finish your own Daily before reviewing a friend's choices.")
+        if target_attempt is None or not target_attempt.complete:
+            raise DailyStoreError("That player has not finished this Daily yet.")
+
+        player_row = _first_row(
+            self.client.table("players")
+            .select("player_id,display_name")
+            .eq("player_id", target_player_id)
+            .limit(1)
+            .execute()
+        )
+        if player_row is None:
+            raise PlayerNotFound(target_player_id)
+
+        answer_rows = _row_list(
+            self.client.table("daily_answers")
+            .select("question_number,puzzle_id,chosen_hold,optimal_hold,points_lost,exact,solver_source")
+            .eq("attempt_id", str(target_attempt.attempt_id))
+            .order("question_number")
+            .execute()
+        )
+        if len(answer_rows) != 10:
+            raise DailyStoreError("That completed Daily does not have all 10 answers.")
+        answers = []
+        for row in answer_rows:
+            answers.append({
+                "question_number": int(row["question_number"]),
+                "puzzle_id": str(row["puzzle_id"]),
+                "chosen_hold": [int(value) for value in (row.get("chosen_hold") or [])],
+                "optimal_hold": [int(value) for value in (row.get("optimal_hold") or [])],
+                "points_lost": float(row.get("points_lost") or 0.0),
+                "exact": bool(row.get("exact")),
+                "solver_source": str(row.get("solver_source") or ""),
+            })
+        return {
+            "player_id": target_player_id,
+            "display_name": str(player_row["display_name"]),
+            "summary": {
+                "total_ev_loss": float(target_attempt.total_ev_loss or 0.0),
+                "exact_count": int(target_attempt.exact_count or 0),
+                "worst_miss": float(target_attempt.worst_miss or 0.0),
+                "best_exact_streak": int(target_attempt.best_exact_streak or 0),
+            },
+            "answers": answers,
+        }
+
     def current_participation_streak(self, player_id: str, current_date: str) -> int:
         self._require_player_row(player_id)
         today = date.fromisoformat(str(current_date))

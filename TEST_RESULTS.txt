@@ -1,43 +1,47 @@
-Yahtzee Coach v43B Phase 2K.6.1.1 test summary
+Yahtzee Coach v43B Phase 2K.8 test summary
 
-STARTUP / DEPLOYMENT-SAFETY HOTFIX
-- New deployment-safety suite: 11/11 checks passed
-- Reproduced a stale exact_mode environment with the Phase 2K.5 module
-- exact_runtime.py imported successfully against that stale module
-- Audited exact-policy SHA-256 still verified successfully
-- Compatibility path remains exact-only and never invokes heuristic fallback
-- Policy-load failures still fail closed as exact_unavailable
-
-COMPACT DECISION LAYOUT
-- Phase 2K.6.1 layout suite: 14/14 passed
-- Full scorecard remains always visible
-- Duplicate open-category chip row remains removed
-- Upper stays 3 columns and Lower stays 4 columns on phone width
-- Upper subtotal / 63 remains visible
-- Compact one-line Roll stage remains intact
+NEW YESTERDAY-STANDINGS + PODIUM FEATURE
+- New Phase 2K.8 suite: 15/15 checks passed
+- Prior Eastern Daily date is resolved correctly
+- Yesterday's deterministic challenge-set ID is used to retrieve saved results
+- Existing real group Daily snapshot/leaderboard is reused; no alternate ranking system added
+- Gold / Silver / Bronze mapping passed
+- Balloon ceremony is wired for podium finishers
+- Full final board is shown before today's unstarted Daily
+- Non-podium and did-not-finish states are handled
+- Solo groups do not receive a meaningless one-person podium medal
+- Start button launches today's persisted Daily directly
+- Per-player browser acknowledgement uses localStorage; no new Supabase migration
+- Official saved leaderboard behavior test confirmed 1st/2nd/3rd map directly to medals
 
 FULL REGRESSION
-- 36/36 current automated test suites passed across the final source tree
-  (the first 27 passed in the primary run; the remaining 9 passed in the continuation run after the long suite batch reached the shell timeout)
-- Phase 2K.6 math hardening passed all checks
-- Start-of-game exact-policy expectation remains 254.5877272
-- Roll clarity: 10/10
-- Practice navigation hotfix: 8/8
-- Practice UI cleanup: 15/15
-- Remembered-login reliability: 17/17
-- Persistent-login/performance: 21/21
-- Login autofill hotfix: 10/10
-- Social groups: 14/14
-- Sharing: 18/18
-- Persistence: 28/28
-- Strategy regressions: 26/26
-- Published strategy benchmarks: 15/15
-- Coaching-language audit passed across 840 real exact-policy positions / 18 coaching families
+- 38/38 current automated test suites passed across the final source tree
+- Phase 2K.7 scorecard + friend-review suite still passes
+- Daily persistence/resume/edit/final-submit protections still pass
+- Social groups, sharing, invite flow, Practice UI, roll clarity, coaching clarity, remembered login, install flow, and mobile UI protections all pass
 
 MATH / STRATEGY PROTECTION
+- Exact integration exhaustive value-table audit: 3,669,120 legal hold values
+- 20,000 public exact analyses/value lookups passed
+- Exact-first representative routing: 840/840
+- Expanded Practice generation: 20,000/20,000 exact-supported rounds
+- v43A integration: 17/17
+- Strategy regressions: 26/26
+- Published strategy benchmarks: 15/15
+- Start-of-game exact-policy expectation remains 254.5877272
 - Exact-policy SHA-256 remains:
   cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b
-- No exact-policy value or recommended hold changed
-- Player-facing path remains exact-only
 
-No new Supabase migration is required for Phase 2K.6.1.1.
+BYTE-FOR-BYTE UNCHANGED FROM THE UPLOADED PHASE 2K.7 BASELINE
+- exact_policy.npz
+- puzzle_bank.npz
+- challenge_catalog.npz
+- yahtzee_engine.py
+- daily_challenge.py
+- exact_mode.py
+- exact_runtime.py
+- puzzle_bank.py
+- daily_store.py
+- supabase_daily_store.py
+
+No new Supabase migration is required for Phase 2K.8.

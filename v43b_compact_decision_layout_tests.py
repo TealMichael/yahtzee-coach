@@ -17,14 +17,14 @@ def run():
     practice = section(app, "def render_practice_mode", "def render_help_feedback")
 
     checks = [
-        ("release is Phase 2K.6.1.1", 'APP_RELEASE = "v43B Phase 2K.6.1.1"' in app),
+        ("release is Phase 2K.8", 'APP_RELEASE = "v43B Phase 2K.8"' in app),
         ("full scorecard remains always visible", "st.expander" not in render_scorecard),
         ("duplicate open-category chips are removed from live scorecard", "open_chips_html" not in render_scorecard),
         ("scorecard shows actual upper subtotal against 63", "Upper: {upper_total} / 63" in render_scorecard),
         ("upper scorecard remains 3 columns on phones", ".score-grid { grid-template-columns:repeat(3" in app),
         ("lower scorecard remains 4 columns on phones", app.count(".score-grid.lower { grid-template-columns:repeat(4") >= 2),
         ("compact upper labels restored", all(f'"{k}": "{v}"' in app for k, v in [("ones","1s"),("twos","2s"),("sixes","6s")])),
-        ("compact lower labels remain understandable", all(f'"{k}": "{v}"' in app for k, v in [("three_of_a_kind","3 Kind"),("full_house","Full H."),("small_straight","Sm Str."),("large_straight","Lg Str.")])),
+        ("original short lower labels restored for readability", "CATEGORY_SCORECARD = dict(CATEGORY_SHORT)" in app and all(f'"{k}": "{v}"' in app for k, v in [("three_of_a_kind","3K"),("full_house","FH"),("small_straight","SS"),("large_straight","LS")])),
         ("roll banner is compact single-row flex", "padding:0.38rem 0.58rem" in app and ".daily-roll-stage-sub { display:none; }" in app),
         ("Daily shows roll before scorecard", daily.index("daily-roll-stage") < daily.index('render_scorecard(challenge["scorecard"])')),
         ("Daily decision prompt is one compact line", "Which dice would you keep? <span class='muted'>Tap to select.</span>" in daily_choice and "Your choice saves when you move forward" not in daily_choice),
