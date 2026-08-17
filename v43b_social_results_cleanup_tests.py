@@ -29,7 +29,7 @@ def run():
     manage = results.index("render_friend_group_hub(")
 
     checks = [
-        ('APP_RELEASE = "v43B Phase 2K.8.2"' in app, "release advances to Phase 2K.8.2"),
+        ('APP_RELEASE = "v43B Phase 2K.8.3"' in app, "release advances to Phase 2K.8.2"),
         (share < standings < insights < grades < friend_peek < manage, "share sits with the personal result before the calm social-results hierarchy"),
         ("on_click=_open_friend_review" not in leaderboard and "st.columns" not in leaderboard, "standings are no longer built from clickable name buttons or squeezed columns"),
         ("leaderboard-list" in leaderboard and "leaderboard-row" in leaderboard, "standings use uniform full-width leaderboard rows"),

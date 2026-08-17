@@ -27,7 +27,7 @@ def run():
     peek = results.index("_render_friend_pick_peek(active_group, board)")
 
     checks = [
-        ('APP_RELEASE = "v43B Phase 2K.8.2"' in app, "release advances to Phase 2K.8.2"),
+        ('APP_RELEASE = "v43B Phase 2K.8.3"' in app, "release advances to Phase 2K.8.2"),
         (results.count("📤 Share today's result") == 1, "share result appears exactly once"),
         (hero < share < standings < insights < grades < peek, "share sits directly with the personal result before social results"),
         ('with st.expander("📤 Share today\'s result", expanded=False):' in results, "existing spoiler-free share stays collapsed until tapped"),

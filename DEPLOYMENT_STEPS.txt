@@ -1,25 +1,22 @@
-YAHTZEE COACH v43B PHASE 2K.8.2
-Share Placement Hotfix
+YAHTZEE COACH v43B PHASE 2K.8.3
+Coaching Semantic Audit
 
 NO NEW SUPABASE STEP.
 
 UPLOAD:
 1. Upload ALL files inside UPLOAD_TO_GITHUB to the root of the GitHub repo.
 2. Commit with:
-   v43B Phase 2K.8.2 - move Daily share next to the result
+   v43B Phase 2K.8.3 - make coaching explanations structurally accurate
 3. Wait for Streamlit to redeploy.
 
 LIVE TEST:
-1. Finish today's Daily.
-2. Confirm Share today's result appears immediately below your personal result summary.
-3. Confirm Daily Standings comes next.
-4. Confirm Group Insights, Your 10 Grades, Peek at a Friend's Picks, and Invite/manage friends remain unchanged.
-5. Open Share today's result and confirm the existing spoiler-free share grid/text still works normally.
+1. Open a completed Daily review or Practice result.
+2. Check a two-pair miss if one appears. The coach should identify the Full House idea before explaining why another hold wins.
+3. Confirm the Remember line is now a complete strategy sentence, not just a short title.
+4. Check that Daily Standings, Group Insights, Your 10 Grades, Share, friend peek, yesterday podium, and login all look unchanged.
 
 WHAT DID NOT CHANGE:
 - No Yahtzee strategy recommendation changed.
 - No exact-policy, puzzle-bank, challenge-catalog, Daily-generator, or Practice-generator changes.
-- No group ranking/tie-break change.
-- No friend-peek behavior change.
+- No group ranking, social, sharing, podium, login, or persistence behavior changes.
 - No database migration.
-- Remembered login, speed improvements, yesterday podium, persistence, and spoiler protections remain in place.

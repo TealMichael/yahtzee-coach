@@ -27,7 +27,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.8.2"
+APP_RELEASE = "v43B Phase 2K.8.3"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
@@ -3627,7 +3627,13 @@ def _render_daily_review_body(answer, *, subject_name="You"):
     report = answer["report"]
     loss = float(record.get("points_lost", 0.0) or 0.0)
     grade = record.get("grade", "") or extract_line(report, "Grade:")
-    lesson = record.get("lesson", "") or record.get("lesson_title", "")
+    takeaway_items = extract_section(report, "Teaching takeaway:")
+    lesson = record.get("lesson", "")
+    if not lesson and takeaway_items:
+        takeaway = takeaway_items[0]
+        lesson = takeaway.split(": ", 1)[1] if ": " in takeaway else takeaway
+    if not lesson:
+        lesson = record.get("lesson_title", "")
     st.caption(
         f"{challenge.get('stage', '')} · Roll {challenge.get('roll_number')} · {challenge.get('skill_tag', '')}"
     )

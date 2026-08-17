@@ -1,3 +1,43 @@
+# Yahtzee Coach v43B Phase 2K.8.3 — Coaching Semantic Audit
+
+This release is a coaching-language correctness pass on top of Phase 2K.8.2. The exact policy and every strategy ranking remain unchanged; this patch only improves how the app translates exact decisions into human explanations.
+
+## v43B Phase 2K.8.3 changes
+
+- **Two-pair holds now read as two-pair holds.** When Full House is open, keeping two pairs is described first as the natural one-die Full House chase instead of being mislabeled as a generic Three/Four of a Kind or Yahtzee plan.
+- **Two pairs with the fifth die also held are handled separately.** The coach now recognizes that holding all five leaves no fresh die for a direct Full House attempt.
+- **Two pairs stop receiving Full House language after Full House is filled.**
+- **Triples are no longer able to fall into a template that calls them a pair.**
+- **Four matching dice no longer say “one die from Yahtzee” when the Yahtzee box is already gone.** The explanation instead names the live matching routes on the actual scorecard.
+- **Triple path language now prioritizes direct live routes such as Full House before more remote matching outcomes.**
+- **Dead-upper-bonus explanations are shorter and more precise.** They still make clear that a high upper die can be optimal even when 63 is impossible, without implying the dead bonus is influencing the ranking.
+- **Extra-Yahtzee language now says forced-upper/Joker rules can come into play** rather than implying Joker scoring always applies immediately.
+- **Mixed holds acknowledge extra dice the player kept.** A pair-plus-singleton hold is no longer described as if every loose die were being rerolled.
+- **Daily “Remember” now displays the full reusable teaching takeaway**, not just a short internal lesson title. Practice already used the richer takeaway; Daily review now matches it.
+
+## Coaching audit
+
+The new semantic regression suite directly protects the live tester case `2,5,5,6,6` on Roll 1: keeping `5,5,6,6` is correctly recognized as a Full House chase while the exact best remains `6,6` at about 1.70 Points Lost.
+
+In addition to the permanent regression suite, the final audit generated and checked **635,040 player-vs-exact coaching contrasts** across all 420 exact scorecard states, all 252 canonical dice rolls, both coached roll stages, and multiple non-best legal holds per position. The audit checks scorecard truth (bonus alive/dead/secured, Yahtzee status, Full House status), hold structure, grammar, and family-specific claims.
+
+## Math / strategy
+
+**No recommended hold changed.** `exact_policy.npz`, the puzzle bank, challenge catalog, Yahtzee engine, Daily generator, and Practice generator are unchanged. The locked exact-policy start-of-game expectation remains **254.5877272**, and the published optimal benchmark positions remain protected.
+
+## Supabase
+
+**No new Supabase migration is required.** Phase 2K.4 remains the latest required database migration.
+
+## Phase 2K.8.3 live-test goal
+
+1. Review a few Daily and Practice misses, especially pairs, two pairs, triples, and four matching dice.
+2. Confirm **Why this wins** describes what the player actually held before explaining the exact alternative.
+3. Confirm **Remember** is now a useful strategy sentence rather than only a short title.
+4. Confirm all Phase 2K.8.2 social results, sharing, podium, login, and performance behavior is unchanged.
+
+---
+
 # Yahtzee Coach v43B Phase 2K.8.2 — Share Placement Hotfix
 
 This is a surgical UI hotfix on top of Phase 2K.8.1. The spoiler-free share feature is unchanged; it is simply moved to a more natural and visible location directly beneath the player's personal Daily result summary.

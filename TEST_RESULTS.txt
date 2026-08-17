@@ -1,35 +1,45 @@
-Yahtzee Coach v43B Phase 2K.8.2 test summary
+Yahtzee Coach v43B Phase 2K.8.3 test summary
 
-NEW SHARE-PLACEMENT HOTFIX
-- New Phase 2K.8.2 placement suite: 6/6 checks passed
-- Share today's result appears exactly once
-- Share now sits directly below the personal result summary and before Daily Standings
-- Existing spoiler-free share payload/card is unchanged
-- Phase 2K.8.1 standings, Group Insights, Your 10 Grades, friend peek, and invite/manage hierarchy remains intact
+NEW COACHING SEMANTIC AUDIT
+- New Phase 2K.8.3 coaching-semantic suite passed
+- Live tester regression protected: dice 2,5,5,6,6 · Roll 1 · user keeps 5,5,6,6 · exact best remains 6,6 · about 1.70 Points Lost
+- Two-pair Full House intent is now recognized before generic matching-dice language
+- Two pairs with all five dice held no longer pretend a Full House reroll is available
+- Full House language is removed when the Full House box is already filled
+- Triples cannot fall into the pair-vs-straight wording path
+- Four-matching explanations respect whether Yahtzee is open, scored for 50, or closed
+- Extra-Yahtzee wording accurately references forced-upper/Joker rules
+- Mixed holds acknowledge extra singleton dice that the player chose to keep
+- Daily Remember text now uses the full reusable Teaching takeaway instead of only the short lesson title
 
-REGRESSION PASSES
-- 40/40 current automated test suites passed across the final app
-- Social-results cleanup: 16/16
-- UI hierarchy cleanup: 15/15
-- Performance/clarity: 24/24
-- Beta readiness: 19/19
-- Daily persistent-attempt UI: 19/19
-- Real social groups: 14/14
-- Share results: 18/18
-- Yesterday podium: 15/15
-- Remembered login/performance: 21/21
-- Remembered-login reliability: 17/17
-- Practice UI cleanup: 15/15
-- Roll clarity: 10/10
-- Core persistence: 28/28
-- v43A Daily integration: 17/17
+LARGE LANGUAGE AUDITS
+- Permanent semantic audit: 13,354 exact coaching contrasts across 24 coaching families
+- Additional final exhaustive audit: 635,040 exact coaching contrasts
+- Exhaustive audit covered all 420 exact scorecard states, all 252 canonical rolls, both coached roll stages, and multiple non-best legal holds per position
+- Scorecard-truth checks passed for upper bonus alive/dead/secured, Yahtzee status, Full House status, hold structure, and singular/plural grammar
+- Longest audited concise Why-this-wins explanation: 300 characters
+
+FULL REGRESSION
+- 41/41 current automated test suites passed on the final build
+- Coaching language family audit passed
+- Coaching clarity tests: 12/12
+- Dark-mode/dead-bonus tests: 11/11
+- Personalized teaching tests passed
+- Advanced scorecard-context teaching tests passed
+- Teaching-experience tests passed
+- Social-results cleanup, share placement, podium, friend peek, persistence, remembered login, Practice UI, and performance regressions all passed
 
 MATH / STRATEGY PROTECTION
-- Phase 2K.6 math-hardening suite passed after the final UI change
-- Start-of-game exact-policy expectation remains 254.5877272
-- Published optimal benchmark positions still match
-- Dead-upper-bonus regression remains protected
-- Exact-policy SHA-256 remains:
+- No recommended hold changed
+- Locked exact-policy SHA-256 remains:
   cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b
+- Start-of-game exact-policy expectation remains 254.5877272
+- Published optimal benchmark positions remain protected
+- Dead-upper-bonus regression remains exact: keep 6; pair of 3s about 1.94 Points Lost
+- Exact integration audit remains clean: 3,669,120 legal hold values; 3,135 tied-best records
+- 840/840 representative expanded-bank reports routed through exact mode
+- 20,000/20,000 expanded Practice rounds stayed exact in the existing integration audit
+- Strategy regressions: 26/26
+- Published strategy benchmarks: 15/15
 
-No new Supabase migration is required for Phase 2K.8.2.
+No new Supabase migration is required for Phase 2K.8.3.
