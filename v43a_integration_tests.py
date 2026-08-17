@@ -49,7 +49,7 @@ def run():
     checks.append(("Daily results link back to Practice", "Go to open Practice" in app_text and "on_click=_set_app_mode" in app_text and 'args=("Practice",)' in app_text))
     checks.append(("Practice can return to completed leaderboard", ("View today's Daily leaderboard" in app_text or "Daily complete · View leaderboard" in app_text) and "on_click=_set_app_mode" in app_text and 'args=("Daily Challenge",)' in app_text))
     checks.append(("competitive mode rejects heuristic fallback", ('this answer was NOT locked' in app_text or 'choice was NOT saved' in app_text) and 'solver_record.get("source") != "exact"' in app_text))
-    checks.append(("coaching waits until completion", 'Choose one question at a time to see the best hold and coaching.' in app_text and 'No grades, Points Lost, or best answers are shown yet.' in app_text))
+    checks.append(("coaching waits until completion", 'Tap a question to open the full coaching for that decision.' in app_text and 'No grades, Points Lost, or best answers are shown yet.' in app_text))
     checks.append(("persistent Daily removes prototype reset control", "Reset today's local demo attempt" not in app_text and "Today's Daily is complete. Come back tomorrow for a new set." in app_text))
     checks.append(("mobile daily result grid protected", '@media (max-width:640px)' in app_text and '.daily-result-grid { grid-template-columns:repeat(2' in app_text))
 

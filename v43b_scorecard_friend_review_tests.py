@@ -34,7 +34,7 @@ def run():
     contract = (ROOT / "daily_store.py").read_text(encoding="utf-8")
 
     checks = [
-        ('APP_RELEASE = "v43B Phase 2K.8"' in app, "release advances to Phase 2K.8"),
+        ('APP_RELEASE = "v43B Phase 2K.8.1"' in app, "release advances to Phase 2K.8"),
         ("CATEGORY_SCORECARD = dict(CATEGORY_SHORT)" in app, "live scorecard restores original short labels"),
         ("font-size:1.02rem; font-weight:950" in app, "score values are larger than compact 2K.6.1 layout"),
         ("min-height:2.45rem" in app, "score boxes are slightly larger while retaining compact grid"),
@@ -43,11 +43,12 @@ def run():
         ("def group_player_daily_review" in contract and "def group_player_daily_review" in backend, "friend-review persistence path exists in both stores"),
         ("Finish your own Daily before reviewing a friend's choices." in contract and "Finish your own Daily before reviewing a friend's choices." in backend, "store blocks spoilers until viewer finishes"),
         ("That player has not finished this Daily yet." in contract and "That player has not finished this Daily yet." in backend, "store blocks unfinished-friend answers"),
-        ("Tap a finished friend's name" in app and "on_click=_open_friend_review" in app, "completed leaderboard names are clickable review controls"),
-        ("_render_friend_daily_review(active_group, board, answers)" in app, "friend review is attached to completed Daily leaderboard"),
-        ("You made different" in app and "biggest miss was Q" in app, "friend comparison shows choice differences and biggest miss"),
-        ("_render_daily_review_body(friend_answers" in app and "subject_name=friend_name" in app, "friend questions reuse exact coaching review UI"),
-        ("_cached_group_player_daily_review" in app, "friend review is cached after completed immutable result"),
+        ("on_click=_open_friend_review" not in app and "Tap a finished friend's name" not in app, "leaderboard no longer doubles as a friend-review control"),
+        ("def _render_friend_pick_peek" in app and "👀 Peek at a friend's picks" in app, "friend picks move to a dedicated bottom-of-page peek"),
+        ("You made different" not in app and "biggest miss was Q" not in app, "side-by-side comparison analytics are removed"),
+        ("See {selected_name}'s 10 picks" in app and "Kept <b>{html.escape(kept)}</b>" in app, "friend peek focuses on the choices themselves"),
+        ("friend-pick-list" in app and "✅ Best" in app and "{loss:.2f} lost" in app, "friend peek shows where the friend lost points without a comparison dashboard"),
+        ("_cached_group_player_daily_review" in app, "friend pick retrieval stays cached after completed immutable result"),
     ]
     for ok, message in checks:
         require(ok, message)
