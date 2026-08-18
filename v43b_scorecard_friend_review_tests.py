@@ -34,7 +34,7 @@ def run():
     contract = (ROOT / "daily_store.py").read_text(encoding="utf-8")
 
     checks = [
-        ('APP_RELEASE = "v43B Phase 2K.8.3"' in app, "release advances to Phase 2K.8"),
+        ('APP_RELEASE = "v43B Phase 2K.9"' in app, "release advances to Phase 2K.9"),
         ("CATEGORY_SCORECARD = dict(CATEGORY_SHORT)" in app, "live scorecard restores original short labels"),
         ("font-size:1.02rem; font-weight:950" in app, "score values are larger than compact 2K.6.1 layout"),
         ("min-height:2.45rem" in app, "score boxes are slightly larger while retaining compact grid"),
@@ -43,12 +43,10 @@ def run():
         ("def group_player_daily_review" in contract and "def group_player_daily_review" in backend, "friend-review persistence path exists in both stores"),
         ("Finish your own Daily before reviewing a friend's choices." in contract and "Finish your own Daily before reviewing a friend's choices." in backend, "store blocks spoilers until viewer finishes"),
         ("That player has not finished this Daily yet." in contract and "That player has not finished this Daily yet." in backend, "store blocks unfinished-friend answers"),
-        ("on_click=_open_friend_review" not in app and "Tap a finished friend's name" not in app, "leaderboard no longer doubles as a friend-review control"),
-        ("def _render_friend_pick_peek" in app and "👀 Peek at a friend's picks" in app, "friend picks move to a dedicated bottom-of-page peek"),
+        ("👀 Peek at a Friend's Picks" in app and "_render_friend_pick_peek(active_group, board)" in app, "friend picks live in a separate optional section below personal results"),
         ("You made different" not in app and "biggest miss was Q" not in app, "side-by-side comparison analytics are removed"),
-        ("See {selected_name}'s 10 picks" in app and "Kept <b>{html.escape(kept)}</b>" in app, "friend peek focuses on the choices themselves"),
-        ("friend-pick-list" in app and "✅ Best" in app and "{loss:.2f} lost" in app, "friend peek shows where the friend lost points without a comparison dashboard"),
-        ("_cached_group_player_daily_review" in app, "friend pick retrieval stays cached after completed immutable result"),
+        ("See {friend_name}'s 10 picks" in app and "Q{q}" in app, "friend peek shows a simple ten-pick list"),
+        ("_cached_group_player_daily_review" in app, "friend picks still use the spoiler-safe immutable review path"),
     ]
     for ok, message in checks:
         require(ok, message)

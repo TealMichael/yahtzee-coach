@@ -27,7 +27,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.8.3"
+APP_RELEASE = "v43B Phase 2K.9"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
@@ -970,11 +970,6 @@ st.markdown(
     .leaderboard-name span { display:block; font-size:0.69rem; font-weight:700; color:#64748b !important; margin-top:0.1rem; }
     .leaderboard-score { text-align:right; font-size:0.78rem; line-height:1.2; color:#64748b !important; }
     .leaderboard-score b { display:block; color:#111827 !important; font-size:0.93rem; }
-    .friend-pick-list { display:flex; flex-direction:column; gap:0.30rem; margin:0.42rem 0 0.55rem 0; }
-    .friend-pick-row { display:grid; grid-template-columns:2.35rem minmax(0,1fr) auto; gap:0.45rem; align-items:center; border:1px solid rgba(127,127,127,0.16); border-radius:11px; padding:0.43rem 0.52rem; background:#f8fafc; color:#111827 !important; }
-    .friend-pick-q { font-weight:950; color:#475569 !important; }
-    .friend-pick-hold { font-size:0.84rem; min-width:0; }
-    .friend-pick-result { font-size:0.78rem; font-weight:900; color:#475569 !important; text-align:right; white-space:nowrap; }
     .friend-review-summary { display:grid; grid-template-columns:1fr 1fr; gap:0.46rem; margin:0.48rem 0 0.62rem 0; }
     .friend-review-card { border:1px solid rgba(127,127,127,0.20); border-radius:14px; padding:0.56rem 0.64rem; background:#f8fafc; color:#111827 !important; }
     .friend-review-card.you { background:#eff6ff; border-color:#bfdbfe; }
@@ -2482,10 +2477,16 @@ def _hold_values_from_exact_label(label: str) -> list[int]:
 
 
 def _register_today_in_database(store):
+    challenges = st.session_state.daily_challenges
+    version = (
+        str(challenges[0].get("daily_version"))
+        if challenges
+        else DAILY_CHALLENGE_VERSION
+    )
     return store.ensure_challenge(
         st.session_state.daily_set_id,
         st.session_state.daily_date_key,
-        DAILY_CHALLENGE_VERSION,
+        version,
         _daily_puzzle_ids(),
     )
 
@@ -3486,12 +3487,7 @@ def _close_friend_review():
 
 
 def render_leaderboard_cards(board, *, allow_review=False):
-    """Render a clean, scan-friendly standings list.
-
-    ``allow_review`` is retained for backwards compatibility, but friend review
-    controls intentionally live below the player's own review instead of inside
-    the leaderboard.
-    """
+    """Render a clean, scan-friendly leaderboard. Friend review lives below the standings."""
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
     active_player_id = str(st.session_state.get("active_player_id") or "")
     rows = []
@@ -3500,18 +3496,20 @@ def render_leaderboard_cards(board, *, allow_review=False):
         player_id = str(item.get("player_id") or "")
         display_name = str(item.get("display_name") or "Player")
         is_you = player_id == active_player_id
-        you_note = "<span>You</span>" if is_you else ""
+        you_note = " <span>YOU</span>" if is_you else ""
+        row_class = "leaderboard-row you" if is_you else "leaderboard-row"
         rows.append(
-            f"<div class='leaderboard-row{' you' if is_you else ''}'>"
+            f"<div class='{row_class}'>"
             f"<div class='leaderboard-rank'>{medals.get(rank, '')} {rank}</div>"
             f"<div class='leaderboard-name'>{html.escape(display_name)}{you_note}</div>"
-            f"<div class='leaderboard-score'><b>{float(item['total_ev_loss']):.2f} lost</b>"
-            f"{int(item['exact_count'])}/10 best</div>"
+            f"<div class='leaderboard-score'><b>{float(item['total_ev_loss']):.2f}</b>"
+            f"Points Lost · {int(item['exact_count'])}/10 best</div>"
             "</div>"
         )
     if rows:
         st.markdown("<div class='leaderboard-list'>" + "".join(rows) + "</div>", unsafe_allow_html=True)
-    st.caption("Lowest Points Lost wins.")
+    with st.expander("How rankings work", expanded=False):
+        st.caption("Lowest Points Lost ranks first. Ties use more best holds, then the smaller biggest miss.")
 
 
 def _share_square(points_lost: float) -> str:
@@ -3627,13 +3625,7 @@ def _render_daily_review_body(answer, *, subject_name="You"):
     report = answer["report"]
     loss = float(record.get("points_lost", 0.0) or 0.0)
     grade = record.get("grade", "") or extract_line(report, "Grade:")
-    takeaway_items = extract_section(report, "Teaching takeaway:")
-    lesson = record.get("lesson", "")
-    if not lesson and takeaway_items:
-        takeaway = takeaway_items[0]
-        lesson = takeaway.split(": ", 1)[1] if ": " in takeaway else takeaway
-    if not lesson:
-        lesson = record.get("lesson_title", "")
+    lesson = record.get("lesson", "") or record.get("teaching_takeaway", "") or record.get("lesson_title", "")
     st.caption(
         f"{challenge.get('stage', '')} · Roll {challenge.get('roll_number')} · {challenge.get('skill_tag', '')}"
     )
@@ -3675,7 +3667,7 @@ def _daily_review_item(answer):
     number = int(challenge.get("daily_number") or 0)
     loss = float(record.get("points_lost", 0.0) or 0.0)
     grade = record.get("grade", "") or extract_line(answer["report"], "Grade:")
-    label = f"Q{number} · {grade} · {loss:.2f} lost"
+    label = f"Q{number} · {grade} · {loss:.2f} points lost"
     with st.expander(label, expanded=False):
         _render_daily_review_body(answer)
 
@@ -3707,45 +3699,39 @@ def _rebuild_friend_daily_answers(review_payload):
 
 
 def _render_friend_pick_peek(active_group, board):
-    """Optional bottom-of-page peek at a finished friend's immutable picks."""
+    """Optional spoiler-safe peek at a completed friend's ten held-dice choices."""
     if active_group is None:
         return
     active_player_id = str(st.session_state.get("active_player_id") or "")
-    candidates = [
+    friends = [
         item for item in board
-        if str(item.get("player_id") or "") and str(item.get("player_id") or "") != active_player_id
+        if str(item.get("player_id") or "") != active_player_id
     ]
-    if not candidates:
+    if not friends:
         return
 
-    names = {str(item["player_id"]): str(item.get("display_name") or "Friend") for item in candidates}
-    candidate_ids = list(names)
-    target_id = str(st.session_state.get("friend_review_player_id") or "")
-    if target_id not in names:
-        target_id = ""
-        st.session_state.friend_review_player_id = None
-
-    with st.expander("👀 Peek at a friend's picks", expanded=bool(target_id)):
-        st.caption("Curious what someone else kept? Pick a finished friend. No comparison dashboard—just their choices.")
-        selected_id = st.selectbox(
+    with st.expander("👀 Peek at a Friend's Picks", expanded=False):
+        friend_by_id = {str(item.get("player_id")): item for item in friends}
+        friend_id = st.selectbox(
             "Finished friend",
-            options=candidate_ids,
-            format_func=lambda player_id: names.get(str(player_id), "Friend"),
-            key=f"friend_peek_selector_{active_group.group_id}",
+            options=list(friend_by_id),
+            format_func=lambda player_id: str(friend_by_id[player_id].get("display_name") or "Friend"),
+            key="friend_pick_peek_player",
         )
-        selected_name = names.get(str(selected_id), "Friend")
+        friend = friend_by_id[str(friend_id)]
+        friend_name = str(friend.get("display_name") or "Friend")
         if st.button(
-            f"👀 See {selected_name}'s 10 picks",
-            key=f"friend_peek_open_{active_group.group_id}",
+            f"👀 See {friend_name}'s 10 picks",
             use_container_width=True,
+            key="friend_pick_peek_button",
         ):
-            st.session_state.friend_review_player_id = str(selected_id)
-            st.rerun()
+            st.session_state.friend_review_player_id = str(friend_id)
 
         target_id = str(st.session_state.get("friend_review_player_id") or "")
-        if not target_id or target_id not in names:
+        if target_id not in friend_by_id:
             return
-
+        target = friend_by_id[target_id]
+        target_name = str(target.get("display_name") or "Friend")
         try:
             payload = _cached_group_player_daily_review(
                 active_group.group_id,
@@ -3753,37 +3739,20 @@ def _render_friend_pick_peek(active_group, board):
                 active_player_id,
                 target_id,
             )
+            friend_answers = _rebuild_friend_daily_answers(payload)
         except Exception as exc:
             st.warning("That friend's picks couldn't be loaded right now.")
             if database_check_enabled():
-                st.caption(f"Friend peek detail: {type(exc).__name__}: {exc}")
+                st.caption(f"Friend picks detail: {type(exc).__name__}: {exc}")
             return
 
-        friend_name = str(payload.get("display_name") or names.get(target_id) or "Friend")
-        rows = []
-        for row in sorted(payload.get("answers", []), key=lambda item: int(item.get("question_number") or 0)):
-            q = int(row.get("question_number") or 0)
-            selected = [int(value) for value in row.get("chosen_hold", [])]
-            kept = ", ".join(str(value) for value in selected) if selected else "nothing"
-            loss = float(row.get("points_lost", 0.0) or 0.0)
+        st.markdown(f"**{html.escape(target_name)}'s 10 picks**")
+        for q, answer in enumerate(friend_answers, start=1):
+            record = answer["solver_record"]
+            selected = record.get("user_hold", "—")
+            loss = float(record.get("points_lost", 0.0) or 0.0)
             result = "✅ Best" if loss <= 1e-9 else f"{loss:.2f} lost"
-            rows.append(
-                "<div class='friend-pick-row'>"
-                f"<div class='friend-pick-q'>Q{q}</div>"
-                f"<div class='friend-pick-hold'>Kept <b>{html.escape(kept)}</b></div>"
-                f"<div class='friend-pick-result'>{result}</div>"
-                "</div>"
-            )
-        st.markdown(f"**{html.escape(friend_name)}'s 10 picks**")
-        st.markdown("<div class='friend-pick-list'>" + "".join(rows) + "</div>", unsafe_allow_html=True)
-
-        if st.button(
-            "Hide picks",
-            key=f"friend_peek_close_{target_id}",
-            use_container_width=True,
-        ):
-            _close_friend_review()
-            st.rerun()
+            st.markdown(f"**Q{q}** · {html.escape(str(selected))} · {result}")
 
 
 def render_daily_results():
@@ -3792,6 +3761,7 @@ def render_daily_results():
     challenges = st.session_state.daily_challenges
     summary = summarize_attempt(records)
 
+    # Keep group switching available, but put group administration later.
     groups = _load_player_groups()
     if len(groups) > 1:
         render_group_selector(groups, key="daily_results_group_selector")
@@ -3830,32 +3800,37 @@ def render_daily_results():
     if streak_copy:
         st.caption(streak_copy)
 
-    # Share belongs with the player's result: see how you did, share it, then see the group.
-    with st.expander("📤 Share today's result", expanded=False):
-        render_daily_share_result(records, summary, rank=rank, completed_count=len(board))
+    render_daily_share_result(records, summary, rank=rank, completed_count=len(board))
 
-    # 1. Daily standings — clean scoreboard first, with no review controls inside it.
-    st.markdown("### 🏆 Daily Standings")
+    # Social payoff comes before group administration.
     if active_group is not None:
         completed = len(board)
         total_members = len(members)
-        if total_members > 1 and completed >= total_members:
-            status = f"{active_group.group_name} · Final · {completed}/{total_members} finished"
-        elif total_members > 1:
-            status = f"{active_group.group_name} · {completed}/{total_members} finished"
-        else:
-            status = f"{active_group.group_name} · you're the only member so far"
-        st.caption(status)
+        st.markdown(f"### 🏆 {active_group.group_name}")
+        if total_members <= 1:
+            st.markdown(
+                "<div class='daily-rank-banner'><b>You're the only member so far.</b><br>Invite a friend to turn this into a real leaderboard.</div>",
+                unsafe_allow_html=True,
+            )
+        elif completed == 1 and rank == 1:
+            waiting = max(0, total_members - completed)
+            st.markdown(
+                f"<div class='daily-rank-banner'><b>You're the first to finish today!</b><br>Waiting for {waiting} friend{'s' if waiting != 1 else ''}.</div>",
+                unsafe_allow_html=True,
+            )
+        elif rank is not None:
+            st.markdown(
+                f"<div class='daily-rank-banner'><b>You're #{rank} of {completed} today.</b><br>Lowest Points Lost leads the group.</div>",
+                unsafe_allow_html=True,
+            )
+        if total_members > 1 and completed < total_members:
+            waiting = total_members - completed
+            st.caption(f"{completed} of {total_members} finished · waiting for {waiting} more")
+        elif total_members > 1 and completed >= total_members:
+            st.caption("Everyone's in — final standings for today.")
         if board:
-            render_leaderboard_cards(board)
-        else:
-            st.caption("No one has finished today's Daily yet.")
-    else:
-        st.caption("Join a friend group to see shared Daily standings here.")
+            render_leaderboard_cards(board, allow_review=False)
 
-    # 2. Group insights — fun group story immediately after the standings.
-    if active_group is not None:
-        st.markdown("### 🎯 Group Insights")
         toughest = story.get("toughest")
         easiest = story.get("easiest")
         story_cards = []
@@ -3889,18 +3864,16 @@ def render_daily_results():
             )
         if story_cards:
             st.markdown("<div class='group-story-grid'>" + "".join(story_cards) + "</div>", unsafe_allow_html=True)
-        else:
-            st.caption("Group insights will appear as more friends finish today's Daily.")
+    else:
+        st.markdown("### 🏆 Play with friends")
+        st.caption("Create or join a friend group to compare Daily results on a shared leaderboard.")
 
-    # 3. Personal review — ten compact grades, each expandable only when wanted.
     st.markdown("### 📝 Your 10 Grades")
-    st.caption("Tap a question to open the full coaching for that decision.")
+    st.caption("Tap any question to open its full coaching.")
     for answer in answers:
         _daily_review_item(answer)
 
-    # 4. Optional social curiosity — deliberately separated at the bottom.
-    if active_group is not None and board:
-        _render_friend_pick_peek(active_group, board)
+    _render_friend_pick_peek(active_group, board)
 
     st.caption("🔒 Today's Daily is complete. Come back tomorrow for a new set.")
 
@@ -3913,7 +3886,9 @@ def render_daily_results():
         args=("Practice",),
     )
 
+    # Group administration stays below results, insights, personal grades, and optional friend peeks.
     render_friend_group_hub(expanded=active_group is None)
+
     render_solver_panel(records)
 
 

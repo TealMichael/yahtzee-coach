@@ -17,7 +17,7 @@ def run():
     practice = section(app, "def render_practice_mode", "def render_help_feedback")
 
     checks = [
-        ("release is Phase 2K.8", 'APP_RELEASE = "v43B Phase 2K.8.3"' in app),
+        ("release is Phase 2K.9", 'APP_RELEASE = "v43B Phase 2K.9"' in app),
         ("full scorecard remains always visible", "st.expander" not in render_scorecard),
         ("duplicate open-category chips are removed from live scorecard", "open_chips_html" not in render_scorecard),
         ("scorecard shows actual upper subtotal against 63", "Upper: {upper_total} / 63" in render_scorecard),

@@ -23,7 +23,7 @@ def run():
     score_box = section(app, "def score_box_html", "def score_grid_html")
 
     checks = [
-        ("release is Phase 2K.8", 'APP_RELEASE = "v43B Phase 2K.8.3"' in app),
+        ("release is Phase 2K.9", 'APP_RELEASE = "v43B Phase 2K.9"' in app),
         ("Daily dice controls are fragment-scoped", "@st.fragment\ndef _daily_choice_fragment" in app),
         ("Practice dice controls are fragment-scoped", "@st.fragment\ndef _practice_choice_fragment" in app),
         ("old full-rerun dice guard is no longer installed", app.count("install_dice_scroll_guard()") == 1),
@@ -42,8 +42,8 @@ def run():
         ("Daily puzzle removes developer-facing no-hint card", "No strategy label or difficulty hint is shown during the official run." not in app),
         ("Daily progress removes redundant percent", "daily-progress-percent" not in app and 'status_text = "Finished" if complete else f"{saved} saved"' in app),
         ("final review uses cards instead of a dataframe", "daily-review-choice" in submission and "st.dataframe" not in submission),
-        ("completed review uses compact expandable grades", 'st.markdown("### 📝 Your 10 Grades")' in results and "for answer in answers:" in results and "_daily_review_item(answer)" in results),
-        ("leaderboard uses clean mobile-friendly rows", "render_leaderboard_cards(board)" in results and "st.dataframe(_leaderboard_frame(board)" not in results),
+        ("completed review renders compact grade rows with expandable coaching", 'st.markdown("### 📝 Your 10 Grades")' in results and "for answer in answers:" in results and "_daily_review_item(answer)" in results),
+        ("leaderboard uses mobile-friendly rows without forced friend review", "render_leaderboard_cards(board, allow_review=False)" in results and "st.dataframe(_leaderboard_frame(board)" not in results),
         ("Practice scenario copy avoids old jargon", all(term not in puzzle for term in ["carrying option value", "escape valve here", "reroll flexibility", "damage-control Yahtzee", "exact destinations"])),
         ("exact solver remains the required official scorer", 'if solver_record.get("source") != "exact"' in app and 'solver_source="exact"' in app),
         ("exact policy file remains unchanged in routing", 'EXACT_POLICY_PATH = Path(__file__).with_name("exact_policy.npz")' in app),

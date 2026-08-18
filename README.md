@@ -1,107 +1,99 @@
-# Yahtzee Coach v43B Phase 2K.8.3 — Coaching Semantic Audit
+# Yahtzee Coach v43B Phase 2K.9 — Bank It or Break It? + Daily Balance
 
-This release is a coaching-language correctness pass on top of Phase 2K.8.2. The exact policy and every strategy ranking remain unchanged; this patch only improves how the app translates exact decisions into human explanations.
+This release adds the first **made-hand scorecard decision family** and rebalances the Daily generator so ten puzzles feel more like ten believable Yahtzee positions and less like a checklist of strategy lessons.
 
-## v43B Phase 2K.8.3 changes
+## v43B Phase 2K.9 changes
 
-- **Two-pair holds now read as two-pair holds.** When Full House is open, keeping two pairs is described first as the natural one-die Full House chase instead of being mislabeled as a generic Three/Four of a Kind or Yahtzee plan.
-- **Two pairs with the fifth die also held are handled separately.** The coach now recognizes that holding all five leaves no fresh die for a direct Full House attempt.
-- **Two pairs stop receiving Full House language after Full House is filled.**
-- **Triples are no longer able to fall into a template that calls them a pair.**
-- **Four matching dice no longer say “one die from Yahtzee” when the Yahtzee box is already gone.** The explanation instead names the live matching routes on the actual scorecard.
-- **Triple path language now prioritizes direct live routes such as Full House before more remote matching outcomes.**
-- **Dead-upper-bonus explanations are shorter and more precise.** They still make clear that a high upper die can be optimal even when 63 is impossible, without implying the dead bonus is influencing the ranking.
-- **Extra-Yahtzee language now says forced-upper/Joker rules can come into play** rather than implying Joker scoring always applies immediately.
-- **Mixed holds acknowledge extra dice the player kept.** A pair-plus-singleton hold is no longer described as if every loose die were being rerolled.
-- **Daily “Remember” now displays the full reusable teaching takeaway**, not just a short internal lesson title. Practice already used the richer takeaway; Daily review now matches it.
+- **Bank It or Break It? is now a real puzzle family.** The first version focuses on made Full Houses with Full House still open. Some exact positions correctly bank the guaranteed 25; others correctly break the hand because the live scorecard makes reopening dice more valuable.
+- **Daily does not force this family into every set.** A deterministic target schedule aims for roughly 30–40% of Dailies, at most one per Daily 10, with a strong reduction after an appearance and a boost after a multi-day drought. BANK and BREAK outcomes are balanced over time.
+- **Practice teaches it more freely.** Made-hand decisions appear regularly in Practice while retaining broad exact-supported variety and an approximately even Roll 1 / Roll 2 mix.
+- **The Daily family mix is less checklist-like.** Instead of pushing nearly every strategy family into every day, Phase 2K.9 targets roughly 5–7 strategy families per Daily and balances exposure across the week.
+- **Joker / Extra Yahtzee becomes appropriately uncommon.** Weekly targeting makes this unusual strategy family feel unusual again, generally around 1–2 Dailies per week rather than most days.
+- **Messy all-different rolls receive a small soft boost.** The Daily can now surface more natural decisions such as straight fragments, a single high die, or reroll-everything choices without turning them into a quota.
+- **Made Full House bias is corrected.** The old Daily-eligible path admitted break-the-Full-House positions but effectively excluded bank-the-25 positions. Phase 2K.9 deliberately supports both exact outcomes.
+- **Made-hand coaching is clearer.** Full House explanations explicitly compare the guaranteed 25 against the value of reopening dice and the live scorecard paths.
+- **Historical Daily sets are protected.** The new deterministic generator and challenge version begin **August 19, 2026**. August 18 and earlier continue to resolve to the exact legacy challenge sets/IDs, protecting saved attempts and yesterday’s standings.
 
-## Coaching audit
+## Locked Daily structure that did not change
 
-The new semantic regression suite directly protects the live tester case `2,5,5,6,6` on Roll 1: keeping `5,5,6,6` is correctly recognized as a Full House chase while the exact best remains `6,6` at about 1.70 Points Lost.
+Every Daily still has:
 
-In addition to the permanent regression suite, the final audit generated and checked **635,040 player-vs-exact coaching contrasts** across all 420 exact scorecard states, all 252 canonical dice rolls, both coached roll stages, and multiple non-best legal holds per position. The audit checks scorecard truth (bonus alive/dead/secured, Yahtzee status, Full House status), hold structure, grammar, and family-specific claims.
+- 5 Roll 1 / 5 Roll 2 decisions
+- 2 Opening / 3 Midgame / 3 Late Game / 2 True Endgame positions
+- 9 simulated-game contexts / 1 curated edge case
+- 2 Clear / 3 Medium / 2 Hard / 2 Punishing / 1 Knife-edge puzzles
+- deterministic generation for a given date
+- no strategy labels or difficulty hints during the official run
 
-## Math / strategy
+## Exact-math protection
 
-**No recommended hold changed.** `exact_policy.npz`, the puzzle bank, challenge catalog, Yahtzee engine, Daily generator, and Practice generator are unchanged. The locked exact-policy start-of-game expectation remains **254.5877272**, and the published optimal benchmark positions remain protected.
+Phase 2K.9 does **not** alter the audited strategy policy or prebuilt binary banks. These remain byte-for-byte unchanged:
 
-## Supabase
+- `exact_policy.npz`
+- `puzzle_bank.npz`
+- `challenge_catalog.npz`
 
-**No new Supabase migration is required.** Phase 2K.4 remains the latest required database migration.
+Locked exact-policy SHA-256:
 
-## Phase 2K.8.3 live-test goal
+`cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b`
 
-1. Review a few Daily and Practice misses, especially pairs, two pairs, triples, and four matching dice.
-2. Confirm **Why this wins** describes what the player actually held before explaining the exact alternative.
-3. Confirm **Remember** is now a useful strategy sentence rather than only a short title.
-4. Confirm all Phase 2K.8.2 social results, sharing, podium, login, and performance behavior is unchanged.
-
----
-
-# Yahtzee Coach v43B Phase 2K.8.2 — Share Placement Hotfix
-
-This is a surgical UI hotfix on top of Phase 2K.8.1. The spoiler-free share feature is unchanged; it is simply moved to a more natural and visible location directly beneath the player's personal Daily result summary.
-
-## v43B Phase 2K.8.2 changes
-
-- **Share today’s result now appears immediately below the personal result hero** and before Daily Standings.
-- The intended flow is now: **Your Result → Share → Daily Standings → Group Insights → Your 10 Grades → Peek at a Friend’s Picks → Invite/manage friends.**
-- **The share card itself is unchanged:** same spoiler-free grid, same native Share / Copy result behavior, same text payload, and same group-rank information.
-- **Nothing else in the completed-Daily UI was changed.** The cleaned-up leaderboard, Group Insights, compact personal grades, lightweight friend peek, and yesterday podium all remain exactly as in Phase 2K.8.1.
-- **No strategy, persistence, login, leaderboard-ranking, puzzle, or database behavior changed.**
+The app remains exact-only/fail-closed for official grading.
 
 ## Supabase
 
-**No new Supabase migration is required.** Phase 2K.4 remains the latest required database migration.
+**No new Supabase migration is required for Phase 2K.9.** Phase 2K.4 remains the latest required database migration. The included `RUN_THIS_ONCE_IN_SUPABASE_Phase2K4.sql` remains for fresh/clean setup only.
 
-## Phase 2K.8.2 live-test goal
+## Phase 2K.9 live-test goals
 
-1. Finish a Daily and confirm **📤 Share today's result** is easy to find immediately beneath your result summary.
-2. Confirm Daily Standings still follows directly after Share.
-3. Confirm the existing share text/grid behaves exactly as before.
-4. Confirm Group Insights, Your 10 Grades, friend peek, and invite/manage remain in their Phase 2K.8.1 positions.
+1. Upload the full release on August 18, 2026 and confirm today’s existing Daily still resolves normally.
+2. On August 19 or later, confirm the Daily still contains exactly 10 puzzles with the locked roll/stage/difficulty/origin structure.
+3. Over normal use, confirm Bank It or Break It? feels occasional rather than scheduled; it should never appear more than once in a Daily.
+4. When one appears in Practice, verify the description makes the made-hand decision clear and the post-answer coaching explicitly discusses the guaranteed 25.
+5. Confirm some made Full Houses are correctly banked and others are correctly broken based on the scorecard.
+6. Confirm Joker positions no longer feel nearly daily and messy all-different rolls appear occasionally.
+7. Recheck Daily saving/resume, yesterday standings, friend leaderboard, sharing, Practice, and remembered login.
 
 ---
 
-# Yahtzee Coach v43B Phase 2K.8.1 — Daily Results Social UI Cleanup
+# Yahtzee Coach v43B Phase 2K.8 — Yesterday’s Final Standings + Podium Ceremony
 
-This hotfix keeps the new Phase 2K.8 yesterday-podium feature but completely cleans up the completed-Daily social/results screen before the next Daily. The goal is simple: **standings first, group story second, your own grades third, optional friend curiosity last.**
+This release builds directly on the unuploaded Phase 2K.7 scorecard/friend-review patch and adds a new next-day payoff for the Daily Challenge. When a signed-in player returns on a new day, the app can show the prior day’s **final friend-group standings before today’s Daily begins**. Gold, silver, and bronze finishers get a small medal ceremony with balloons, then one clear button starts today’s puzzle set.
 
-## v43B Phase 2K.8.1 changes
+## v43B Phase 2K.8 changes
 
-- **Daily Standings are a leaderboard again.** Player names are no longer Streamlit buttons and the board no longer uses three squeezed columns per player. Each finisher is one consistent full-width row with rank, name, Points Lost, and best-hold count.
-- **The results hierarchy is now fixed:** Daily Standings → Group Insights → Your 10 Grades → Share → Peek at a Friend’s Picks → Invite/manage friends.
-- **Group Insights stay visible and fun** directly below the standings: Today’s Killer plus Everyone Nailed It / Most Solved.
-- **Your 10 Grades return to compact expanders.** Each row is short (`Q4 · B · 1.94 lost`) and opens only when the player wants the full dice/scorecard/coaching review.
-- **The side-by-side friend comparison dashboard is removed.** No You-vs-Friend cards, different-choice count, biggest-miss comparison sentence, or tiny five-column question grid.
-- **Friend review becomes a lightweight bottom-of-page peek.** Choose a finished friend and press one button to reveal their 10 saved holds with a simple Best / Points Lost result for each question.
-- **Friend picks remain spoiler-safe.** The persistence layer still refuses to return another player’s detailed choices until the viewer has completed their own Daily, and unfinished friends remain private.
-- **Yesterday’s Final Standings / Podium Ceremony stays intact** and automatically benefits from the cleaner shared leaderboard rows.
-- **The Phase 2K.7 scorecard readability work stays intact.** The live decision screen still uses the short labels and slightly larger score values/boxes while keeping Roll + scorecard + dice together.
+- **Yesterday’s final standings now appear before an unstarted new Daily.** The app reconstructs yesterday’s deterministic Daily challenge ID and reads the already-saved completed attempts from the same real group leaderboard used on the results screen.
+- **Top-three finishers get a podium ceremony:** 🥇 Gold, 🥈 Silver, or 🥉 Bronze, with Streamlit’s balloon animation and a locked-in final-place message.
+- **The complete final leaderboard is shown beneath the ceremony.** Players outside the top three still see their final place and the finished board.
+- **Players who did not finish yesterday are handled gracefully.** They can still see how their group finished before starting today.
+- **Solo groups do not award a one-person medal.** The recap can still exist, but podium celebration requires a group with more than one member.
+- **One button starts today’s Daily directly from the recap.** There is no extra second “Start” screen after yesterday’s results.
+- **The recap acknowledgement is browser-local and player-specific.** Once the player starts today’s Daily, that browser remembers the ceremony for that player/date so ordinary refreshes or reopenings do not replay it.
+- **No new Supabase table or migration is required.** The feature reuses `daily_attempts`, existing group membership data, and the current browser `localStorage` capability already used by remembered login.
+- **Phase 2K.7 remains fully included:** readable compact scorecard labels/boxes and completed-friend Daily reviews are still part of this full release.
 
 ## What is intentionally unchanged
 
 - Exact solver, exact policy, and every recommended hold / Points Lost value.
 - `exact_policy.npz`, `puzzle_bank.npz`, and `challenge_catalog.npz`.
 - Daily puzzle generator/composition and Practice puzzle generation.
+- One-official-attempt-per-day persistence rules.
 - Group ranking and tie-break rules.
-- Yesterday’s podium logic.
-- 30-day remembered login, performance caching, sharing, invite links, persistence, and spoiler protections.
+- 30-day remembered login, sharing, friend reviews, and spoiler protections.
 
 ## Supabase
 
-**No new Supabase migration is required for Phase 2K.8.1.** Phase 2K.4 remains the latest required database migration. The included `RUN_THIS_ONCE_IN_SUPABASE_Phase2K4.sql` is only for a fresh/clean setup.
+**No new Supabase migration is required for Phase 2K.8.** Phase 2K.4 remains the latest required database migration. The `RUN_THIS_ONCE_IN_SUPABASE_Phase2K4.sql` file remains included only for a fresh/clean setup.
 
-## Phase 2K.8.1 live-test goals
+## Phase 2K.8 live-test goals
 
-1. Finish the Daily on a phone and confirm **Daily Standings** is immediately easy to scan.
-2. Confirm the order is **Daily Standings → Group Insights → Your 10 Grades**.
-3. Open several of **Your 10 Grades** and confirm the compact row expands into the full exact coaching.
-4. Open **Peek at a Friend’s Picks**, choose a completed friend, and press the peek button.
-5. Confirm their 10 rows show what they kept and where they lost points without a comparison dashboard.
-6. Confirm unfinished friends cannot be peeked at.
-7. On the next day, confirm Yesterday’s Final Standings / podium still renders correctly with the cleaner leaderboard rows.
-8. Confirm Daily play, Practice, remembered login, sharing, and exact strategy behave normally.
+1. Use a player in a friend group that had at least one completed Daily yesterday and open the app before starting today’s Daily.
+2. Confirm yesterday’s final board appears first.
+3. With a player who finished 1st, 2nd, or 3rd in a multi-member group, confirm the correct medal and balloons appear.
+4. Confirm a non-podium finisher sees the correct final place without the medal ceremony.
+5. Confirm a player who did not finish yesterday still sees the final group board cleanly.
+6. Press **Start today’s Daily Challenge** and confirm Question 1 begins immediately.
+7. Refresh/reopen on that same browser after starting today and confirm yesterday’s ceremony does not replay.
+8. Confirm Phase 2K.7 scorecard readability and completed-friend review behavior are still present.
 
 ---
 

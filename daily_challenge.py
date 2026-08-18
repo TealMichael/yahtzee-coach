@@ -10,7 +10,7 @@ coverage; the live v43B Phase 2D app uses Supabase friend groups and real result
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from hashlib import sha256
 import math
 import random
@@ -19,7 +19,9 @@ from zoneinfo import ZoneInfo
 
 from puzzle_bank import generate_daily_challenge_set
 
-DAILY_CHALLENGE_VERSION = "43A-bank42.6"
+LEGACY_DAILY_CHALLENGE_VERSION = "43A-bank42.6"
+DAILY_CHALLENGE_VERSION = "43B-bank42.6-2K9"
+DAILY_2K9_EFFECTIVE_DATE = date(2026, 8, 19)
 DAILY_TIMEZONE = "America/New_York"
 TIE_TOLERANCE = 1e-9
 
@@ -62,19 +64,30 @@ def current_daily_date_key(now: datetime | None = None, timezone_name: str = DAI
     return now.date().isoformat()
 
 
+def daily_challenge_version(date_key: str) -> str:
+    day = date.fromisoformat(str(date_key))
+    return DAILY_CHALLENGE_VERSION if day >= DAILY_2K9_EFFECTIVE_DATE else LEGACY_DAILY_CHALLENGE_VERSION
+
+
 def daily_challenges(date_key: str) -> list[dict]:
-    """Return the deterministic Daily 10, decorated with a stable version id."""
+    """Return the deterministic Daily 10, decorated with its date-safe version id."""
     challenges = generate_daily_challenge_set(str(date_key), count=10)
+    version = daily_challenge_version(str(date_key))
     for number, challenge in enumerate(challenges, start=1):
         challenge["daily_number"] = number
-        challenge["daily_version"] = DAILY_CHALLENGE_VERSION
+        challenge["daily_version"] = version
         challenge["daily_date"] = str(date_key)
     return challenges
 
 
 def challenge_set_id(date_key: str, challenges: Sequence[Mapping]) -> str:
     material = "|".join(str(item.get("challenge_id", "")) for item in challenges)
-    digest = sha256(f"{DAILY_CHALLENGE_VERSION}|{date_key}|{material}".encode("utf-8")).hexdigest()
+    version = (
+        str(challenges[0].get("daily_version"))
+        if challenges and challenges[0].get("daily_version")
+        else daily_challenge_version(str(date_key))
+    )
+    digest = sha256(f"{version}|{date_key}|{material}".encode("utf-8")).hexdigest()
     return f"{date_key}-{digest[:10]}"
 
 
@@ -145,7 +158,7 @@ def build_mock_friend_results(date_key: str, challenges: Sequence[Mapping]) -> l
     """
     players: list[dict] = []
     for name, skill_adjustment in MOCK_FRIENDS:
-        rng = random.Random(_stable_seed("mock-group", DAILY_CHALLENGE_VERSION, date_key, name))
+        rng = random.Random(_stable_seed("mock-group", daily_challenge_version(date_key), date_key, name))
         question_results = [
             _mock_question_result(rng, challenge, skill_adjustment)
             for challenge in challenges

@@ -67,7 +67,7 @@ def run():
     checks.append(("live Daily results get question stats from the batched snapshot", 'snapshot.get("question_stats"' in source))
     checks.append(("simulated friend board is no longer imported by the live app", 'build_leaderboard' not in source and 'group_story' not in source and 'user_rank' not in source))
     checks.append(("Supabase backend exposes real member directory", 'def list_group_members(self, group_id: str)' in backend))
-    checks.append(("results show completed friend participation cleanly", "{completed}/{total_members} finished" in source and "Final · {completed}/{total_members} finished" in source))
+    checks.append(("results show completed friend participation cleanly", "finished · waiting for" in source and "final standings for today" in source))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

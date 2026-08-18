@@ -1,22 +1,40 @@
-YAHTZEE COACH v43B PHASE 2K.8.3
-Coaching Semantic Audit
+YAHTZEE COACH v43B PHASE 2K.9
+Bank It or Break It? + Daily Puzzle Balance
 
 NO NEW SUPABASE STEP.
+This is a full release and includes all prior Phase 2K.8.3 functionality.
 
 UPLOAD:
 1. Upload ALL files inside UPLOAD_TO_GITHUB to the root of the GitHub repo.
 2. Commit with:
-   v43B Phase 2K.8.3 - make coaching explanations structurally accurate
+   v43B Phase 2K.9 - add Bank It or Break It and rebalance Daily puzzles
 3. Wait for Streamlit to redeploy.
 
-LIVE TEST:
-1. Open a completed Daily review or Practice result.
-2. Check a two-pair miss if one appears. The coach should identify the Full House idea before explaining why another hold wins.
-3. Confirm the Remember line is now a complete strategy sentence, not just a short title.
-4. Check that Daily Standings, Group Insights, Your 10 Grades, Share, friend peek, yesterday podium, and login all look unchanged.
+IMPORTANT DATE SAFETY:
+- Phase 2K.9 Daily generation starts August 19, 2026.
+- August 18, 2026 and all earlier Daily dates stay on the legacy deterministic generator/version.
+- This protects saved historical attempts, challenge IDs, and yesterday's final standings.
+
+LIVE TEST — BANK IT OR BREAK IT + DAILY BALANCE:
+1. Confirm the current Daily opens/resumes normally and still saves exactly one official attempt.
+2. On an August 19+ Daily, confirm 10 puzzles, 5 Roll 1 / 5 Roll 2, and the normal game-stage mix.
+3. Do not expect Bank It or Break It every day. It is intentionally occasional and capped at one per Daily.
+4. In Practice, watch for a made Full House decision. Confirm both BANK and BREAK outcomes can occur over repeated play.
+5. After answering one, confirm the coaching explicitly compares the guaranteed 25 with the value of reopening dice.
+6. Confirm Joker / Extra Yahtzee puzzles feel less frequent and occasional all-different rolls still look natural.
+
+REGRESSION CHECK:
+- Yesterday's Final Standings + podium ceremony
+- Daily persistence/resume/edit/final submit
+- Friend leaderboard + friend-pick peek
+- Daily sharing
+- Practice navigation and exact-only grading
+- 30-day remembered login
+- Mobile scorecard/roll layout
 
 WHAT DID NOT CHANGE:
-- No Yahtzee strategy recommendation changed.
-- No exact-policy, puzzle-bank, challenge-catalog, Daily-generator, or Practice-generator changes.
-- No group ranking, social, sharing, podium, login, or persistence behavior changes.
-- No database migration.
+- exact_policy.npz, puzzle_bank.npz, and challenge_catalog.npz are byte-for-byte unchanged.
+- Exact-policy SHA-256 is unchanged.
+- No Supabase schema change or migration.
+- Group ranking/tie-break rules are unchanged.
+- Daily competitive spoiler protections remain intact.

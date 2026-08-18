@@ -22,7 +22,7 @@ def check(condition, message):
 app = (ROOT / "app.py").read_text(encoding="utf-8")
 bridge = (ROOT / "exact_runtime.py").read_text(encoding="utf-8")
 
-check('APP_RELEASE = "v43B Phase 2K.8.3"' in app, "release label updated")
+check('APP_RELEASE = "v43B Phase 2K.9"' in app, "release label updated")
 check("from exact_runtime import" in app, "app uses deployment-safe exact bridge")
 check("from exact_mode import (" not in app, "app does not directly import new exact_mode helper names")
 check("legacy heuristic" in bridge, "bridge documents exact-only behavior")

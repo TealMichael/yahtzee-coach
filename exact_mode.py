@@ -414,10 +414,11 @@ def _visible_strategy_reason(
     made = _made_hand_name(hold, scorecard)
 
     if made:
+        guaranteed = "25 points" if made == "Full House" else "guaranteed value"
         return (
             "Protect a made hand",
-            f"The exact hold keeps the complete {made}. The current made value is worth more than opening up another reroll.",
-            "When a scoring hand is already made, compare the value of improving it with the risk of breaking guaranteed value.",
+            f"The exact hold keeps the complete {made}. Banking {guaranteed} is worth more here than reopening dice for another reroll.",
+            "When a scoring hand is already made, compare its guaranteed score with what the remaining scorecard can gain by reopening dice.",
         )
 
     if scorecard.get("yahtzee") == 50 and max_count >= 3:
@@ -425,7 +426,7 @@ def _visible_strategy_reason(
         return (
             "Exploit the extra-Yahtzee window",
             f"The exact hold protects the {face}s because Yahtzee is already scored for 50. Another Yahtzee can add the 100-point bonus, and Joker/forced-upper rules make this matching core more valuable than it looks in an ordinary turn.",
-            "After a 50-point Yahtzee, matching dice deserve a fresh evaluation: the extra-Yahtzee bonus and forced-upper/Joker rules can dramatically raise their future value.",
+            "After a 50-point Yahtzee, matching dice deserve a fresh evaluation: the extra-Yahtzee bonus and Joker rules can dramatically raise their future value.",
         )
 
     if max_count >= 4:
@@ -574,19 +575,17 @@ def _pattern_lines(
 
     if max_count >= 4:
         face = max(counts, key=counts.get)
-        lines.append(f"You protected four matching {face}s, a strong matching core.")
+        lines.append(f"You recognized the value of a four-of-a-kind core with the {face}s.")
     elif max_count == 3:
         face = max(counts, key=counts.get)
-        lines.append(f"You protected three matching {face}s, giving the hand a clear matching-number base.")
+        lines.append(f"You protected a triple of {face}s, a strong base that can still improve.")
     elif max_count == 2:
         pair_faces = [face for face, count in counts.items() if count == 2]
         if len(pair_faces) >= 2:
-            if len(hold) == 4 and _is_open(scorecard, "full_house"):
-                lines.append("You protected two pairs, creating a direct one-die Full House chance.")
-            elif _is_open(scorecard, "full_house"):
-                lines.append("You kept two pairs, but you also kept an extra die instead of leaving one die free for the Full House chase.")
+            if _is_open(scorecard, "full_house"):
+                lines.append("You protected two pairs, giving you a direct Full House idea while keeping two matching bases.")
             else:
-                lines.append("You protected two pairs, preserving two different matching numbers.")
+                lines.append("You protected two pairs, but Full House is already filled, so the hold has to earn its value through the matching boxes that remain.")
         else:
             face = pair_faces[0]
             upper = UPPER_BY_FACE[face]
@@ -635,45 +634,20 @@ def _hold_intent(
 
     counts = {face: hold.count(face) for face in range(1, 7)}
     max_count = max(counts.values(), default=0)
-    fresh = 5 - len(hold)
-    loose_faces = [face for face, count in counts.items() if count == 1]
-
-    if len(hold) == 5:
-        pair_faces = [face for face, count in counts.items() if count == 2]
-        if len(pair_faces) >= 2 and _is_open(scorecard, "full_house"):
-            return (
-                f"Your hold keeps both pairs ({pair_faces[0]}s and {pair_faces[1]}s) but also locks the fifth die, "
-                "so it stops the reroll instead of actively chasing the Full House."
-            )
-        if max_count >= 4:
-            face = max(counts, key=counts.get)
-            return f"Your hold locks all five dice around four {face}s, choosing to stop rerolling rather than chase a different finish."
-        if max_count == 3:
-            face = max(counts, key=counts.get)
-            return f"Your hold locks all five dice around three {face}s, choosing the current total instead of using another reroll."
-        return "Your hold locks all five dice and chooses the current roll instead of using another reroll."
 
     if max_count >= 4:
         face = max(counts, key=counts.get)
-        if loose_faces:
-            extras = _format_faces(loose_faces)
-            return f"Your hold builds around four {face}s but also keeps {extras}, leaving only {_fresh_dice_text(fresh)} to improve the matching core."
-        return f"Your hold builds around four {face}s and leaves {_fresh_dice_text(fresh)} to improve that matching core."
+        return f"Your hold builds around four {face}s, a one-die-away matching core with major upside."
 
     if max_count == 3:
         face = max(counts, key=counts.get)
-        if loose_faces:
-            extras = _format_faces(loose_faces)
-            return f"Your hold builds around three {face}s but also keeps {extras}, leaving {_fresh_dice_text(fresh)} to improve the matching core."
-        return f"Your hold builds around three {face}s and leaves {_fresh_dice_text(fresh)} to improve that matching core."
+        return f"Your hold builds around three {face}s and uses the remaining reroll(s) to improve that matching core."
 
     pair_faces = [face for face, count in counts.items() if count == 2]
     if len(pair_faces) >= 2:
-        if len(hold) == 4 and _is_open(scorecard, "full_house"):
-            return f"Your hold protects two pairs ({pair_faces[0]}s and {pair_faces[1]}s), keeping a direct Full House path alive."
         if _is_open(scorecard, "full_house"):
-            return f"Your hold keeps two pairs ({pair_faces[0]}s and {pair_faces[1]}s) plus an extra die, so it preserves the pairs but leaves no fresh die for a direct Full House try."
-        return f"Your hold protects two pairs ({pair_faces[0]}s and {pair_faces[1]}s), preserving two matching-number directions while Full House is already filled."
+            return f"Your hold protects two pairs ({pair_faces[0]}s and {pair_faces[1]}s), keeping a direct Full House path alive."
+        return f"Your hold protects two pairs ({pair_faces[0]}s and {pair_faces[1]}s), preserving two matching-number directions."
 
     straight_name, straight_core = _straight_core(hold, scorecard)
     if straight_name and straight_core >= 4 and len(set(hold)) >= 4:
@@ -684,16 +658,12 @@ def _hold_intent(
     if max_count == 2:
         face = max(counts, key=counts.get)
         upper = UPPER_BY_FACE[face]
-        extras = [value for value in loose_faces]
-        extra_text = f" plus {_format_faces(extras)}" if extras else ""
         if _is_open(scorecard, upper):
             if bonus["earned"]:
-                return f"Your hold keeps the pair of {face}s{extra_text}, supporting the open {CATEGORY_LABELS[upper]} box; the upper bonus is already secured."
+                return f"Your hold targets the pair of {face}s and the open {CATEGORY_LABELS[upper]} box; the upper bonus is already secured."
             if bonus["alive"]:
-                return f"Your hold keeps the pair of {face}s{extra_text}, supporting the open {CATEGORY_LABELS[upper]} box while the upper bonus is still reachable."
-            return f"Your hold keeps the pair of {face}s{extra_text}, supporting the open {CATEGORY_LABELS[upper]} box even though the upper bonus is no longer reachable."
-        if extras:
-            return f"Your hold keeps the pair of {face}s plus {_format_faces(extras)}, mixing a matching-number base with extra dice instead of rerolling all the loose values."
+                return f"Your hold targets the pair of {face}s, supporting the open {CATEGORY_LABELS[upper]} box while the upper bonus is still reachable."
+            return f"Your hold targets the pair of {face}s and the open {CATEGORY_LABELS[upper]} box even though the upper bonus is no longer reachable."
         return f"Your hold uses the pair of {face}s as a matching-number base and rerolls the loose dice."
 
     if len(hold) == 1:
@@ -797,45 +767,23 @@ def _live_paths_for_hold(
 
     counts = {face: held.count(face) for face in range(1, 7)}
     max_count = max(counts.values(), default=0)
-    pair_faces = [face for face, count in counts.items() if count == 2]
     paths: list[str] = []
 
-    def add(category: str):
-        if _is_open(scorecard, category):
-            paths.append(CATEGORY_LABELS[category])
+    # Open upper boxes directly supported by held faces.
+    for face in sorted(set(held), reverse=True):
+        upper = UPPER_BY_FACE[face]
+        if _is_open(scorecard, upper):
+            paths.append(CATEGORY_LABELS[upper])
 
-    # Name the most direct visible destination first.  This prevents a two-pair
-    # Full House hold from being described as if it were mainly a 4K/Yahtzee chase.
-    if len(pair_faces) >= 2:
-        if len(held) == 4:
-            add("full_house")
-        for face in sorted(pair_faces, reverse=True):
-            add(UPPER_BY_FACE[face])
-        add("three_of_a_kind")
-    elif max_count >= 4:
-        face = max(counts, key=counts.get)
-        add(UPPER_BY_FACE[face])
-        add("four_of_a_kind")
-        add("yahtzee")
-        add("three_of_a_kind")
-    elif max_count == 3:
-        face = max(counts, key=counts.get)
-        add(UPPER_BY_FACE[face])
-        add("three_of_a_kind")
-        add("full_house")
-        add("four_of_a_kind")
-        add("yahtzee")
-    elif max_count == 2:
-        face = max(counts, key=counts.get)
-        add(UPPER_BY_FACE[face])
-        add("three_of_a_kind")
-        add("full_house")
-        add("four_of_a_kind")
-        add("yahtzee")
-    else:
-        # Distinct/mixed holds are usually about upper value, straights, or Chance.
-        for face in sorted(set(held), reverse=True):
-            add(UPPER_BY_FACE[face])
+    # Matching-number destinations become meaningfully supported once a hold has
+    # at least a pair.  A triple/four-of-kind makes these paths even more obvious.
+    if max_count >= 2:
+        for category in ("three_of_a_kind", "four_of_a_kind", "yahtzee"):
+            if _is_open(scorecard, category):
+                paths.append(CATEGORY_LABELS[category])
+        pair_count = sum(1 for count in counts.values() if count >= 2)
+        if _is_open(scorecard, "full_house") and (pair_count >= 2 or max_count >= 3):
+            paths.append("Full House")
 
     straight_name, straight_core = _straight_core(held, scorecard)
     if straight_name and straight_core >= 3 and len(set(held)) >= 3:
@@ -843,7 +791,7 @@ def _live_paths_for_hold(
 
     # Chance is most useful to name when the held dice are already a meaningful
     # raw-total base rather than a low singleton.
-    if _is_open(scorecard, "chance") and (sum(held) >= 10 or (max(held) >= 5 and len(held) >= 2)):
+    if _is_open(scorecard, "chance") and (sum(held) >= 10 or max(held) >= 5 and len(held) >= 2):
         paths.append("Chance")
 
     # Preserve order while removing duplicates.
@@ -883,9 +831,8 @@ def _simple_why_with_family(
 
     user_counts = {face: user.count(face) for face in range(1, 7)}
     optimal_counts = {face: optimal.count(face) for face in range(1, 7)}
-    user_pair_faces = [face for face, count in user_counts.items() if count == 2]
-    user_matching_faces = [face for face, count in user_counts.items() if count >= 2]
-    optimal_pair_faces = [face for face, count in optimal_counts.items() if count == 2]
+    user_pair_faces = [face for face, count in user_counts.items() if count >= 2]
+    optimal_pair_faces = [face for face, count in optimal_counts.items() if count >= 2]
     optimal_distinct = sorted(set(optimal))
     optimal_max_count = max(optimal_counts.values(), default=0)
 
@@ -898,24 +845,27 @@ def _simple_why_with_family(
         face = max(optimal_counts, key=optimal_counts.get)
         return (
             "extra_yahtzee_joker",
-            f"Yahtzee is already scored for 50, so another Yahtzee can add a 100-point bonus and bring the special forced-upper/Joker scoring rules into play. "
-            f"Keeping the {face}s protects that extra upside, which makes this matching core worth more than it would in a normal turn.",
+            f"Yahtzee is already scored for 50, so another Yahtzee can add a 100-point bonus and can activate the forced-upper/Joker scoring rules. "
+            f"Keeping the {face}s protects that special upside, which makes this matching core worth more than it would in a normal turn.",
         )
 
     user_made = _made_hand_name(user, scorecard)
     optimal_made = _made_hand_name(optimal, scorecard)
     if optimal_made:
+        bank_value = "25-point" if optimal_made == "Full House" else "made"
         return (
             "protect_made_hand",
-            f"You already have a made {optimal_made}. Keeping all five protects guaranteed value; another reroll would risk breaking a scoring hand that the exact math says is worth banking here.",
+            f"You already have a {bank_value} {optimal_made}. Keeping all five banks that guaranteed score; "
+            "the exact math says the open boxes do not pay enough to justify breaking it here.",
         )
     if user_made and len(user) == 5:
         paths = _live_paths_for_hold(optimal, scorecard, limit=3)
         path_text = _join_paths(paths) if paths else "the remaining open boxes"
+        bank_text = "Banking the guaranteed 25" if user_made == "Full House" else f"Keeping the made {user_made}"
         return (
             "break_made_hand",
-            f"Keeping the made {user_made} is a reasonable safety play, but it is not automatically best. "
-            f"With {rerolls} reroll{'s' if rerolls != 1 else ''} left, the exact hold gives up that guaranteed hand because {path_text} offer more full-game value from this scorecard.",
+            f"{bank_text} is a reasonable safety play, but made does not automatically mean keep. "
+            f"With {rerolls} reroll{'s' if rerolls != 1 else ''} left, the exact hold reopens {_fresh_dice_text(fresh)} because {path_text} offer more full-game value from this scorecard.",
         )
 
     # True endgame: name the only destinations left before discussing generic
@@ -932,32 +882,43 @@ def _simple_why_with_family(
 
     # Dead-bonus late-game trap: a lower pair can look like the natural 3K/4K
     # chase, but a higher open upper die can serve every remaining matching box.
-    if len(optimal) == 1 and user_pair_faces and not bonus["earned"] and not bonus["alive"]:
+    if len(optimal) == 1 and any(user_counts[face] == 2 for face in user_pair_faces) and not bonus["earned"] and not bonus["alive"]:
         face = optimal[0]
         upper = UPPER_BY_FACE[face]
-        pair_face = max(user_pair_faces)
+        pair_face = max(face for face in user_pair_faces if user_counts[face] == 2)
         matching_paths = [
             CATEGORY_LABELS[c]
             for c in ("three_of_a_kind", "four_of_a_kind", "yahtzee")
             if _is_open(scorecard, c)
         ]
         if _is_open(scorecard, upper) and face > pair_face and matching_paths:
-            raw_matching = [
-                CATEGORY_LABELS[c]
-                for c in ("three_of_a_kind", "four_of_a_kind")
-                if _is_open(scorecard, c)
-            ]
-            other_paths = [CATEGORY_LABELS[upper]]
-            if _is_open(scorecard, "yahtzee"):
-                other_paths.append("Yahtzee")
-            if raw_matching:
-                score_note = f"Building around the {face} also makes {_join_paths(raw_matching)} score higher than building around the pair of {pair_face}s."
-            else:
-                score_note = f"The {face} fits {_join_paths(other_paths)} better than committing to the pair of {pair_face}s."
+            path_text = _join_paths([CATEGORY_LABELS[upper], *matching_paths])
             return (
                 "bonus_dead_high_die",
-                f"The 35-point upper bonus is out of reach, so keeping the {face} is not a bonus chase. "
-                f"{score_note} {_join_paths(other_paths)} are still open, and keeping one {face} leaves {_fresh_dice_text(fresh)} with {_rerolls_text(rerolls)} left.",
+                f"The 35-point upper bonus is already out of reach, so keeping the {face} is not a bonus chase. "
+                f"{path_text} are still live, and the {face} can help all of them while giving the matching-number boxes a higher scoring base than the pair of {pair_face}s. "
+                f"With {_rerolls_text(rerolls)} left, keeping one {face} and rolling {_fresh_dice_text(fresh)} is worth more than committing early to the lower pair.",
+            )
+
+    # Two-pair player hold: recognize the Full House idea before generic matching-dice language.
+    # This prevents a 5,5,6,6 hold from being described as a 3K/4K/Yahtzee chase.
+    user_exact_pair_faces = [face for face, count in user_counts.items() if count == 2]
+    if len(user_exact_pair_faces) >= 2 and _is_open(scorecard, "full_house"):
+        pair_text = _join_paths([f"{face}s" for face in sorted(user_exact_pair_faces)[:2]])
+        best_paths = _live_paths_for_hold(optimal, scorecard, limit=4)
+        best_text = _join_paths(best_paths) if best_paths else "the remaining open boxes"
+        if len(user) == 4:
+            return (
+                "two_pair_full_house_tradeoff",
+                f"Keeping both pairs ({pair_text}) is a natural Full House chase: one fresh die can finish it. "
+                f"But it locks four dice. The exact hold, {hold_text(optimal)}, leaves {_fresh_dice_text(fresh)} and keeps {best_text} available. "
+                "On this scorecard, those extra fresh dice are worth more.",
+            )
+        if len(user) == 5:
+            return (
+                "two_pair_no_reroll",
+                f"Your hold contains two pairs, but keeping all five dice leaves no fresh die to complete the Full House. "
+                f"The exact hold, {hold_text(optimal)}, reopens {_fresh_dice_text(fresh)} so the remaining scorecard can still improve.",
             )
 
     # Common human trap: keep a closed-number pair even though the remaining
@@ -1012,38 +973,11 @@ def _simple_why_with_family(
                 f"{exact_reason}",
             )
 
-    # Two-pair holds need their own explanation.  The immediate structure is a
-    # Full House chase, not a generic 3K/4K/Yahtzee plan.  This is especially
-    # important when the exact answer releases one of the pairs to reopen dice.
-    user_exact_pairs = [face for face, count in user_counts.items() if count == 2]
-    if len(user_exact_pairs) >= 2:
-        pair_text = f"{user_exact_pairs[0]}s and {user_exact_pairs[1]}s"
-        best_paths = _live_paths_for_hold(optimal, scorecard, limit=4)
-        best_text = _join_paths(best_paths) if best_paths else "the boxes that remain"
-        if len(user) == 4 and _is_open(scorecard, "full_house"):
-            return (
-                "two_pair_full_house_tradeoff",
-                f"Keeping both pairs ({pair_text}) is a natural Full House chase: one fresh die can finish it. "
-                f"But it locks four dice. The exact hold, {hold_text(optimal)}, leaves {_fresh_dice_text(fresh)} and keeps {best_text} available. "
-                "On this scorecard, those extra fresh dice are worth more.",
-            )
-        if _is_open(scorecard, "full_house"):
-            return (
-                "two_pair_locked_fifth",
-                f"You kept both pairs ({pair_text}), but you also kept the fifth die, so there is no fresh die left for the direct Full House try. "
-                f"The exact hold, {hold_text(optimal)}, reopens {_fresh_dice_text(fresh)} and gives the remaining scorecard more ways to improve.",
-            )
-        return (
-            "two_pair_no_full_house",
-            f"Your hold keeps two pairs ({pair_text}), but Full House is already filled, so the two-pair shape itself has no special scoring payoff. "
-            f"The exact hold, {hold_text(optimal)}, focuses on {best_text} while leaving {_fresh_dice_text(fresh)} to reroll.",
-        )
-
     # If the exact answer is a visible straight core, say exactly what the
     # connected dice are doing instead of using generic "flexibility" language.
     straight_name, straight_core = _straight_core(optimal, scorecard)
     if straight_name and straight_core >= 3 and len(set(optimal)) >= 3:
-        if user_matching_faces:
+        if user_pair_faces:
             return (
                 "straight_over_matching",
                 f"Your hold builds around matching dice, but the open {straight_name} box needs distinct connected numbers. "
@@ -1057,28 +991,28 @@ def _simple_why_with_family(
 
     # Two pairs with Full House open are easy to teach concretely: both matching
     # directions matter, not just the higher-looking pair.
-    if len(optimal_pair_faces) >= 2 and len(optimal) == 4 and _is_open(scorecard, "full_house"):
+    if len(optimal_pair_faces) >= 2 and _is_open(scorecard, "full_house"):
         faces = sorted(optimal_pair_faces)[:2]
         return (
             "two_pair_full_house",
             f"Both pairs matter because Full House is still open. Keeping the {faces[0]}s and {faces[1]}s preserves two different ways for the last die to complete the hand instead of throwing away half of that structure.",
         )
 
-    # Four matching dice are one die from Yahtzee and often already useful in
-    # upper/4K boxes.  Name those destinations directly.
+    # Four matching dice are a premium matching core. Mention Yahtzee only when
+    # Yahtzee (or the extra-Yahtzee bonus state) is actually relevant.
     if optimal_max_count >= 4:
         face = max(optimal_counts, key=optimal_counts.get)
         paths = _live_paths_for_hold(optimal, scorecard, limit=4)
         path_text = _join_paths(paths) if paths else "the live matching boxes"
         if _is_open(scorecard, "yahtzee"):
-            opening = f"Four {face}s are one matching die from Yahtzee"
+            lead = f"Four {face}s are one matching die from Yahtzee"
         elif scorecard.get("yahtzee") == 50:
-            opening = f"Four {face}s are one matching die from another Yahtzee and its 100-point bonus"
+            lead = f"Four {face}s are one matching die from another Yahtzee and its 100-point bonus"
         else:
-            opening = f"Four {face}s are already a powerful matching core"
+            lead = f"Four {face}s are already a powerful matching core"
         return (
             "four_matching",
-            f"{opening} and also support {path_text}. "
+            f"{lead} and also support {path_text}. "
             f"Breaking that four-die core would give up a much stronger structure than the loose dice can replace.",
         )
 
@@ -1086,10 +1020,10 @@ def _simple_why_with_family(
     if optimal_max_count == 3:
         face = max(optimal_counts, key=optimal_counts.get)
         paths = _live_paths_for_hold(optimal, scorecard, limit=4)
-        path_text = _join_paths(paths) if paths else "the current scorecard"
+        path_text = _join_paths(paths) if paths else "the live matching boxes"
         return (
             "triple_matching",
-            f"Three {face}s already give you a strong core for {path_text}. "
+            f"Three {face}s already give you a strong matching base for {path_text}. "
             f"Keeping the triple leaves {_fresh_dice_text(fresh)} to improve it instead of rebuilding that structure from the beginning.",
         )
 
@@ -1203,7 +1137,7 @@ def _simple_why(
 def _clear_takeaway_for_family(family: str, fallback: str) -> str:
     """Keep the reusable 'Remember' line short, concrete, and consistent."""
     lessons = {
-        "extra_yahtzee_joker": "After a 50-point Yahtzee, matching dice get extra value because another Yahtzee can add 100 points and bring the forced-upper/Joker scoring rules into play.",
+        "extra_yahtzee_joker": "After a 50-point Yahtzee, matching dice get extra value because another Yahtzee can add 100 points and may activate forced-upper/Joker scoring rules.",
         "protect_made_hand": "A made hand gives guaranteed value. Protect it unless the remaining scorecard gives a clear reason to gamble for more.",
         "break_made_hand": "Made does not always mean keep. With rerolls left, compare guaranteed points with the upside in the boxes that are still open.",
         "true_endgame": "Near the end, forget generic opening rules and optimize the boxes that are actually left.",
@@ -1219,9 +1153,8 @@ def _clear_takeaway_for_family(family: str, fallback: str) -> str:
         "straight_structure": "A connected straight core is a premium structure. Protect it and reroll the dice that do not help complete it.",
         "two_pair_full_house": "With Full House open, two pairs create a direct one-die finish. Do not throw away one pair without a strong scorecard reason.",
         "two_pair_full_house_tradeoff": "Two pairs are a strong Full House start, but four locked dice leave only one fresh die. Compare that direct finish with the value of reopening more dice for the rest of the scorecard.",
-        "two_pair_locked_fifth": "If you want to chase a Full House from two pairs, the fifth die has to be available to reroll. Keeping all five stops the chase.",
-        "two_pair_no_full_house": "Once Full House is filled, two pairs lose their special two-pair payoff. Judge which single matching number or other structure best fits the boxes that remain.",
-        "four_matching": "Four matching dice are a powerful one-die-away matching core and often support several open boxes. Breaking them should require a very strong scorecard reason.",
+        "two_pair_no_reroll": "Two pairs only chase a Full House if you leave a die to reroll. Keeping all five freezes the hand instead of giving the pairs a chance to connect.",
+        "four_matching": "Four matching dice are a premium matching core. Protect them unless the remaining scorecard gives a very strong reason to break the structure.",
         "triple_matching": "A triple already has scoring strength and still has room to grow. Keep it when the remaining matching boxes reward that number.",
         "chance_timing": "When Chance is one of only a few boxes left, raw die total matters more than it does on an open scorecard.",
         "open_board_flexibility": "Early on, do not lock weak fragments just because they look like a pattern. Fresh dice keep more scoring routes alive.",
@@ -1406,6 +1339,7 @@ def build_exact_report(
         "legal_hold_count": len(results),
         "points_lost": float(points_lost),
         "lesson_title": lesson_title,
+        "teaching_takeaway": takeaway,
         "context_notes": " | ".join(context_notes),
         "user_idea": user_idea,
         "best_idea": best_idea,

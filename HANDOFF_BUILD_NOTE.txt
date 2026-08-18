@@ -1,0 +1,21 @@
+Yahtzee Coach current release: v43B Phase 2K.9
+
+Phase 2K.9 implements the approved Bank It or Break It? puzzle family and the broader Daily-generation balance pass.
+
+Key locked decisions:
+- Bank It or Break It is occasional in Daily (~30-40%), max one, not guaranteed.
+- BANK and BREAK exact outcomes are both deliberately represented.
+- Practice exposes the concept more regularly.
+- Daily targets roughly 5-7 strategy families rather than checking nearly every family every day.
+- Joker / Extra Yahtzee is reduced to an unusual weekly teaching event.
+- Messy all-different rolls get a small soft boost only.
+- The original 5/5 roll, stage, origin, and difficulty structures remain fixed.
+- The new Daily generator is forward-only beginning 2026-08-19; older Daily IDs remain unchanged.
+- No database migration is required.
+- The audited exact policy and all prebuilt .npz banks remain unchanged.
+
+Validation completed:
+- 40/40 current automated suites pass.
+- Exact integration exhaustive audit passes all 3,669,120 legal hold values.
+- Phase 2K.9 90-day/21-day/Practice balance audits pass.
+- exact_policy.npz SHA-256 remains cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b.

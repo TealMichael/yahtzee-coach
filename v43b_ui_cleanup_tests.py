@@ -20,12 +20,10 @@ def run():
     results = _block(app, "def render_daily_results():", "def render_daily_mode():")
     share = _block(app, "def render_daily_share_result(", "def _daily_review_item")
 
-    standings_pos = results.index('st.markdown("### 🏆 Daily Standings")')
-    insights_pos = results.index('st.markdown("### 🎯 Group Insights")')
     review_pos = results.index('st.markdown("### 📝 Your 10 Grades")')
-    share_pos = results.index('with st.expander("📤 Share today\'s result"')
-    peek_pos = results.index("_render_friend_pick_peek(active_group, board)")
     manage_pos = results.index("render_friend_group_hub(")
+    share_pos = results.index("render_daily_share_result(")
+    social_pos = results.index('st.markdown(f"### 🏆 {active_group.group_name}")')
 
     checks = [
         ("Returning Player is the first/default identity tab", 'st.tabs(["Returning Player", "Create Player"])' in identity),
@@ -34,8 +32,7 @@ def run():
         ("signed-in status is compact", 'st.caption(f"👤 **{name}**")' in app and "permanent v43B player" not in app),
         ("Daily intro removes prototype/version badges", "prototype-badge" not in intro and "v43B" not in intro and "official attempt" not in intro),
         ("completed hero removes saved/progress implementation chatter", "Challenge ID" not in results and "10/10 submitted" not in results and "100% saved" not in results),
-        ("completed social hierarchy is standings then insights then own grades", standings_pos < insights_pos < review_pos),
-        ("share sits with the result while friend peek stays below own grades", share_pos < standings_pos < insights_pos < review_pos < peek_pos < manage_pos),
+        ("completed page hierarchy starts result then share then friends", share_pos < social_pos < review_pos),
         ("Your 10 Grades is above Invite & manage friends", review_pos < manage_pos and "👥 Invite & manage friends" in app),
         ("share card is compact by default", "Preview shared result" in share and "white-space:normal" not in share),
         ("completed lock copy is human-facing", "Today's Daily is complete. Come back tomorrow for a new set." in results),

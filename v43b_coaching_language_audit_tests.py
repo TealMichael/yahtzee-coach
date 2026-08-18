@@ -106,9 +106,9 @@ def direct_family_checks():
     # Made-hand decisions in both directions.
     c = card({})
     fam, text, remember = why(c, [6, 6], [3, 3, 3, 6, 6], 2)
-    require("protect-made-hand family", fam == "protect_made_hand" and "made Full House" in text and "guaranteed value" in text)
+    require("protect-made-hand family", fam == "protect_made_hand" and "25-point Full House" in text and "banks that guaranteed score" in text)
     fam, text, remember = why(c, [3, 3, 3, 6, 6], [3, 3, 3], 1)
-    require("break-made-hand family", fam == "break_made_hand" and "reasonable safety play" in text and "not automatically best" in text)
+    require("break-made-hand family", fam == "break_made_hand" and "reasonable safety play" in text and "does not automatically mean keep" in text)
 
     # Extra-Yahtzee/Joker rules.
     c = card({"yahtzee": 50})

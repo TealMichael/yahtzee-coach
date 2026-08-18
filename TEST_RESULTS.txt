@@ -1,45 +1,50 @@
-Yahtzee Coach v43B Phase 2K.8.3 test summary
+Yahtzee Coach v43B Phase 2K.9 test summary
 
-NEW COACHING SEMANTIC AUDIT
-- New Phase 2K.8.3 coaching-semantic suite passed
-- Live tester regression protected: dice 2,5,5,6,6 · Roll 1 · user keeps 5,5,6,6 · exact best remains 6,6 · about 1.70 Points Lost
-- Two-pair Full House intent is now recognized before generic matching-dice language
-- Two pairs with all five dice held no longer pretend a Full House reroll is available
-- Full House language is removed when the Full House box is already filled
-- Triples cannot fall into the pair-vs-straight wording path
-- Four-matching explanations respect whether Yahtzee is open, scored for 50, or closed
-- Extra-Yahtzee wording accurately references forced-upper/Joker rules
-- Mixed holds acknowledge extra singleton dice that the player chose to keep
-- Daily Remember text now uses the full reusable Teaching takeaway instead of only the short lesson title
+NEW BANK IT OR BREAK IT + DAILY BALANCE
+- New Phase 2K.9 puzzle-balance suite passed in full
+- 90-day deterministic theme schedule: 32/90 Dailies (35.6%)
+- BANK/BREAK balance in schedule audit: 17 BANK / 15 BREAK
+- Back-to-back theme transitions: 3 across the 90-day audit
+- Maximum one Bank It or Break It puzzle per Daily verified
+- 21-day generated Daily audit preserves exact 5/5 Roll split
+- 21-day audit preserves 2 Opening / 3 Midgame / 3 Late / 2 Endgame
+- 21-day audit preserves 9 simulated / 1 curated origin mix
+- 21-day audit preserves 2 Clear / 3 Medium / 2 Hard / 2 Punishing / 1 Knife-edge
+- Daily strategy-family diversity lands at 5–7 families/day
+- Joker / Extra Yahtzee appeared on 4/21 audited days (~1.33/week)
+- All-different messy rolls appeared on 13/210 audited puzzles (~6.2%)
+- Practice Bank/Break exposure audit: 77/600 (12.8%), 46 BREAK / 31 BANK
+- Made Full House coaching explicitly covers the guaranteed 25 and reopening dice
 
-LARGE LANGUAGE AUDITS
-- Permanent semantic audit: 13,354 exact coaching contrasts across 24 coaching families
-- Additional final exhaustive audit: 635,040 exact coaching contrasts
-- Exhaustive audit covered all 420 exact scorecard states, all 252 canonical rolls, both coached roll stages, and multiple non-best legal holds per position
-- Scorecard-truth checks passed for upper bonus alive/dead/secured, Yahtzee status, Full House status, hold structure, and singular/plural grammar
-- Longest audited concise Why-this-wins explanation: 300 characters
+HISTORICAL DAILY SAFETY
+- Phase 2K.9 generator is forward-only beginning August 19, 2026
+- August 18 and earlier route through the unchanged legacy generator
+- August 18 baseline challenge IDs match Phase 2K.8.3 exactly
+- Date-specific Daily challenge versions protect stored historical challenge IDs and yesterday recap behavior
 
 FULL REGRESSION
-- 41/41 current automated test suites passed on the final build
-- Coaching language family audit passed
-- Coaching clarity tests: 12/12
-- Dark-mode/dead-bonus tests: 11/11
-- Personalized teaching tests passed
-- Advanced scorecard-context teaching tests passed
-- Teaching-experience tests passed
-- Social-results cleanup, share placement, podium, friend peek, persistence, remembered login, Practice UI, and performance regressions all passed
+- 40/40 current automated test suites passed across the final source tree
+- Daily persistence/resume/edit/final-submit protections pass
+- Yesterday standings + podium pass
+- Friend leaderboard/review/peek protections pass
+- Sharing, invite flow, Practice UI, roll clarity, coaching clarity, install flow, mobile UI, and remembered login all pass
+- 31-day Daily variety audit: 303/310 unique underlying decisions; 0 consecutive-day exact repeats
 
 MATH / STRATEGY PROTECTION
-- No recommended hold changed
-- Locked exact-policy SHA-256 remains:
-  cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b
-- Start-of-game exact-policy expectation remains 254.5877272
-- Published optimal benchmark positions remain protected
-- Dead-upper-bonus regression remains exact: keep 6; pair of 3s about 1.94 Points Lost
-- Exact integration audit remains clean: 3,669,120 legal hold values; 3,135 tied-best records
-- 840/840 representative expanded-bank reports routed through exact mode
-- 20,000/20,000 expanded Practice rounds stayed exact in the existing integration audit
+- Exact integration exhaustive value-table audit: 3,669,120 legal hold values
+- 20,000 public exact analyses/value lookups passed
+- Exact-first representative routing: 840/840
+- Expanded Practice generation: 20,000/20,000 exact-supported rounds
+- Practice Roll 1 share in exact integration: 0.464
+- v43A integration: 17/17
 - Strategy regressions: 26/26
-- Published strategy benchmarks: 15/15
+- Start-of-game exact-policy expectation remains 254.5877272
+- Exact-policy SHA-256 remains:
+  cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b
 
-No new Supabase migration is required for Phase 2K.8.3.
+BYTE-FOR-BYTE UNCHANGED FROM PHASE 2K.8.3
+- exact_policy.npz
+- puzzle_bank.npz
+- challenge_catalog.npz
+
+No new Supabase migration is required for Phase 2K.9.
