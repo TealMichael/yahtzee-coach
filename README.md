@@ -1,3 +1,33 @@
+# Yahtzee Coach v43B Phase 2K.9.1 — Tie + Coaching + Share Color Hotfix
+
+This hotfix combines three small live-play fixes discovered before Phase 2K.9.1 was deployed: fair leaderboard ties, clearer coaching for tiny solver edges, and spoiler-free share colors that match the same coaching rubric.
+
+## v43B Phase 2K.9.1 changes
+
+- **Same displayed Points Lost = a real tie.** Hidden decimals no longer separate players who both see, for example, `1.77`.
+- **Best Holds and biggest miss are no longer tiebreakers.** They remain useful descriptive stats, but they do not decide leaderboard placement.
+- **Standard competition ranking is used.** Two players tied for first produce ranks `1, 1, 3`; two tied for second produce `1, 2, 2, 4`.
+- **Tied rows receive the same medal icon.** A first-place tie gives both players gold; the next player is third and receives bronze.
+- **Player-facing rank copy is tie-aware.** The result summary uses `T-1`, the group banner says `You're tied for #1…`, and shared results say `Tied for #1…`.
+- **Yesterday's podium ceremony is tie-aware.** Tied podium players get the same medal celebration, and skipped places are not artificially awarded.
+- **Tiny solver edges are framed proportionally.** A miss of `0.25 Points Lost` or less is visibly called a very close decision rather than sounding like a major strategy mistake.
+- **Generic near-tie coaching is more concrete.** It validates the player's idea, names the open scorecard boxes creating the small edge, and explains the fresh-reroll tradeoff instead of relying on vague route language.
+- **Share colors now agree with coaching.** `🟩` = exact best, `🟨` = 0.01–0.25, `🟧` = 0.26–1.50, and `🟥` = over 1.50 Points Lost. A 0.14-point near-tie therefore looks “almost best,” not “close.”
+- **No data rewrite is needed.** Existing saved raw Points Lost values are unchanged; ranking and share colors are interpreted at display time.
+
+## What did not change
+
+- Phase 2K.9 Bank It or Break It / Daily puzzle generation
+- exact strategy policy, exact EV values, hold rankings, or Points Lost math
+- Daily challenge IDs or the August 19 forward-only generator boundary
+- Supabase schema or migrations
+- login, friend groups, scorecard layout, Practice, or Daily persistence
+- `exact_policy.npz`, `puzzle_bank.npz`, or `challenge_catalog.npz`
+
+**No new Supabase migration is required.**
+
+---
+
 # Yahtzee Coach v43B Phase 2K.9 — Bank It or Break It? + Daily Balance
 
 This release adds the first **made-hand scorecard decision family** and rebalances the Daily generator so ten puzzles feel more like ten believable Yahtzee positions and less like a checklist of strategy lessons.

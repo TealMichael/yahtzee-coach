@@ -810,6 +810,7 @@ def _simple_why_with_family(
     roll_number: int,
     is_optimal: bool,
     visible_reason: str,
+    points_lost: float | None = None,
 ) -> tuple[str, str]:
     """Return (family, explanation) for concise player-facing coaching.
 
@@ -1102,11 +1103,47 @@ def _simple_why_with_family(
         )
 
     # Generic fallback: still name the player's visible route and the exact hold's
-    # visible destinations.  Avoid abstract phrases like "useful flexibility."
+    # visible destinations.  Near-ties need especially careful wording: when the
+    # solver edge is only a few hundredths, describe the small scorecard tradeoff
+    # instead of making a strong human hold sound strategically wrong.
     user_paths = _live_paths_for_hold(user, scorecard, limit=3)
     best_paths = _live_paths_for_hold(optimal, scorecard, limit=3)
     user_text = _join_paths(user_paths) if user_paths else "a narrower partial pattern"
     best_text = _join_paths(best_paths) if best_paths else "more of the boxes that are still open"
+
+    if points_lost is not None and 0.0 < float(points_lost) <= 0.25:
+        added = list(optimal)
+        released = list(user)
+        for value in user:
+            if value in added:
+                added.remove(value)
+                released.remove(value)
+
+        # Chance is often technically supported but is rarely the clearest reason
+        # to protect one extra low/mid die. Prefer the concrete scorecard boxes
+        # first, and name Chance only when it is truly the only visible route.
+        concrete_paths = [path for path in best_paths if path != "Chance"] or best_paths
+        path_text = _join_paths(concrete_paths[:2]) if concrete_paths else "remaining scorecard"
+        box_word = "box" if len(concrete_paths[:2]) == 1 else "boxes"
+
+        if added and not released:
+            extra_fresh = len(optimal) - len(user)
+            tradeoff = (
+                f"That tiny scorecard edge is just barely worth giving up {extra_fresh} fresh reroll "
+                f"{'die' if extra_fresh == 1 else 'dice'}."
+            ) if extra_fresh > 0 else "That tiny scorecard edge is just enough to separate the two holds."
+            return (
+                "scorecard_fit_close",
+                f"Your hold was already a strong idea. The exact hold, {hold_text(optimal)}, also adds {_format_faces(added)} because the open {path_text} {box_word} still {'has' if box_word == 'box' else 'have'} scoring value. "
+                f"{tradeoff} Your hold is only {float(points_lost):.2f} Points Lost.",
+            )
+
+        return (
+            "scorecard_fit_close",
+            f"Your hold was already a strong idea. The exact hold, {hold_text(optimal)}, fits the open {path_text} {box_word} just a little better while keeping a similar reroll plan. "
+            f"This is a fine scorecard distinction—only {float(points_lost):.2f} Points Lost.",
+        )
+
     return (
         "scorecard_fit",
         f"Your hold is mainly aiming at {user_text}. The exact hold, {hold_text(optimal)}, supports {best_text} while leaving {_fresh_dice_text(fresh)} to reroll. "
@@ -1160,6 +1197,7 @@ def _clear_takeaway_for_family(family: str, fallback: str) -> str:
         "open_board_flexibility": "Early on, do not lock weak fragments just because they look like a pattern. Fresh dice keep more scoring routes alive.",
         "reroll_all": "Rerolling everything is correct when none of the current dice earns its place on the remaining scorecard.",
         "scorecard_fit": "When no obvious pattern decides the play, compare which open boxes each hold actually supports and how many fresh dice it leaves.",
+        "scorecard_fit_close": "When two holds are this close, use the open scorecard boxes to find the small edge.",
     }
     return lessons.get(family, fallback)
 
@@ -1246,6 +1284,7 @@ def build_exact_report(
         roll_number=roll_number,
         is_optimal=is_optimal,
         visible_reason=visible_reason,
+        points_lost=points_lost,
     )
     takeaway = _clear_takeaway_for_family(coaching_family, takeaway)
 

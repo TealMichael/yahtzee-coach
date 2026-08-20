@@ -196,29 +196,30 @@ def run():
         completed_revision_ok = True
     checks.append(("completed attempt rejects revisions", completed_revision_ok))
 
-    # Leaderboard tie-break tests:
-    # Bob: same total (0.62), MORE exact (8 vs Alice's 7) -> Bob ahead of Alice.
+    # Leaderboard tie contract: displayed Points Lost is the official competition score.
+    # Bob and Alice both display 0.62, so exact-count differences do not break the tie.
     bob_losses = [0, 0, 0, 0, 0, 0, 0, 0, 0.31, 0.31]
     finish_attempt(store, bob.player_id, challenge, bob_losses)
-    # Cara: lower total -> Cara first regardless of exact count.
+    # Cara is lower at 0.50 and remains first.
     cara_losses = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0.50]
     finish_attempt(store, cara.player_id, challenge, cara_losses)
     board = store.leaderboard(group.group_id, challenge.challenge_id)
-    checks.append(("leaderboard primary sort is lowest total EV loss", [row["display_name"] for row in board][0] == "Cara"))
-    checks.append(("leaderboard first tiebreak is more exact holds", [row["display_name"] for row in board][1:] == ["Bob", "Alice"]))
+    checks.append(("leaderboard primary sort is lowest displayed Points Lost", [row["display_name"] for row in board][0] == "Cara"))
+    alice_rank = next(row["rank"] for row in board if row["display_name"] == "Alice")
+    bob_rank = next(row["rank"] for row in board if row["display_name"] == "Bob")
+    checks.append(("same displayed Points Lost is a real tie despite different best-hold counts", alice_rank == bob_rank == 2))
 
-    # Dedicated worst-miss tiebreak: Dave and Erin tie total/exact but Dave's worst miss is lower.
+    # Dave and Erin also tie at 1.00 even though their biggest misses differ.
     dave = store.create_player("Dave", "1234")
     erin = store.create_player("Erin", "5678")
     store.join_group(dave.player_id, group.join_code)
     store.join_group(erin.player_id, group.join_code)
-    # Both total 1.0, exact 8. Dave misses .50/.50; Erin .75/.25.
     finish_attempt(store, dave.player_id, challenge, [0]*8 + [0.50, 0.50])
     finish_attempt(store, erin.player_id, challenge, [0]*8 + [0.75, 0.25])
     board2 = store.leaderboard(group.group_id, challenge.challenge_id)
     dave_rank = next(row["rank"] for row in board2 if row["display_name"] == "Dave")
     erin_rank = next(row["rank"] for row in board2 if row["display_name"] == "Erin")
-    checks.append(("leaderboard second tiebreak is lower worst miss", dave_rank < erin_rank))
+    checks.append(("biggest miss no longer breaks a displayed-score tie", dave_rank == erin_rank == 4))
 
     stats = store.group_question_stats(group.group_id, challenge.challenge_id)
     q10 = next(row for row in stats if row["question_number"] == 10)

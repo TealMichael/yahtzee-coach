@@ -27,7 +27,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.9"
+APP_RELEASE = "v43B Phase 2K.9.1"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
@@ -2902,6 +2902,16 @@ def _user_real_rank(board):
     return None
 
 
+def _rank_is_tied(board, rank) -> bool:
+    if rank is None:
+        return False
+    try:
+        target = int(rank)
+    except Exception:
+        return False
+    return sum(1 for row in board if int(row.get("rank") or 0) == target) > 1
+
+
 def _story_from_group_stats(stats):
     if not stats:
         return {"toughest": None, "easiest": None}
@@ -3058,6 +3068,7 @@ def render_yesterday_final_standings_if_needed() -> bool:
         return False
 
     rank = _find_player_rank(board)
+    rank_tied = _rank_is_tied(board, rank)
     medals = {1: ("🥇", "GOLD", "1st"), 2: ("🥈", "SILVER", "2nd"), 3: ("🥉", "BRONZE", "3rd")}
     podium = rank in medals and len(members) > 1
 
@@ -3075,17 +3086,19 @@ def render_yesterday_final_standings_if_needed() -> bool:
         if st.session_state.get("yesterday_balloons_date") != today:
             st.balloons()
             st.session_state.yesterday_balloons_date = today
+        podium_result = f"You tied for {place} yesterday!" if rank_tied else f"You finished {place} yesterday!"
         st.markdown(
             "<div class='yesterday-podium'>"
             f"<div class='medal'>{medal}</div>"
-            f"<div class='title'>{medal_name}! You finished {place} yesterday!</div>"
+            f"<div class='title'>{medal_name}! {podium_result}</div>"
             f"<div class='copy'>Nice run, {html.escape(st.session_state.get('active_player_name') or 'Player')}. Your medal is locked in.</div>"
             "</div>",
             unsafe_allow_html=True,
         )
     elif rank is not None:
+        yesterday_result = f"You tied for #{rank} of {len(board)} yesterday." if rank_tied else f"You finished #{rank} of {len(board)} yesterday."
         st.markdown(
-            f"<div class='yesterday-final-note'><b>You finished #{rank} of {len(board)} yesterday.</b><br>Here's the final board.</div>",
+            f"<div class='yesterday-final-note'><b>{yesterday_result}</b><br>Here's the final board.</div>",
             unsafe_allow_html=True,
         )
     else:
@@ -3509,22 +3522,26 @@ def render_leaderboard_cards(board, *, allow_review=False):
     if rows:
         st.markdown("<div class='leaderboard-list'>" + "".join(rows) + "</div>", unsafe_allow_html=True)
     with st.expander("How rankings work", expanded=False):
-        st.caption("Lowest Points Lost ranks first. Ties use more best holds, then the smaller biggest miss.")
+        st.caption("Lowest displayed Points Lost ranks first. Same score to the hundredth = a real tie. Tied players share the place, so ranks can go 1, 1, 3. Names are only alphabetized inside a tie.")
 
 
 def _share_square(points_lost: float) -> str:
-    """Convert EV loss into a compact spoiler-free Wordle-style result square."""
+    """Convert EV loss into a compact spoiler-free result square.
+
+    The share bands intentionally mirror the exact-mode coaching rubric so the
+    visual result never looks harsher than the feedback the player receives.
+    """
     loss = max(0.0, float(points_lost or 0.0))
     if loss <= 1e-9:
         return "🟩"
-    if loss <= 0.10:
+    if loss <= 0.25:
         return "🟨"
-    if loss <= 1.00:
+    if loss <= 1.50:
         return "🟧"
     return "🟥"
 
 
-def build_daily_share_text(records, summary, rank=None, completed_count=0):
+def build_daily_share_text(records, summary, rank=None, completed_count=0, rank_tied=False):
     """Build a compact spoiler-free Daily result suitable for text messages/social sharing."""
     squares = [_share_square(item.get("points_lost", 0.0)) for item in records]
     first_row = "".join(squares[:5])
@@ -3538,7 +3555,10 @@ def build_daily_share_text(records, summary, rank=None, completed_count=0):
         f"🔥 Best-hold streak: {summary['best_exact_streak']}",
     ]
     if rank is not None and int(completed_count or 0) > 0:
-        lines.append(f"🏆 Group rank right now: #{int(rank)} of {int(completed_count)}")
+        if rank_tied:
+            lines.append(f"🏆 Group rank right now: Tied for #{int(rank)} of {int(completed_count)}")
+        else:
+            lines.append(f"🏆 Group rank right now: #{int(rank)} of {int(completed_count)}")
     lines.extend([
         "🟩 best · 🟨 almost best · 🟧 close · 🟥 miss",
         PUBLIC_APP_URL,
@@ -3546,9 +3566,9 @@ def build_daily_share_text(records, summary, rank=None, completed_count=0):
     return "\n".join(lines)
 
 
-def render_daily_share_result(records, summary, rank=None, completed_count=0):
+def render_daily_share_result(records, summary, rank=None, completed_count=0, rank_tied=False):
     """Render compact spoiler-free Daily blocks with native share/copy controls."""
-    share_text = build_daily_share_text(records, summary, rank=rank, completed_count=completed_count)
+    share_text = build_daily_share_text(records, summary, rank=rank, completed_count=completed_count, rank_tied=rank_tied)
     share_text_js = json.dumps(share_text)
     squares = [_share_square(item.get("points_lost", 0.0)) for item in records]
     first_row = "".join(squares[:5])
@@ -3647,6 +3667,11 @@ def _render_daily_review_body(answer, *, subject_name="You"):
     )
     simple_why_items = extract_section(report, "Simple why:")
     simple_why = simple_why_items[0] if simple_why_items else record.get("simple_why", "")
+    if 0.0 < loss <= 0.25:
+        st.markdown(
+            f"**🤏 Very close:** Your hold was only {loss:.2f} Points Lost from the exact best hold. "
+            "This was a fine distinction, not a bad strategy choice."
+        )
     if simple_why:
         st.markdown(f"**💡 Why this wins:** {simple_why}")
     if lesson:
@@ -3774,8 +3799,9 @@ def render_daily_results():
         if database_check_enabled():
             st.caption(f"Leaderboard detail: {type(exc).__name__}: {exc}")
     rank = _user_real_rank(board)
+    rank_tied = _rank_is_tied(board, rank)
     story = _story_from_group_stats(stats)
-    rank_value = f"#{rank} of {len(board)}" if rank is not None else "—"
+    rank_value = f"T-{rank} of {len(board)}" if rank_tied else (f"#{rank} of {len(board)}" if rank is not None else "—")
 
     st.markdown(
         "<div class='daily-hero'>"
@@ -3800,7 +3826,7 @@ def render_daily_results():
     if streak_copy:
         st.caption(streak_copy)
 
-    render_daily_share_result(records, summary, rank=rank, completed_count=len(board))
+    render_daily_share_result(records, summary, rank=rank, completed_count=len(board), rank_tied=rank_tied)
 
     # Social payoff comes before group administration.
     if active_group is not None:
@@ -3819,8 +3845,9 @@ def render_daily_results():
                 unsafe_allow_html=True,
             )
         elif rank is not None:
+            rank_copy = f"You're tied for #{rank} of {completed} today." if rank_tied else f"You're #{rank} of {completed} today."
             st.markdown(
-                f"<div class='daily-rank-banner'><b>You're #{rank} of {completed} today.</b><br>Lowest Points Lost leads the group.</div>",
+                f"<div class='daily-rank-banner'><b>{rank_copy}</b><br>Lowest Points Lost leads the group.</div>",
                 unsafe_allow_html=True,
             )
         if total_members > 1 and completed < total_members:

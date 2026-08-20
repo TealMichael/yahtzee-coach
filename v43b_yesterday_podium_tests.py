@@ -31,7 +31,7 @@ def run():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
 
     checks = [
-        ('APP_RELEASE = "v43B Phase 2K.9"' in app, "release advances to Phase 2K.9"),
+        ('APP_RELEASE = "v43B Phase 2K.9.1"' in app, "release advances to Phase 2K.9.1"),
         ("Yesterday's Final Standings" in app, "new-day recap is clearly labeled as final standings"),
         ("_previous_daily_date_key" in app and "timedelta(days=1)" in app, "recap resolves the prior Eastern Daily date"),
         ("_challenge_set_id_for_date(yesterday)" in app, "yesterday's deterministic challenge id is used for standings"),
@@ -67,7 +67,7 @@ def run():
     require([row["display_name"] for row in board] == ["Gold", "Silver", "Bronze", "Fourth"], "final board preserves official ranking order")
     require([row["rank"] for row in board[:3]] == [1, 2, 3], "top three rows map directly to medal ceremony ranks")
 
-    print("Phase 2K.8 yesterday final standings + podium checks passed")
+    print("Phase 2K.9.1 yesterday final standings + podium checks passed")
 
 
 if __name__ == "__main__":

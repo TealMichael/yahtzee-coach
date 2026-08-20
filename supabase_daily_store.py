@@ -45,6 +45,7 @@ from daily_store import (
     hash_device_token_secret,
     hash_pin,
     normalize_display_name,
+    rank_leaderboard_rows,
     split_device_token,
     utc_now,
     verify_pin,
@@ -857,15 +858,7 @@ class SupabaseDailyStore:
                 "best_exact_streak": int(attempt.best_exact_streak or 0),
                 "completed_at": attempt.completed_at,
             })
-        board.sort(key=lambda item: (
-            round(item["total_ev_loss"], 12),
-            -item["exact_count"],
-            round(item["worst_miss"], 12),
-            item["display_name"].casefold(),
-            item["player_id"],
-        ))
-        for rank, row in enumerate(board, start=1):
-            row["rank"] = rank
+        rank_leaderboard_rows(board)
 
         attempt_ids = [attempt.attempt_id for attempt in completed]
         stats: list[dict] = []
@@ -940,16 +933,7 @@ class SupabaseDailyStore:
                 "completed_at": attempt.completed_at,
             })
 
-        rows.sort(key=lambda item: (
-            round(item["total_ev_loss"], 12),
-            -item["exact_count"],
-            round(item["worst_miss"], 12),
-            item["display_name"].casefold(),
-            item["player_id"],
-        ))
-        for rank, row in enumerate(rows, start=1):
-            row["rank"] = rank
-        return rows
+        return rank_leaderboard_rows(rows)
 
     def group_question_stats(self, group_id: str, challenge_id: str) -> list[dict]:
         self._require_group_row(group_id)

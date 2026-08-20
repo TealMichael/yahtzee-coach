@@ -1,21 +1,43 @@
-Yahtzee Coach current release: v43B Phase 2K.9
+Yahtzee Coach current release: v43B Phase 2K.9.1
 
-Phase 2K.9 implements the approved Bank It or Break It? puzzle family and the broader Daily-generation balance pass.
+Phase 2K.9.1 is a narrow hotfix on top of Phase 2K.9 covering leaderboard ties, close-call coaching clarity, and spoiler-free share color balance.
 
-Key locked decisions:
-- Bank It or Break It is occasional in Daily (~30-40%), max one, not guaranteed.
-- BANK and BREAK exact outcomes are both deliberately represented.
-- Practice exposes the concept more regularly.
-- Daily targets roughly 5-7 strategy families rather than checking nearly every family every day.
-- Joker / Extra Yahtzee is reduced to an unusual weekly teaching event.
-- Messy all-different rolls get a small soft boost only.
-- The original 5/5 roll, stage, origin, and difficulty structures remain fixed.
-- The new Daily generator is forward-only beginning 2026-08-19; older Daily IDs remain unchanged.
-- No database migration is required.
-- The audited exact policy and all prebuilt .npz banks remain unchanged.
+Locked tie rule:
+- Displayed Points Lost to the hundredth is the official leaderboard score.
+- Same displayed score = real tie.
+- No Best Holds or biggest-miss tiebreakers.
+- Standard competition ranking: 1, 1, 3 (or 1, 2, 2, 4).
+- Names are alphabetized only to order tied rows visually; alphabetical order does not break the tie.
+- Tied rank is shown as T-# in the player's result summary and “tied for #” in banner/share copy.
+- Yesterday's medal ceremony awards the same medal to all players sharing a podium rank. A skipped rank receives no medal.
+
+Locked close-call coaching rule:
+- A miss of 0.25 Points Lost or less is explicitly framed as a very close decision / fine distinction.
+- Generic scorecard-fit near-ties validate the player's original idea before explaining the solver's tiny edge.
+- Generic close-call explanations prefer concrete open boxes over vague route language and do not lean on Chance when a clearer scorecard box explains the edge.
+- When the exact hold keeps an extra die, explain that the tiny scorecard edge is just barely worth giving up that fresh reroll die.
+- The reusable takeaway is: “When two holds are this close, use the open scorecard boxes to find the small edge.”
+
+Locked share-color rule:
+- 🟩 best = exact, 0.00 Points Lost.
+- 🟨 almost best = 0.01–0.25 Points Lost.
+- 🟧 close = 0.26–1.50 Points Lost.
+- 🟥 miss = over 1.50 Points Lost.
+- These bands intentionally mirror the exact-mode coaching rubric so share visuals do not look harsher than the player's coaching.
+
+Scope protection:
+- No puzzle-generation changes from Phase 2K.9.
+- No exact-policy/strategy-engine/hold-value changes; exact_mode.py changes are player-facing coaching language only.
+- Share-color rebalance changes only app.py display classification; stored Points Lost values are untouched.
+- No database migration or saved-result rewrite.
+- No login, friend, scorecard, Practice, or challenge-ID changes.
+- Existing stored raw totals automatically use the new ranking rule and share-color rubric when rendered.
 
 Validation completed:
-- 40/40 current automated suites pass.
-- Exact integration exhaustive audit passes all 3,669,120 legal hold values.
-- Phase 2K.9 90-day/21-day/Practice balance audits pass.
+- 43/43 current automated suites pass across the final source tree, including dedicated tie, close-call coaching, and share-color regressions.
+- Tie regression covers hidden-decimal ties and 1,1,3 competition ranking.
+- Close-call regression recreates the vague scorecard-fit teaching pattern and requires proportional, concrete coaching.
+- Share-color regression covers rubric boundaries and the real-play tiny-miss case.
+- Exact integration remains green, including all 3,669,120 legal hold values.
+- Phase 2K.9 puzzle-balance regression remains green.
 - exact_policy.npz SHA-256 remains cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b.

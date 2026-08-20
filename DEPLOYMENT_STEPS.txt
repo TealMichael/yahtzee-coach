@@ -1,29 +1,39 @@
-YAHTZEE COACH v43B PHASE 2K.9
-Bank It or Break It? + Daily Puzzle Balance
+YAHTZEE COACH v43B PHASE 2K.9.1
+Tie Handling + Close-Call Coaching + Share Color Balance Hotfix
 
 NO NEW SUPABASE STEP.
-This is a full release and includes all prior Phase 2K.8.3 functionality.
+This is a full current-app release and includes all prior Phase 2K.9 functionality.
 
 UPLOAD:
 1. Upload ALL files inside UPLOAD_TO_GITHUB to the root of the GitHub repo.
 2. Commit with:
-   v43B Phase 2K.9 - add Bank It or Break It and rebalance Daily puzzles
+   v43B Phase 2K.9.1 - fix ties, close-call coaching, and share colors
 3. Wait for Streamlit to redeploy.
 
-IMPORTANT DATE SAFETY:
-- Phase 2K.9 Daily generation starts August 19, 2026.
-- August 18, 2026 and all earlier Daily dates stay on the legacy deterministic generator/version.
-- This protects saved historical attempts, challenge IDs, and yesterday's final standings.
+LIVE TEST — TIE HANDLING:
+1. Open today's completed group leaderboard.
+2. If two players display the same Points Lost score, confirm they share the same rank.
+3. Confirm standard competition ranking is used (example: 1, 1, 3).
+4. Confirm the tied player's result card shows T-# and the banner says “You're tied for #…”.
+5. Open “How rankings work” and confirm it explains that the displayed hundredth is the official score.
+6. Preview/share a tied result and confirm the text says “Tied for #…”.
+7. On the following day, tied podium finishers should receive the same medal ceremony; the next place is skipped.
 
-LIVE TEST — BANK IT OR BREAK IT + DAILY BALANCE:
-1. Confirm the current Daily opens/resumes normally and still saves exactly one official attempt.
-2. On an August 19+ Daily, confirm 10 puzzles, 5 Roll 1 / 5 Roll 2, and the normal game-stage mix.
-3. Do not expect Bank It or Break It every day. It is intentionally occasional and capped at one per Daily.
-4. In Practice, watch for a made Full House decision. Confirm both BANK and BREAK outcomes can occur over repeated play.
-5. After answering one, confirm the coaching explicitly compares the guaranteed 25 with the value of reopening dice.
-6. Confirm Joker / Extra Yahtzee puzzles feel less frequent and occasional all-different rolls still look natural.
+LIVE TEST — CLOSE-CALL COACHING:
+1. Open a Daily Review where the player lost 0.25 Points Lost or less.
+2. Confirm the review visibly says “Very close” and explains that this was a fine distinction, not a bad strategy choice.
+3. For a generic scorecard-fit near-tie, confirm “Why this wins” validates the original hold, names the concrete open boxes behind the small edge, and explains the fresh-die tradeoff.
+4. Confirm the “Remember” line says to use the open scorecard boxes to find the small edge.
+
+LIVE TEST — SHARE COLOR BALANCE:
+1. Finish/review a Daily containing a non-exact hold worth 0.25 Points Lost or less.
+2. Confirm its spoiler-free share square is yellow (🟨 almost best), not orange.
+3. Confirm a 0.26–1.50 miss is orange (🟧 close).
+4. Confirm a miss over 1.50 is red (🟥 miss).
+5. Confirm exact best holds remain green.
 
 REGRESSION CHECK:
+- Phase 2K.9 Bank It or Break It + Daily puzzle balance
 - Yesterday's Final Standings + podium ceremony
 - Daily persistence/resume/edit/final submit
 - Friend leaderboard + friend-pick peek
@@ -31,10 +41,12 @@ REGRESSION CHECK:
 - Practice navigation and exact-only grading
 - 30-day remembered login
 - Mobile scorecard/roll layout
+- Existing coaching families and exact-policy integration
 
-WHAT DID NOT CHANGE:
-- exact_policy.npz, puzzle_bank.npz, and challenge_catalog.npz are byte-for-byte unchanged.
-- Exact-policy SHA-256 is unchanged.
-- No Supabase schema change or migration.
-- Group ranking/tie-break rules are unchanged.
-- Daily competitive spoiler protections remain intact.
+WHAT DID NOT CHANGE FROM PHASE 2K.9:
+- puzzle_bank.py and daily_challenge.py
+- exact strategy policy / hold-value math / exact-only routing
+- exact_policy.npz, puzzle_bank.npz, and challenge_catalog.npz
+- Phase 2K.9 forward-only Daily generator boundary beginning August 19, 2026
+- No Supabase schema change or migration
+- Saved raw Points Lost values remain untouched; ranking is computed from the displayed hundredth

@@ -26,6 +26,34 @@ JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 REMEMBER_DEVICE_DAYS = 30
 
 
+def displayed_points_lost(value: float) -> float:
+    """Return the official leaderboard score exactly as players see it: hundredths."""
+    return float(f"{float(value or 0.0):.2f}")
+
+
+def rank_leaderboard_rows(rows: list[dict]) -> list[dict]:
+    """Sort and competition-rank completed Daily results by displayed Points Lost.
+
+    Players with the same displayed score share the same place. The next place is
+    skipped after a tie (for example 1, 1, 3). Names only alphabetize rows inside
+    a tie; they never break the tie.
+    """
+    rows.sort(key=lambda item: (
+        displayed_points_lost(item["total_ev_loss"]),
+        item["display_name"].casefold(),
+        item["player_id"],
+    ))
+    previous_score = None
+    current_rank = 0
+    for position, row in enumerate(rows, start=1):
+        score = displayed_points_lost(row["total_ev_loss"])
+        if previous_score is None or score != previous_score:
+            current_rank = position
+            previous_score = score
+        row["rank"] = current_rank
+    return rows
+
+
 def hash_device_token_secret(secret: str) -> str:
     """Hash a high-entropy remembered-device secret before database storage."""
     return hashlib.sha256(str(secret or "").encode("utf-8")).hexdigest()
@@ -596,16 +624,7 @@ class InMemoryDailyStore:
                 "best_exact_streak": int(attempt.best_exact_streak or 0),
                 "completed_at": attempt.completed_at,
             })
-        rows.sort(key=lambda item: (
-            round(item["total_ev_loss"], 12),
-            -item["exact_count"],
-            round(item["worst_miss"], 12),
-            item["display_name"].casefold(),
-            item["player_id"],
-        ))
-        for rank, row in enumerate(rows, start=1):
-            row["rank"] = rank
-        return rows
+        return rank_leaderboard_rows(rows)
 
     def group_question_stats(self, group_id: str, challenge_id: str) -> list[dict]:
         if group_id not in self.groups:
