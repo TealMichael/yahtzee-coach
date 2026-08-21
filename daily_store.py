@@ -20,6 +20,7 @@ import re
 import secrets
 from typing import Callable, Iterable, Mapping, Protocol, Sequence
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 TIE_TOLERANCE = 1e-9
 JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -182,6 +183,8 @@ class _StoredPlayer:
     display_name_key: str
     pin_hash: str
     created_at: datetime
+    avatar_config: dict = field(default_factory=dict)
+    avatar_setup_complete: bool = False
 
     def public(self) -> PublicPlayer:
         return PublicPlayer(self.player_id, self.display_name, self.created_at)
@@ -265,6 +268,9 @@ class DailyStore(Protocol):
     def join_group(self, player_id: str, join_code: str) -> GroupRecord: ...
     def list_groups(self, player_id: str) -> list[GroupRecord]: ...
     def list_group_members(self, group_id: str) -> list[dict]: ...
+    def get_player_profile(self, player_id: str) -> dict: ...
+    def save_player_avatar(self, player_id: str, avatar_config: Mapping) -> dict: ...
+    def player_medal_totals(self, player_id: str, group_id: str, through_date: str) -> dict: ...
     def ensure_challenge(self, challenge_id: str, challenge_date: str,
                          challenge_version: str, puzzle_ids: Sequence[str]) -> ChallengeRecord: ...
     def get_or_create_attempt(self, player_id: str, challenge_id: str) -> tuple[AttemptRecord, bool]: ...
@@ -298,6 +304,7 @@ class InMemoryDailyStore:
         self.groups: dict[str, GroupRecord] = {}
         self.group_id_by_join_code: dict[str, str] = {}
         self.group_members: set[tuple[str, str]] = set()
+        self.group_joined_at: dict[tuple[str, str], datetime] = {}
         self.challenges: dict[str, ChallengeRecord] = {}
         self.attempts: dict[str, AttemptRecord] = {}
         self.attempt_id_by_player_challenge: dict[tuple[str, str], str] = {}
@@ -408,6 +415,7 @@ class InMemoryDailyStore:
         self.groups[group.group_id] = group
         self.group_id_by_join_code[group.join_code] = group.group_id
         self.group_members.add((group.group_id, player_id))
+        self.group_joined_at[(group.group_id, player_id)] = self._now()
         return group
 
     def join_group(self, player_id: str, join_code: str) -> GroupRecord:
@@ -417,6 +425,7 @@ class InMemoryDailyStore:
         if group_id is None:
             raise GroupNotFound("No group found for that join code.")
         self.group_members.add((group_id, player_id))
+        self.group_joined_at.setdefault((group_id, player_id), self._now())
         return self.groups[group_id]
 
     def list_groups(self, player_id: str) -> list[GroupRecord]:
@@ -437,6 +446,101 @@ class InMemoryDailyStore:
                 "display_name": player.display_name,
             })
         return sorted(rows, key=lambda row: (row["display_name"].casefold(), row["player_id"]))
+
+    def get_player_profile(self, player_id: str) -> dict:
+        player = self._require_player(player_id)
+        return {
+            "player_id": player.player_id,
+            "display_name": player.display_name,
+            "avatar_config": dict(player.avatar_config or {}),
+            "avatar_setup_complete": bool(player.avatar_setup_complete),
+        }
+
+    def save_player_avatar(self, player_id: str, avatar_config: Mapping) -> dict:
+        player = self._require_player(player_id)
+        player.avatar_config = {str(key): str(value) for key, value in dict(avatar_config or {}).items()}
+        player.avatar_setup_complete = True
+        return self.get_player_profile(player_id)
+
+    def player_medal_totals(self, player_id: str, group_id: str, through_date: str) -> dict:
+        """Count finalized social medals through a date using the same leaderboard tie rules.
+
+        Medals are derived instead of duplicated in storage. A day only counts once the
+        player belonged to a group with at least one other member, and only challenges on
+        or before ``through_date`` are considered. If historical deployment/version changes
+        ever left more than one challenge id for a calendar day, the player's first completed
+        attempt for that day is treated as the official medal attempt so a day cannot double-count.
+        """
+        self._require_player(player_id)
+        player_id = str(player_id)
+        group_id = str(group_id)
+        if group_id not in self.groups:
+            raise GroupNotFound(group_id)
+        cutoff = date.fromisoformat(str(through_date))
+        if (group_id, player_id) not in self.group_members:
+            raise GroupNotFound("Player must belong to this friend group.")
+
+        memberships = {
+            member_id: self.group_joined_at.get((group_id, member_id), self.groups[group_id].created_at)
+            for member_group_id, member_id in self.group_members
+            if member_group_id == group_id
+        }
+        candidate_by_day: dict[date, tuple[datetime, ChallengeRecord]] = {}
+        for challenge in self.challenges.values():
+            challenge_day = date.fromisoformat(challenge.challenge_date)
+            if challenge_day > cutoff:
+                continue
+            joined_at = memberships.get(player_id)
+            if joined_at is None or joined_at.astimezone(ZoneInfo("America/New_York")).date() > challenge_day:
+                continue
+            viewer_attempt_id = self.attempt_id_by_player_challenge.get((player_id, challenge.challenge_id))
+            if not viewer_attempt_id:
+                continue
+            viewer_attempt = self.attempts[viewer_attempt_id]
+            if not viewer_attempt.complete or viewer_attempt.completed_at is None:
+                continue
+            prior = candidate_by_day.get(challenge_day)
+            if prior is None or viewer_attempt.completed_at < prior[0]:
+                candidate_by_day[challenge_day] = (viewer_attempt.completed_at, challenge)
+
+        totals = {"gold": 0, "silver": 0, "bronze": 0, "total": 0}
+        for challenge_day in sorted(candidate_by_day):
+            challenge = candidate_by_day[challenge_day][1]
+            eligible = {
+                member_id for member_id, joined_at in memberships.items()
+                if joined_at.astimezone(ZoneInfo("America/New_York")).date() <= challenge_day
+            }
+            if player_id not in eligible or len(eligible) < 2:
+                continue
+            rows = []
+            for member_id in eligible:
+                attempt_id = self.attempt_id_by_player_challenge.get((member_id, challenge.challenge_id))
+                if not attempt_id:
+                    continue
+                attempt = self.attempts[attempt_id]
+                if not attempt.complete:
+                    continue
+                player = self.players[member_id]
+                rows.append({
+                    "player_id": member_id,
+                    "display_name": player.display_name,
+                    "total_ev_loss": float(attempt.total_ev_loss or 0.0),
+                })
+            if not rows:
+                continue
+            rank_leaderboard_rows(rows)
+            mine = next((row for row in rows if row["player_id"] == player_id), None)
+            if mine is None:
+                continue
+            rank = int(mine.get("rank") or 0)
+            if rank == 1:
+                totals["gold"] += 1
+            elif rank == 2:
+                totals["silver"] += 1
+            elif rank == 3:
+                totals["bronze"] += 1
+        totals["total"] = totals["gold"] + totals["silver"] + totals["bronze"]
+        return totals
 
     def ensure_challenge(self, challenge_id: str, challenge_date: str,
                          challenge_version: str, puzzle_ids: Sequence[str]) -> ChallengeRecord:

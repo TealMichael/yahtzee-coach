@@ -20,6 +20,7 @@ import re
 import secrets
 from typing import Mapping, Sequence
 from urllib.parse import urlsplit, urlunsplit
+from zoneinfo import ZoneInfo
 
 from supabase import Client, create_client
 
@@ -484,6 +485,170 @@ class SupabaseDailyStore:
             "display_name": str(row["display_name"]),
         } for row in player_rows]
         return sorted(rows, key=lambda row: (row["display_name"].casefold(), row["player_id"]))
+
+    def get_player_profile(self, player_id: str) -> dict:
+        row = _first_row(
+            self.client.table("players")
+            .select("player_id,display_name,avatar_config,avatar_setup_complete")
+            .eq("player_id", str(player_id))
+            .limit(1)
+            .execute()
+        )
+        if row is None:
+            raise PlayerNotFound(str(player_id))
+        return {
+            "player_id": str(row["player_id"]),
+            "display_name": str(row["display_name"]),
+            "avatar_config": dict(row.get("avatar_config") or {}),
+            "avatar_setup_complete": bool(row.get("avatar_setup_complete")),
+        }
+
+    def save_player_avatar(self, player_id: str, avatar_config: Mapping) -> dict:
+        self._require_player_row(player_id)
+        payload = {
+            "avatar_config": {str(key): str(value) for key, value in dict(avatar_config or {}).items()},
+            "avatar_setup_complete": True,
+        }
+        row = _first_row(
+            self.client.table("players")
+            .update(payload)
+            .eq("player_id", str(player_id))
+            .select("player_id,display_name,avatar_config,avatar_setup_complete")
+            .execute()
+        )
+        if row is None:
+            raise DailyStoreError("Player avatar could not be saved.")
+        return {
+            "player_id": str(row["player_id"]),
+            "display_name": str(row["display_name"]),
+            "avatar_config": dict(row.get("avatar_config") or {}),
+            "avatar_setup_complete": bool(row.get("avatar_setup_complete")),
+        }
+
+    def player_medal_totals(self, player_id: str, group_id: str, through_date: str) -> dict:
+        """Derive finalized social medals from stored Daily attempts using leaderboard tie rules."""
+        self._require_player_row(player_id)
+        player_id = str(player_id)
+        group_id = str(group_id)
+        self._require_group_row(group_id)
+        cutoff = date.fromisoformat(str(through_date))
+
+        membership_rows = _row_list(
+            self.client.table("group_members")
+            .select("player_id,joined_at")
+            .eq("group_id", group_id)
+            .execute()
+        )
+        memberships = {
+            str(row["player_id"]): (_as_datetime(row.get("joined_at")) or utc_now())
+            for row in membership_rows
+        }
+        if player_id not in memberships:
+            raise GroupNotFound("Player must belong to this friend group.")
+        player_ids = list(memberships)
+        if len(player_ids) < 2:
+            return {"gold": 0, "silver": 0, "bronze": 0, "total": 0}
+
+        attempt_rows = _row_list(
+            self.client.table("daily_attempts")
+            .select("player_id,challenge_id,completed_at,total_ev_loss")
+            .in_("player_id", player_ids)
+            .execute()
+        )
+        completed_rows = [row for row in attempt_rows if row.get("completed_at") is not None]
+        challenge_ids = sorted({str(row["challenge_id"]) for row in completed_rows})
+        if not challenge_ids:
+            return {"gold": 0, "silver": 0, "bronze": 0, "total": 0}
+
+        challenge_rows = _row_list(
+            self.client.table("daily_challenges")
+            .select("challenge_id,challenge_date")
+            .in_("challenge_id", challenge_ids)
+            .execute()
+        )
+        challenge_dates = {
+            str(row["challenge_id"]): date.fromisoformat(str(row["challenge_date"]))
+            for row in challenge_rows
+        }
+        player_rows = _row_list(
+            self.client.table("players")
+            .select("player_id,display_name")
+            .in_("player_id", player_ids)
+            .execute()
+        )
+        names = {str(row["player_id"]): str(row["display_name"]) for row in player_rows}
+
+        # Choose at most one official challenge id per calendar day for this player.
+        # This protects medal history if an old deployment boundary ever registered two
+        # challenge versions for the same date; the first completed attempt wins.
+        selected_by_day: dict[date, tuple[datetime, str]] = {}
+        for row in completed_rows:
+            if str(row["player_id"]) != player_id:
+                continue
+            challenge_id = str(row["challenge_id"])
+            challenge_day = challenge_dates.get(challenge_id)
+            completed_at = _as_datetime(row.get("completed_at"))
+            if challenge_day is None or completed_at is None or challenge_day > cutoff:
+                continue
+            joined_at = memberships[player_id]
+            if joined_at.astimezone(ZoneInfo("America/New_York")).date() > challenge_day:
+                continue
+            prior = selected_by_day.get(challenge_day)
+            if prior is None or completed_at < prior[0]:
+                selected_by_day[challenge_day] = (completed_at, challenge_id)
+        selected_ids = {challenge_id for _, challenge_id in selected_by_day.values()}
+        if not selected_ids:
+            return {"gold": 0, "silver": 0, "bronze": 0, "total": 0}
+
+        by_challenge: dict[str, list[dict]] = {}
+        for row in completed_rows:
+            challenge_id = str(row["challenge_id"])
+            if challenge_id not in selected_ids:
+                continue
+            challenge_day = challenge_dates.get(challenge_id)
+            if challenge_day is None:
+                continue
+            member_id = str(row["player_id"])
+            joined_at = memberships.get(member_id)
+            if joined_at is None or joined_at.astimezone(ZoneInfo("America/New_York")).date() > challenge_day:
+                continue
+            by_challenge.setdefault(challenge_id, []).append(row)
+
+        totals = {"gold": 0, "silver": 0, "bronze": 0, "total": 0}
+        for challenge_day in sorted(selected_by_day):
+            challenge_id = selected_by_day[challenge_day][1]
+            rows = by_challenge.get(challenge_id, [])
+            eligible_member_ids = {
+                member_id for member_id, joined_at in memberships.items()
+                if joined_at.astimezone(ZoneInfo("America/New_York")).date() <= challenge_day
+            }
+            if player_id not in eligible_member_ids or len(eligible_member_ids) < 2:
+                continue
+            board = []
+            for row in rows:
+                member_id = str(row["player_id"])
+                if member_id not in eligible_member_ids or member_id not in names:
+                    continue
+                board.append({
+                    "player_id": member_id,
+                    "display_name": names[member_id],
+                    "total_ev_loss": float(row.get("total_ev_loss") or 0.0),
+                })
+            if not board:
+                continue
+            rank_leaderboard_rows(board)
+            mine = next((item for item in board if item["player_id"] == player_id), None)
+            if mine is None:
+                continue
+            rank = int(mine.get("rank") or 0)
+            if rank == 1:
+                totals["gold"] += 1
+            elif rank == 2:
+                totals["silver"] += 1
+            elif rank == 3:
+                totals["bronze"] += 1
+        totals["total"] = totals["gold"] + totals["silver"] + totals["bronze"]
+        return totals
 
     # ---------- Challenge registration ----------
 

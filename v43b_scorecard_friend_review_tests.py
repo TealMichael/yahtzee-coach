@@ -34,7 +34,7 @@ def run():
     contract = (ROOT / "daily_store.py").read_text(encoding="utf-8")
 
     checks = [
-        ('APP_RELEASE = "v43B Phase 2K.9.1"' in app, "release advances to Phase 2K.9.1"),
+        ('APP_RELEASE = "v43B Phase 2K.11.2"' in app, "release advances to Phase 2K.9.1"),
         ("CATEGORY_SCORECARD = dict(CATEGORY_SHORT)" in app, "live scorecard restores original short labels"),
         ("font-size:1.02rem; font-weight:950" in app, "score values are larger than compact 2K.6.1 layout"),
         ("min-height:2.45rem" in app, "score boxes are slightly larger while retaining compact grid"),

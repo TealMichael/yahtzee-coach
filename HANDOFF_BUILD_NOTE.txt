@@ -1,43 +1,47 @@
-Yahtzee Coach current release: v43B Phase 2K.9.1
+Yahtzee Coach current release: v43B Phase 2K.11.2
 
-Phase 2K.9.1 is a narrow hotfix on top of Phase 2K.9 covering leaderboard ties, close-call coaching clarity, and spoiler-free share color balance.
+Phase 2K.11.2 is the final pre-deployment polish pass for My Player + Personal Medal Moments.
 
-Locked tie rule:
-- Displayed Points Lost to the hundredth is the official leaderboard score.
-- Same displayed score = real tie.
-- No Best Holds or biggest-miss tiebreakers.
-- Standard competition ranking: 1, 1, 3 (or 1, 2, 2, 4).
-- Names are alphabetized only to order tied rows visually; alphabetical order does not break the tie.
-- Tied rank is shown as T-# in the player's result summary and “tied for #” in banner/share copy.
-- Yesterday's medal ceremony awards the same medal to all players sharing a podium rank. A skipped rank receives no medal.
+LOCKED PRODUCT DIRECTION:
+- Personal reward moment stays simple: Pixel Mike + signed-in player's sprite + one medal + All-Time Medals.
+- Light retro preview remains the art-direction source of truth.
+- No stadium/podium production, audio, or unnecessary animation.
+- Character creator stays lightweight and category-first.
+- Two unlabeled base character silhouettes are available; every hairstyle/outfit/skin/accessory/shoe works with either.
+- Current hair set includes curly, spiky, short, side sweep, ponytail, bob, long waves, high bun, braids, and buzz.
+- Do not require a player to identify as Male/Female; they choose the sprite parts they want.
 
-Locked close-call coaching rule:
-- A miss of 0.25 Points Lost or less is explicitly framed as a very close decision / fine distinction.
-- Generic scorecard-fit near-ties validate the player's original idea before explaining the solver's tiny edge.
-- Generic close-call explanations prefer concrete open boxes over vague route language and do not lean on Chance when a clearer scorecard box explains the edge.
-- When the exact hold keeps an extra die, explain that the tiny scorecard edge is just barely worth giving up that fresh reroll die.
-- The reusable takeaway is: “When two holds are this close, use the open scorecard boxes to find the small edge.”
+MEDAL CABINETS:
+- Medals remain derived from real historical Daily standings; do not store duplicate medal totals.
+- Medal totals are group-specific.
+- In My Player, multi-group users can switch which medal cabinet they are viewing.
+- The medal-cabinet selector is intentionally independent from active_group_id and must never switch the active Daily group.
+- Morning ceremony continues to show one selected group's result once per player/browser/day.
 
-Locked share-color rule:
-- 🟩 best = exact, 0.00 Points Lost.
-- 🟨 almost best = 0.01–0.25 Points Lost.
-- 🟧 close = 0.26–1.50 Points Lost.
-- 🟥 miss = over 1.50 Points Lost.
-- These bands intentionally mirror the exact-mode coaching rubric so share visuals do not look harsher than the player's coaching.
+SUPABASE:
+- No new 2K.11.2 migration.
+- Existing RUN_THIS_ONCE_IN_SUPABASE_Phase2K11.sql remains the only avatar schema step.
+- avatar_config is JSON, so new style/hair/outfit option values require no schema change.
 
-Scope protection:
-- No puzzle-generation changes from Phase 2K.9.
-- No exact-policy/strategy-engine/hold-value changes; exact_mode.py changes are player-facing coaching language only.
-- Share-color rebalance changes only app.py display classification; stored Points Lost values are untouched.
-- No database migration or saved-result rewrite.
-- No login, friend, scorecard, Practice, or challenge-ID changes.
-- Existing stored raw totals automatically use the new ranking rule and share-color rubric when rendered.
+GAME / STRATEGY FREEZE:
+Byte-for-byte unchanged from Phase 2K.11.1:
+- yahtzee_engine.py
+- exact_runtime.py
+- exact_mode.py
+- puzzle_bank.py
+- daily_challenge.py
+- daily_store.py
+- supabase_daily_store.py
+- session_learning.py
+- practice_progress.py
+- exact_policy.npz
+- puzzle_bank.npz
+- challenge_catalog.npz
 
-Validation completed:
-- 43/43 current automated suites pass across the final source tree, including dedicated tie, close-call coaching, and share-color regressions.
-- Tie regression covers hidden-decimal ties and 1,1,3 competition ranking.
-- Close-call regression recreates the vague scorecard-fit teaching pattern and requires proportional, concrete coaching.
-- Share-color regression covers rubric boundaries and the real-play tiny-miss case.
-- Exact integration remains green, including all 3,669,120 legal hold values.
-- Phase 2K.9 puzzle-balance regression remains green.
+A dedicated 2K.11.2 regression hard-codes those hashes so a future presentation-only patch fails immediately if the actual Yahtzee game drifts.
+
+VALIDATION:
+- 47/47 automated suites pass.
+- 210 avatar style/option/pose renders validated.
+- Exhaustive exact integration passes all 3,669,120 legal hold values.
 - exact_policy.npz SHA-256 remains cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b.

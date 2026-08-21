@@ -1,6 +1,7 @@
 import re
 import html
 import json
+import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -14,6 +15,11 @@ from exact_runtime import (
 )
 from session_learning import build_session_learning_summary
 from practice_progress import build_practice_progress, newly_unlocked_badges
+from retro_podium import personal_medal_moment_html
+from player_avatar import (
+    AVATAR_CHOICES, CATEGORY_ICONS, CATEGORY_LABELS, avatar_option_tile_html,
+    avatar_preview_html, default_avatar_for_player, medal_counter_html, normalize_avatar_config,
+)
 from puzzle_bank import generate_practice_challenge as generate_expanded_practice_challenge
 from daily_challenge import (
     DAILY_CHALLENGE_VERSION, DAILY_TIMEZONE, challenge_set_id,
@@ -27,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.9.1"
+APP_RELEASE = "v43B Phase 2K.11.2"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
@@ -117,6 +123,32 @@ _yesterday_results_storage_component = st.components.v2.component(
     """,
 )
 
+# Phase 2K.10: the ceremony marks itself viewed as soon as it is actually
+# rendered. This keeps the retro movie to once per browser/player/day even if
+# someone watches it and closes the app before pressing Play Today's 10.
+_yesterday_results_seen_writer = st.components.v2.component(
+    "yahtzee_yesterday_results_seen_writer",
+    html="<span aria-hidden='true'></span>",
+    css=":host { display: none !important; height: 0 !important; }",
+    js=r"""
+    export default function({ data, setStateValue }) {
+      const key = data?.storage_key || "";
+      const value = data?.value || "";
+      let ack = "";
+      try {
+        if (key && value) {
+          window.localStorage.setItem(key, value);
+          ack = window.localStorage.getItem(key) || "";
+        }
+      } catch (err) {
+        ack = "";
+      }
+      setStateValue("ack", ack);
+    }
+    """,
+)
+
+
 
 @st.cache_resource(show_spinner=False)
 def load_daily_store():
@@ -163,6 +195,16 @@ def _cached_participation_streak(player_id: str, current_date: str):
     return load_daily_store().current_participation_streak(str(player_id), str(current_date))
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_player_profile(player_id: str):
+    return load_daily_store().get_player_profile(str(player_id))
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_player_medal_totals(player_id: str, group_id: str, through_date: str):
+    return load_daily_store().player_medal_totals(str(player_id), str(group_id), str(through_date))
+
+
 def _clear_social_caches():
     """Clear small public-result caches after a write that changes social state."""
     _cached_player_groups.clear()
@@ -172,6 +214,8 @@ def _clear_social_caches():
     _cached_group_daily_snapshot.clear()
     _cached_group_player_daily_review.clear()
     _cached_participation_streak.clear()
+    _cached_player_profile.clear()
+    _cached_player_medal_totals.clear()
 
 
 def database_check_enabled():
@@ -2007,6 +2051,12 @@ def initialize_player_identity_state():
         st.session_state.yesterday_result_storage_state = {"value": "", "ready": False}
     if "yesterday_balloons_date" not in st.session_state:
         st.session_state.yesterday_balloons_date = None
+    if "avatar_editor_open" not in st.session_state:
+        st.session_state.avatar_editor_open = False
+    if "avatar_editor_player_id" not in st.session_state:
+        st.session_state.avatar_editor_player_id = None
+    if "avatar_draft" not in st.session_state:
+        st.session_state.avatar_draft = {}
 
 
 def _browser_remember_cookie() -> str:
@@ -2139,6 +2189,26 @@ def render_yesterday_result_storage_bridge() -> dict:
     return state
 
 
+def mark_yesterday_ceremony_seen_now(date_key: str):
+    """Persist ceremony acknowledgement immediately without a schema change."""
+    storage_key = _yesterday_results_storage_key()
+    if not storage_key:
+        return
+    try:
+        _yesterday_results_seen_writer(
+            data={"storage_key": storage_key, "value": str(date_key)},
+            default={"ack": ""},
+            on_ack_change=lambda: None,
+            key=f"yesterday_result_seen_writer_{st.session_state.get('active_player_id')}_{date_key}",
+        )
+    except Exception as exc:
+        if database_check_enabled():
+            st.caption(f"Yesterday-ceremony acknowledgement detail: {type(exc).__name__}: {exc}")
+    # Also suppress repeats during this live Streamlit session. The component
+    # above handles future fresh sessions through localStorage.
+    st.session_state.yesterday_result_storage_state = {"value": str(date_key), "ready": True}
+
+
 def render_pending_remember_cookie_command():
     """Write/delete the first-party remembered-device cookie in the browser."""
     command = st.session_state.get("remember_cookie_command")
@@ -2230,6 +2300,10 @@ def _activate_player(player, *, created: bool = False):
     st.session_state.active_player_name = player.display_name
     st.session_state.daily_display_name = player.display_name
     st.session_state.player_auth_flash = ""
+    if created:
+        st.session_state.avatar_editor_open = True
+        st.session_state.avatar_editor_player_id = player.player_id
+        st.session_state.avatar_draft = {}
 
 
 def _sign_out_player():
@@ -2246,6 +2320,9 @@ def _sign_out_player():
     st.session_state.active_player_id = None
     st.session_state.active_player_name = None
     st.session_state.player_auth_flash = ""
+    st.session_state.avatar_editor_open = False
+    st.session_state.avatar_editor_player_id = None
+    st.session_state.avatar_draft = {}
     st.session_state.active_group_id = None
     st.session_state.group_flash = ""
     st.session_state.pop("friend_group_selector", None)
@@ -2604,6 +2681,205 @@ def _set_app_mode(mode: str):
     st.session_state.app_mode = mode
 
 
+def _active_player_profile():
+    player_id = str(st.session_state.get("active_player_id") or "")
+    if not player_id:
+        return {"avatar_config": {}, "avatar_setup_complete": False}
+    try:
+        return dict(_cached_player_profile(player_id) or {})
+    except Exception as exc:
+        if database_check_enabled():
+            st.caption(f"Player profile detail: {type(exc).__name__}: {exc}")
+        return {"avatar_config": {}, "avatar_setup_complete": False, "profile_unavailable": True}
+
+
+def _active_avatar_config(profile=None):
+    profile = dict(profile or _active_player_profile())
+    saved = dict(profile.get("avatar_config") or {})
+    if profile.get("avatar_setup_complete") and saved:
+        return normalize_avatar_config(saved)
+    return default_avatar_for_player(st.session_state.get("active_player_id"))
+
+
+def _clear_avatar_widget_state(player_id: str | None = None):
+    pid = str(player_id or st.session_state.get("active_player_id") or "")
+    for category in AVATAR_CHOICES:
+        st.session_state.pop(f"avatar_{category}_{pid}", None)
+    st.session_state.pop(f"avatar_creator_category_{pid}", None)
+
+
+def _open_avatar_editor():
+    profile = _active_player_profile()
+    player_id = st.session_state.get("active_player_id")
+    _clear_avatar_widget_state(player_id)
+    st.session_state.avatar_editor_open = True
+    st.session_state.avatar_editor_player_id = player_id
+    st.session_state.avatar_draft = _active_avatar_config(profile)
+
+
+def _close_avatar_editor():
+    _clear_avatar_widget_state(st.session_state.get("avatar_editor_player_id"))
+    st.session_state.avatar_editor_open = False
+    st.session_state.avatar_editor_player_id = None
+    st.session_state.avatar_draft = {}
+
+
+def _avatar_medals_for_group(group_id: str | None, through_date: str) -> dict:
+    player_id = str(st.session_state.get("active_player_id") or "")
+    if not player_id or not group_id:
+        return {"gold": 0, "silver": 0, "bronze": 0, "total": 0}
+    try:
+        return dict(_cached_player_medal_totals(player_id, str(group_id), str(through_date)) or {})
+    except Exception as exc:
+        if database_check_enabled():
+            st.caption(f"Medal history detail: {type(exc).__name__}: {exc}")
+        return {"gold": 0, "silver": 0, "bronze": 0, "total": 0}
+
+
+def _avatar_medal_group_choice(groups, player_id: str):
+    """Choose which friend-group medal cabinet My Player is showing.
+
+    This selector is intentionally independent from ``active_group_id`` so browsing
+    a second medal cabinet cannot silently switch the group used by Daily standings.
+    """
+    if not groups:
+        return None
+    if len(groups) == 1:
+        return groups[0]
+    active = _select_active_group(groups)
+    ids = [group.group_id for group in groups]
+    labels = {group.group_id: group.group_name for group in groups}
+    key = f"avatar_medal_group_{player_id}"
+    if st.session_state.get(key) not in ids:
+        st.session_state[key] = active.group_id if active and active.group_id in ids else ids[0]
+    st.markdown("**🏅 Medal cabinet**")
+    chosen_id = st.selectbox(
+        "Medal group",
+        options=ids,
+        format_func=lambda group_id: labels[group_id],
+        key=key,
+        label_visibility="collapsed",
+    )
+    st.caption("Medals are tracked separately for each friend group.")
+    return next(group for group in groups if group.group_id == chosen_id)
+
+
+def render_player_avatar_creator():
+    player_id = str(st.session_state.get("active_player_id") or "")
+    player_name = str(st.session_state.get("active_player_name") or "Player")
+    if not player_id:
+        return
+    profile = _active_player_profile()
+    if st.session_state.get("avatar_editor_player_id") != player_id or not st.session_state.get("avatar_draft"):
+        st.session_state.avatar_editor_player_id = player_id
+        st.session_state.avatar_draft = _active_avatar_config(profile)
+    draft = normalize_avatar_config(st.session_state.avatar_draft)
+
+    # Phase 2K.11.2 keeps the approved light retro preview as the visual target
+    # while broadening player representation. Native buttons remain reliable on mobile.
+    st.markdown(
+        "<div style='border:3px solid #172033;border-radius:20px 20px 0 0;background:#fff9ea;"
+        "padding:16px 16px 10px;text-align:center;box-shadow:5px 5px 0 #d9d2c3;color:#172033'>"
+        "<div style='font:1000 28px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#ffc62f;"
+        "text-shadow:3px 0 #172033,-3px 0 #172033,0 3px #172033,0 -3px #172033,3px 3px #d86e16'>"
+        "CREATE YOUR PLAYER</div>"
+        "<div style='margin-top:8px;font:900 12px ui-monospace,SFMono-Regular,Menlo,monospace'>"
+        "Build your champion. Roll in style.</div>"
+        "<div style='margin-top:5px;font:700 11px system-ui;color:#64748b'>"
+        "Pick a few details. Your player updates immediately and joins Pixel Mike in medal moments.</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        avatar_preview_html(
+            draft,
+            player_name=player_name,
+            setup_complete=bool(profile.get("avatar_setup_complete")),
+        ),
+        unsafe_allow_html=True,
+    )
+
+    groups = _load_player_groups()
+    if groups:
+        cabinet_group = _avatar_medal_group_choice(groups, player_id)
+        yesterday = _previous_daily_date_key(st.session_state.daily_date_key)
+        medals = _avatar_medals_for_group(cabinet_group.group_id if cabinet_group else None, yesterday)
+        st.markdown(
+            medal_counter_html(medals, group_name=cabinet_group.group_name if cabinet_group else ""),
+            unsafe_allow_html=True,
+        )
+
+    if st.button("🎲 Randomize player", use_container_width=True, key="avatar_randomize"):
+        st.session_state.avatar_draft = {
+            category: random.choice(list(choices)) for category, choices in AVATAR_CHOICES.items()
+        }
+        st.rerun()
+
+    category_options = list(AVATAR_CHOICES)
+    category_key = f"avatar_creator_category_{player_id}"
+    selected_category = st.pills(
+        "Customize",
+        options=category_options,
+        default="hair",
+        format_func=lambda value: f"{CATEGORY_ICONS[value]} {CATEGORY_LABELS[value].title()}",
+        selection_mode="single",
+        key=category_key,
+    ) or "hair"
+
+    st.markdown(
+        f"<div style='margin:8px 0 7px;padding:7px 10px;border:2px solid #172033;border-radius:10px;"
+        f"background:#2468b4;color:white;font:1000 12px ui-monospace,SFMono-Regular,Menlo,monospace;"
+        f"box-shadow:3px 3px 0 #a9b5c6'>{CATEGORY_ICONS[selected_category]} {CATEGORY_LABELS[selected_category]}</div>",
+        unsafe_allow_html=True,
+    )
+
+    choices = AVATAR_CHOICES[selected_category]
+    items = list(choices.items())
+    for offset in range(0, len(items), 3):
+        cols = st.columns(3)
+        for col, (value, label) in zip(cols, items[offset:offset + 3]):
+            with col:
+                selected = draft[selected_category] == value
+                st.markdown(
+                    avatar_option_tile_html(selected_category, value, draft, selected=selected),
+                    unsafe_allow_html=True,
+                )
+                button_label = f"✓ {label}" if selected else label
+                if st.button(
+                    button_label,
+                    use_container_width=True,
+                    key=f"avatar_choice_{selected_category}_{value}_{player_id}",
+                    disabled=selected,
+                ):
+                    updated = dict(draft)
+                    updated[selected_category] = value
+                    st.session_state.avatar_draft = normalize_avatar_config(updated)
+                    st.rerun()
+
+    left, right = st.columns(2)
+    with left:
+        if st.button("Save & Continue", type="primary", use_container_width=True, key="avatar_save"):
+            try:
+                load_daily_store().save_player_avatar(player_id, st.session_state.avatar_draft)
+            except Exception as exc:
+                st.error("Your player couldn't be saved yet. Make sure the Phase 2K.11 Supabase step has been run.")
+                if database_check_enabled():
+                    st.caption(f"Avatar save detail: {type(exc).__name__}: {exc}")
+            else:
+                _cached_player_profile.clear()
+                st.session_state.player_auth_flash = "🎮 Your player is saved for future medal ceremonies."
+                _close_avatar_editor()
+                st.rerun()
+    with right:
+        if st.button("Not now" if not profile.get("avatar_setup_complete") else "Back", use_container_width=True, key="avatar_cancel"):
+            _close_avatar_editor()
+            st.rerun()
+
+    if profile.get("profile_unavailable"):
+        st.info("Avatar saving will turn on after the one-time Phase 2K.11 Supabase migration. The rest of Yahtzee Coach still works normally.")
+
+
+
 def render_player_identity_gate():
     """Create or restore the player used for Daily Challenge."""
     st.markdown(
@@ -2731,9 +3007,15 @@ def render_player_status_bar():
         st.info(flash)
         st.session_state.player_auth_flash = ""
     name = st.session_state.get("active_player_name") or "Player"
-    left, right = st.columns([5, 1])
+    profile = _active_player_profile()
+    left, middle, right = st.columns([4, 2, 2])
     with left:
         st.caption(f"👤 **{name}**")
+    with middle:
+        label = "🎨 My Player" if profile.get("avatar_setup_complete") else "🎨 Make Sprite"
+        if st.button(label, use_container_width=True, key="open_avatar_editor"):
+            _open_avatar_editor()
+            st.rerun()
     with right:
         if st.button("Sign out", use_container_width=True, key="player_sign_out"):
             _sign_out_player()
@@ -3026,10 +3308,11 @@ def _start_today_from_yesterday_recap():
 
 
 def render_yesterday_final_standings_if_needed() -> bool:
-    """Show yesterday's final group standings once before an unstarted new Daily.
+    """Show yesterday's final group results once before an unstarted new Daily.
 
-    Returns True when the recap (or its browser-storage loading state) owns the
-    screen, so the normal Daily intro should not render underneath it.
+    Multi-member groups get the Phase 2K.11 personal Pixel Mike medal moment. Solo
+    groups retain a compact recap without awarding a meaningless one-person
+    social medal. Returns True while yesterday's recap owns the screen.
     """
     today = st.session_state.daily_date_key
     storage_state = st.session_state.get("yesterday_result_storage_state") or {}
@@ -3067,49 +3350,40 @@ def render_yesterday_final_standings_if_needed() -> bool:
     if not board:
         return False
 
-    rank = _find_player_rank(board)
-    rank_tied = _rank_is_tied(board, rank)
-    medals = {1: ("🥇", "GOLD", "1st"), 2: ("🥈", "SILVER", "2nd"), 3: ("🥉", "BRONZE", "3rd")}
-    podium = rank in medals and len(members) > 1
-
-    st.markdown(
-        "<div class='daily-hero'>"
-        "<div class='daily-kicker'>🏆 Yesterday's Final Standings</div>"
-        f"<div class='daily-title'>{_daily_date_label(yesterday)}</div>"
-        f"<div class='daily-rule'><b>{html.escape(active.group_name)}</b> is final. See where everyone landed before today's 10 begin.</div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    if podium:
-        medal, medal_name, place = medals[rank]
-        if st.session_state.get("yesterday_balloons_date") != today:
-            st.balloons()
-            st.session_state.yesterday_balloons_date = today
-        podium_result = f"You tied for {place} yesterday!" if rank_tied else f"You finished {place} yesterday!"
+    # A social medal only makes sense when the group has somebody to compete with.
+    # A multi-member group may still have only one finisher; that player can earn
+    # gold because the next-day board is final for that group/day.
+    if len(members) > 1:
+        profile = _active_player_profile()
+        medals = _avatar_medals_for_group(active.group_id, yesterday)
+        ceremony = personal_medal_moment_html(
+            board,
+            active_player_id=str(st.session_state.get("active_player_id") or ""),
+            active_player_name=str(st.session_state.get("active_player_name") or "Player"),
+            group_name=str(active.group_name),
+            date_label=_daily_date_label(yesterday),
+            avatar_config=_active_avatar_config(profile),
+            medal_totals=medals,
+        )
+        components.html(ceremony, height=510, scrolling=False)
+        st.caption("Tap the medal moment or SKIP to jump to the finished screen. Silent by design.")
+    else:
         st.markdown(
-            "<div class='yesterday-podium'>"
-            f"<div class='medal'>{medal}</div>"
-            f"<div class='title'>{medal_name}! {podium_result}</div>"
-            f"<div class='copy'>Nice run, {html.escape(st.session_state.get('active_player_name') or 'Player')}. Your medal is locked in.</div>"
+            "<div class='daily-hero'>"
+            "<div class='daily-kicker'>🏆 Yesterday's Final Standings</div>"
+            f"<div class='daily-title'>{_daily_date_label(yesterday)}</div>"
+            f"<div class='daily-rule'><b>{html.escape(active.group_name)}</b> is final. Your solo group recap is ready.</div>"
             "</div>",
             unsafe_allow_html=True,
         )
-    elif rank is not None:
-        yesterday_result = f"You tied for #{rank} of {len(board)} yesterday." if rank_tied else f"You finished #{rank} of {len(board)} yesterday."
-        st.markdown(
-            f"<div class='yesterday-final-note'><b>{yesterday_result}</b><br>Here's the final board.</div>",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            "<div class='yesterday-final-note'><b>You didn't record a finish yesterday.</b><br>You can still see how your group finished before starting today's challenge.</div>",
-            unsafe_allow_html=True,
-        )
 
-    render_leaderboard_cards(board, allow_review=False)
+    mark_yesterday_ceremony_seen_now(today)
+
+    with st.expander("View yesterday's standings", expanded=False):
+        render_leaderboard_cards(board, allow_review=False)
+
     if st.button(
-        "🎲 Start today's Daily Challenge",
+        "🎲 PLAY TODAY'S 10 →",
         type="primary",
         use_container_width=True,
         key="yesterday_final_start_today",
@@ -3924,6 +4198,9 @@ def render_daily_mode():
         render_player_identity_gate()
         return
     render_player_status_bar()
+    if st.session_state.get("avatar_editor_open"):
+        render_player_avatar_creator()
+        return
     if not sync_daily_attempt_from_database():
         return
     if not st.session_state.daily_started:

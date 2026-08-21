@@ -1,56 +1,19 @@
-Yahtzee Coach v43B Phase 2K.9.1 test summary
+Yahtzee Coach v43B Phase 2K.11.2 test summary
 
-LEADERBOARD TIE HOTFIX
-- Same displayed Points Lost to the hundredth now shares rank
-- Hidden raw-decimal differences no longer break a visible tie
-- Best Holds and biggest miss no longer break ties
-- Standard competition ranking verified: 1, 1, 3
-- Today result summary/banner/share copy is tie-aware
-- Yesterday podium/non-podium recap copy is tie-aware
-- Supabase and in-memory leaderboard paths use the same ranking helper
+RESULT: PASS
 
-CLOSE-CALL COACHING CLEANUP
-- Daily Review visibly flags 0.01–0.25 Points Lost as “Very close”
-- Close generic scorecard-fit explanations validate the player's idea before refining it
-- The explanation names concrete open boxes and the fresh-reroll tradeoff instead of vague “remaining routes” language
-- Chance is suppressed in the generic near-tie explanation when clearer open scoring boxes explain the edge
-- Close generic takeaway is: “When two holds are this close, use the open scorecard boxes to find the small edge.”
-- Dedicated 2K.9.1 close-call regression recreates the vague coaching pattern from the playtest screenshot
+- 47/47 current automated test suites pass.
+- New Phase 2K.11.2 avatar safety regression renders every creator option in:
+  - idle
+  - medal receive
+  - celebration
+  Total checked: 210 style/option/pose renders.
+- New multi-group medal-cabinet regression verifies My Player can browse group-specific medal totals without changing active_group_id.
+- New game-freeze guards verify SHA-256 hashes for the exact engine, Daily/puzzle generator, stores, session/practice state, and protected data banks.
+- Exhaustive exact-policy integration passes all 3,669,120 legal hold values.
+- Exact-first routing, Daily generation, Bank It or Break It, tie ranking, close-call coaching, share colors, persistence, social/friends, login, scorecard, Practice, yesterday results, avatar persistence, and medal history regressions remain green.
 
+Protected exact-policy SHA-256:
+cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b
 
-SHARE COLOR BALANCE
-- Spoiler-free share squares now align with the exact-mode coaching rubric
-- Green remains exact-only (0.00 Points Lost)
-- Yellow “almost best” now covers 0.01–0.25 Points Lost
-- Orange “close” now covers 0.26–1.50 Points Lost
-- Red “miss” now begins above 1.50 Points Lost
-- The playtest case with tiny misses totaling 0.39 no longer automatically displays as two orange squares
-- Dedicated boundary regression covers 0.00, 0.25, 0.2501, 1.50, and 1.5001 Points Lost
-
-FULL REGRESSION
-- 43/43 current automated test suites passed across the final source tree
-- Daily persistence/resume/edit/final-submit protections pass
-- Yesterday standings + podium pass
-- Friend leaderboard/review/peek protections pass
-- Sharing, invite flow, Practice UI, roll clarity, coaching clarity, install flow, mobile UI, and remembered login all pass
-- Phase 2K.9 puzzle-balance suite remains green
-- Existing coaching-language family audit remains green
-
-PHASE 2K.9 PUZZLE PROTECTION
-- Bank It or Break It frequency/balance behavior is unchanged
-- Locked 5/5 Roll split, stage mix, origin mix, and difficulty mix remain unchanged
-- Phase 2K.9 forward-only Daily boundary beginning August 19, 2026 remains unchanged
-- puzzle_bank.py and daily_challenge.py are unchanged from the Phase 2K.9 release
-
-MATH / STRATEGY PROTECTION
-- Exact integration exhaustive value-table audit remains green: 3,669,120 legal hold values
-- Exact policy, hold rankings, expected values, and official exact-only/fail-closed routing remain unchanged
-- exact_policy.npz SHA-256 remains:
-  cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b
-
-BYTE-FOR-BYTE UNCHANGED FROM PHASE 2K.9
-- exact_policy.npz
-- puzzle_bank.npz
-- challenge_catalog.npz
-
-No new Supabase migration is required for Phase 2K.9.1.
+No new Phase 2K.11.2 Supabase migration is required.

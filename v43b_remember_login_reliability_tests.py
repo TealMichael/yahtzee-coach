@@ -22,7 +22,7 @@ def run():
     app = (ROOT / "app.py").read_text()
     req = (ROOT / "requirements.txt").read_text()
 
-    checks.append(("later release preserves remembered-login bridge", 'APP_RELEASE = "v43B Phase 2K.9.1"' in app))
+    checks.append(("later release preserves remembered-login bridge", 'APP_RELEASE = "v43B Phase 2K.11.2"' in app))
     checks.append(("browser localStorage has a dedicated key", 'REMEMBER_STORAGE_KEY = "yc_remember_device_v2"' in app))
     checks.append(("uses Streamlit Components v2 bridge", 'st.components.v2.component(' in app and 'yahtzee_remember_storage' in app))
     checks.append(("bridge reads browser localStorage", 'window.localStorage.getItem(key)' in app))

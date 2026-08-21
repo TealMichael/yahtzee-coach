@@ -42,13 +42,14 @@ def run():
 
     app = (ROOT / "app.py").read_text(encoding="utf-8")
     supabase = (ROOT / "supabase_daily_store.py").read_text(encoding="utf-8")
-    require('APP_RELEASE = "v43B Phase 2K.9.1"' in app, "hotfix release label is current")
+    retro = (ROOT / "retro_podium.py").read_text(encoding="utf-8")
+    require('APP_RELEASE = "v43B Phase 2K.11.2"' in app, "hotfix release label is current")
     require("Same score to the hundredth = a real tie" in app, "ranking explanation tells players the actual rule")
     require("You're tied for #{rank} of {completed} today." in app, "today banner is tie-aware")
     require('rank_value = f"T-{rank} of {len(board)}"' in app, "result card uses T-rank for a tie")
     require("Group rank right now: Tied for #" in app, "shared result is tie-aware")
-    require("You tied for {place} yesterday!" in app, "podium ceremony celebrates tied medalists")
-    require("You tied for #{rank} of {len(board)} yesterday." in app, "non-podium yesterday recap is tie-aware")
+    require("TIED FOR GOLD!" in retro and "_rank_tied" in retro, "personal medal moment celebrates tied gold medalists")
+    require('prefix = "Tied for" if tied else "You finished"' in retro, "non-podium yesterday recap is tie-aware")
     require("rank_leaderboard_rows(board)" in supabase and "return rank_leaderboard_rows(rows)" in supabase, "Supabase uses the same tie-ranking contract")
 
     print("Phase 2K.9.1 tie-handling hotfix checks passed")

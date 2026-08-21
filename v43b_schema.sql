@@ -14,6 +14,8 @@ create table if not exists public.players (
     display_name text not null check (char_length(display_name) between 2 and 24),
     display_name_key text not null unique,
     pin_hash text not null check (pin_hash like 'scrypt$%'),
+    avatar_config jsonb not null default '{"hair":"spiky","outfit":"blue_tank","skin":"warm","accessory":"white_headband","shoes":"blue"}'::jsonb check (jsonb_typeof(avatar_config) = 'object'),
+    avatar_setup_complete boolean not null default false,
     created_at timestamptz not null default now()
 );
 
