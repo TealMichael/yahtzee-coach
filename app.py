@@ -17,7 +17,7 @@ from session_learning import build_session_learning_summary
 from practice_progress import build_practice_progress, newly_unlocked_badges
 from retro_podium import personal_medal_moment_html
 from player_avatar import (
-    AVATAR_CHOICES, CATEGORY_ICONS, CATEGORY_LABELS, avatar_option_tile_html,
+    AVATAR_CHOICES, CATEGORY_LABELS, avatar_option_tile_html,
     avatar_preview_html, default_avatar_for_player, medal_counter_html, normalize_avatar_config,
 )
 from puzzle_bank import generate_practice_challenge as generate_expanded_practice_challenge
@@ -2815,21 +2815,35 @@ def render_player_avatar_creator():
         }
         st.rerun()
 
+    # Mobile-safe category navigation. Phase 2K.11.2 originally used symbol-heavy
+    # st.pills here; some phone/browser combinations promoted those glyphs into
+    # oversized emoji and squeezed the text labels out of view. Keep this boring
+    # on purpose: two rows of plain-text native buttons are predictable everywhere.
     category_options = list(AVATAR_CHOICES)
     category_key = f"avatar_creator_category_{player_id}"
-    selected_category = st.pills(
-        "Customize",
-        options=category_options,
-        default="hair",
-        format_func=lambda value: f"{CATEGORY_ICONS[value]} {CATEGORY_LABELS[value].title()}",
-        selection_mode="single",
-        key=category_key,
-    ) or "hair"
+    if st.session_state.get(category_key) not in category_options:
+        st.session_state[category_key] = "hair"
 
+    st.markdown("**Customize**")
+    for offset in range(0, len(category_options), 3):
+        cols = st.columns(3)
+        for col, category in zip(cols, category_options[offset:offset + 3]):
+            with col:
+                selected = st.session_state.get(category_key) == category
+                if st.button(
+                    CATEGORY_LABELS[category].title(),
+                    use_container_width=True,
+                    type="primary" if selected else "secondary",
+                    key=f"avatar_category_{category}_{player_id}",
+                ):
+                    st.session_state[category_key] = category
+                    st.rerun()
+
+    selected_category = st.session_state.get(category_key) or "hair"
     st.markdown(
         f"<div style='margin:8px 0 7px;padding:7px 10px;border:2px solid #172033;border-radius:10px;"
         f"background:#2468b4;color:white;font:1000 12px ui-monospace,SFMono-Regular,Menlo,monospace;"
-        f"box-shadow:3px 3px 0 #a9b5c6'>{CATEGORY_ICONS[selected_category]} {CATEGORY_LABELS[selected_category]}</div>",
+        f"box-shadow:3px 3px 0 #a9b5c6'>{CATEGORY_LABELS[selected_category]}</div>",
         unsafe_allow_html=True,
     )
 

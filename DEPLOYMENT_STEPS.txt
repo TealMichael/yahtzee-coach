@@ -1,5 +1,5 @@
-YAHTZEE COACH v43B PHASE 2K.11.2 — DEPLOYMENT
-Pre-Deployment Player Polish
+YAHTZEE COACH v43B PHASE 2K.11.2 — FINAL WEEKEND DEPLOYMENT
+Mobile Player Creator Navigation Fix Included
 
 SUPABASE:
 - There is NO new Phase 2K.11.2 migration.
@@ -9,24 +9,25 @@ SUPABASE:
 DEPLOY:
 1. Upload ALL files inside UPLOAD_TO_GITHUB/ to the ROOT of the GitHub repo.
 2. Commit with:
-   v43B Phase 2K.11.2 - finish inclusive player creator and medal cabinets
+   v43B Phase 2K.11.2 - fix mobile player creator navigation
 3. Wait for Streamlit to redeploy.
 
-LIVE TEST — MY PLAYER
+LIVE TEST — CREATE YOUR PLAYER
 1. Sign in and open 🎨 Make Sprite / 🎨 My Player.
-2. Confirm Character, Hair, Outfit, Skin, Accessory, and Shoes are available.
-3. Confirm both Character styles work with all other categories.
-4. Check ponytail, bob, long waves, high bun, and braids on the live sprite.
-5. Confirm Randomize still works and Save & Continue persists the result.
-6. If the player belongs to multiple groups, switch the Medal cabinet selector and verify the group name/totals change.
-7. Confirm switching medal cabinets does NOT change the active Daily friend group.
+2. Confirm Customize shows two clean rows of plain-text buttons:
+     Character | Hair | Outfit
+     Skin | Accessory | Shoes
+3. Confirm there are NO oversized emoji/glyph category buttons.
+4. Tap each category and confirm the selected button highlights and its visual choices appear below.
+5. Confirm both Character styles work with the hairstyle/outfit/skin/accessory/shoe choices.
+6. Confirm Randomize and Save & Continue still work.
+7. If the player belongs to multiple groups, verify the Medal cabinet selector changes only the cabinet being viewed, not the active Daily group.
 
 LIVE TEST — MEDAL MOMENT
 1. Use a player with finalized group results yesterday and an unstarted Daily today.
-2. Confirm Pixel Mike + the saved player sprite + medal handoff still render cleanly.
-3. Confirm the correct group's All-Time Medals appear under the character.
-4. Confirm gold/silver/bronze/tie copy matches the official leaderboard.
-5. Confirm SKIP/tap-to-finish, reduced motion, and PLAY TODAY'S 10 still work.
+2. Confirm Pixel Mike + saved player sprite + medal handoff render cleanly.
+3. Confirm All-Time Medals appear under the character and tie behavior matches the official leaderboard.
+4. Confirm SKIP/tap-to-finish, reduced motion, and PLAY TODAY'S 10 still work.
 
 GAME FREEZE CHECK:
-Do not expect ANY change to puzzles, exact holds, Points Lost, Daily composition, coaching math, Practice strategy, scorecard behavior, persistence, friends, or tie ranking. This release is presentation/social icing only.
+Do not expect ANY change to puzzles, exact holds, Points Lost, Daily composition, coaching math, Practice strategy, scorecard behavior, persistence, friends, or tie ranking. This final fix is character-creator presentation only.

@@ -1,6 +1,13 @@
 Yahtzee Coach current release: v43B Phase 2K.11.2
 
-Phase 2K.11.2 is the final pre-deployment polish pass for My Player + Personal Medal Moments.
+This is the FINAL WEEKEND BUILD replacement for Phase 2K.11.2.
+
+MOBILE CREATOR NAVIGATION FIX:
+- Do not restore the old symbol-heavy st.pills category selector.
+- Some phones/browsers promoted those glyphs into oversized emoji and hid the category text.
+- Create Your Player now uses two rows of three plain-text native buttons: Character, Hair, Outfit, Skin, Accessory, Shoes.
+- Selected category is indicated with native primary-button styling.
+- Selected-category heading is text-only.
 
 LOCKED PRODUCT DIRECTION:
 - Personal reward moment stays simple: Pixel Mike + signed-in player's sprite + one medal + All-Time Medals.
@@ -8,40 +15,21 @@ LOCKED PRODUCT DIRECTION:
 - No stadium/podium production, audio, or unnecessary animation.
 - Character creator stays lightweight and category-first.
 - Two unlabeled base character silhouettes are available; every hairstyle/outfit/skin/accessory/shoe works with either.
-- Current hair set includes curly, spiky, short, side sweep, ponytail, bob, long waves, high bun, braids, and buzz.
-- Do not require a player to identify as Male/Female; they choose the sprite parts they want.
 
 MEDAL CABINETS:
 - Medals remain derived from real historical Daily standings; do not store duplicate medal totals.
 - Medal totals are group-specific.
-- In My Player, multi-group users can switch which medal cabinet they are viewing.
-- The medal-cabinet selector is intentionally independent from active_group_id and must never switch the active Daily group.
-- Morning ceremony continues to show one selected group's result once per player/browser/day.
+- My Player can browse group-specific medal cabinets without changing the active Daily group.
 
 SUPABASE:
 - No new 2K.11.2 migration.
 - Existing RUN_THIS_ONCE_IN_SUPABASE_Phase2K11.sql remains the only avatar schema step.
-- avatar_config is JSON, so new style/hair/outfit option values require no schema change.
 
 GAME / STRATEGY FREEZE:
-Byte-for-byte unchanged from Phase 2K.11.1:
-- yahtzee_engine.py
-- exact_runtime.py
-- exact_mode.py
-- puzzle_bank.py
-- daily_challenge.py
-- daily_store.py
-- supabase_daily_store.py
-- session_learning.py
-- practice_progress.py
-- exact_policy.npz
-- puzzle_bank.npz
-- challenge_catalog.npz
-
-A dedicated 2K.11.2 regression hard-codes those hashes so a future presentation-only patch fails immediately if the actual Yahtzee game drifts.
+The mobile navigation fix changes app.py presentation only. The exact solver, puzzle generator, Daily generator, stores, session/practice state, and protected banks remain frozen.
 
 VALIDATION:
-- 47/47 automated suites pass.
+- 48/48 automated suites pass.
 - 210 avatar style/option/pose renders validated.
 - Exhaustive exact integration passes all 3,669,120 legal hold values.
 - exact_policy.npz SHA-256 remains cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b.
