@@ -4,8 +4,8 @@ from __future__ import annotations
 
 The avatar stays intentionally small and dynamic: chunky inline SVG primitives,
 no video, no large sprite sheet, and no effect on any Yahtzee strategy/game code.
-Phase 2K.11.2 broadens the creator with inclusive base styles and hairstyles while
-preserving the Phase 2K.11 JSON persistence contract.
+Phase 2K.12.1 hair-expansion hotfix adds independent hairstyle and hair-color with independent hairstyle and hair-color
+choices while preserving the Phase 2K.11 JSON persistence contract.
 """
 
 from hashlib import sha256
@@ -31,6 +31,26 @@ AVATAR_CHOICES = {
         "bun": "High Bun",
         "braids": "Braids",
         "buzz": "Buzz",
+        "pigtails": "Pigtails",
+        "long_straight": "Long Straight",
+        "low_ponytail": "Low Ponytail",
+        "shoulder_wavy": "Shoulder-Length Wavy",
+        "locs": "Locs / Twists",
+    },
+    "hair_color": {
+        "black": "Black",
+        "dark_brown": "Dark Brown",
+        "brown": "Brown",
+        "light_brown": "Light Brown",
+        "blonde": "Blonde",
+        "dirty_blonde": "Dirty Blonde",
+        "auburn": "Auburn / Red",
+        "gray_white": "Gray / White",
+        "pink": "Pink",
+        "purple": "Purple",
+        "blue": "Blue",
+        "teal": "Teal",
+        "green": "Green",
     },
     "outfit": {
         "blue_tank": "Blue Sport",
@@ -68,7 +88,8 @@ AVATAR_CHOICES = {
 
 CATEGORY_LABELS = {
     "style": "CHARACTER",
-    "hair": "HAIR",
+    "hair": "HAIR STYLE",
+    "hair_color": "HAIR COLOR",
     "outfit": "OUTFIT",
     "skin": "SKIN",
     "accessory": "ACCESSORY",
@@ -78,6 +99,7 @@ CATEGORY_LABELS = {
 CATEGORY_ICONS = {
     "style": "☺",
     "hair": "✦",
+    "hair_color": "◆",
     "outfit": "▣",
     "skin": "●",
     "accessory": "★",
@@ -87,6 +109,7 @@ CATEGORY_ICONS = {
 DEFAULT_AVATAR = {
     "style": "classic",
     "hair": "spiky",
+    "hair_color": "dark_brown",
     "outfit": "blue_tank",
     "skin": "warm",
     "accessory": "white_headband",
@@ -102,18 +125,45 @@ _SKIN = {
     "dark": ("#5c392c", "#3d251e"),
 }
 
-_HAIR = {
-    "curly": ("#6b351b", "#9a5628"),
-    "spiky": ("#5a2b17", "#7e3f20"),
-    "short": ("#161a22", "#323743"),
-    "sweep": ("#c68b35", "#efbd60"),
-    "ponytail": ("#4e2a1c", "#7a4930"),
-    "bob": ("#241a17", "#4d382f"),
-    "waves": ("#70401f", "#a66b34"),
-    "bun": ("#3a2318", "#69412b"),
-    "braids": ("#2e211b", "#594036"),
-    "buzz": ("#8a6038", "#b98651"),
+_HAIR_COLOR = {
+    # Natural shades
+    "black": ("#17191f", "#343944"),
+    "dark_brown": ("#4f2a1b", "#75432a"),
+    "brown": ("#70401f", "#a66b34"),
+    "light_brown": ("#9a6638", "#c48a50"),
+    "blonde": ("#d9a742", "#f2cf72"),
+    "dirty_blonde": ("#a7864a", "#ccb06d"),
+    "auburn": ("#8b3f27", "#c1623c"),
+    "gray_white": ("#a9adb7", "#e2e5ea"),
+    # Fun shades requested by the player group
+    "pink": ("#c94f86", "#ef83b0"),
+    "purple": ("#6f4aa7", "#a27ad2"),
+    "blue": ("#315ca8", "#5e91df"),
+    "teal": ("#197f82", "#4fb7b2"),
+    "green": ("#3d7f45", "#6eb66d"),
 }
+
+# Before 2K.12.2, hair color was baked into each hairstyle. When an older saved
+# avatar has no `hair_color`, use the closest old shade so existing players keep
+# looking familiar until they intentionally choose a new color.
+_LEGACY_HAIR_COLOR_BY_STYLE = {
+    "curly": "brown",
+    "spiky": "dark_brown",
+    "short": "black",
+    "sweep": "blonde",
+    "ponytail": "dark_brown",
+    "bob": "black",
+    "waves": "brown",
+    "bun": "dark_brown",
+    "braids": "black",
+    "buzz": "light_brown",
+    "pigtails": "brown",
+    "long_straight": "dark_brown",
+    "low_ponytail": "dark_brown",
+    "shoulder_wavy": "brown",
+    "locs": "black",
+}
+
 
 _OUTFIT = {
     "blue_tank": ("#f8fafc", "#2563a8", "#1f4e85"),
@@ -139,7 +189,11 @@ def normalize_avatar_config(config: Mapping | None) -> dict[str, str]:
     raw = dict(config or {})
     normalized: dict[str, str] = {}
     for category, choices in AVATAR_CHOICES.items():
-        value = str(raw.get(category) or DEFAULT_AVATAR[category])
+        if category == "hair_color" and not raw.get("hair_color"):
+            hair_style = str(raw.get("hair") or DEFAULT_AVATAR["hair"])
+            value = _LEGACY_HAIR_COLOR_BY_STYLE.get(hair_style, DEFAULT_AVATAR["hair_color"])
+        else:
+            value = str(raw.get(category) or DEFAULT_AVATAR[category])
         normalized[category] = value if value in choices else DEFAULT_AVATAR[category]
     return normalized
 
@@ -149,14 +203,15 @@ def default_avatar_for_player(player_id: str | None) -> dict[str, str]:
     if not player_id:
         return dict(DEFAULT_AVATAR)
     digest = sha256(str(player_id).encode("utf-8")).digest()
-    # Keep the five original categories on the same digest bytes they used in
-    # 2K.11.1 so an unsaved legacy player's look does not unexpectedly reshuffle.
+    # Keep the original categories on the same digest bytes they used before the
+    # hair-color expansion so an unsaved legacy player's look does not reshuffle.
     result = {}
     for index, category in enumerate(("hair", "outfit", "skin", "accessory", "shoes")):
         keys = list(AVATAR_CHOICES[category])
         result[category] = keys[digest[index] % len(keys)]
     style_keys = list(AVATAR_CHOICES["style"])
     result["style"] = style_keys[digest[5] % len(style_keys)]
+    result["hair_color"] = _LEGACY_HAIR_COLOR_BY_STYLE.get(result["hair"], DEFAULT_AVATAR["hair_color"])
     return normalize_avatar_config(result)
 
 
@@ -208,6 +263,39 @@ def _hair_svg(style: str, base: str, hi: str) -> str:
             f'<rect x="52" y="22" width="7" height="25" fill="{base}"/><rect x="15" y="42" width="6" height="8" fill="{hi}"/>'
             f'<rect x="55" y="42" width="6" height="8" fill="{hi}"/><rect x="29" y="12" width="18" height="4" fill="{hi}"/>'
         )
+    if style == "pigtails":
+        return (
+            f'<rect x="22" y="11" width="32" height="15" fill="{base}"/><rect x="15" y="19" width="10" height="10" fill="{base}"/>'
+            f'<rect x="51" y="19" width="10" height="10" fill="{base}"/><rect x="11" y="25" width="9" height="19" fill="{base}"/>'
+            f'<rect x="56" y="25" width="9" height="19" fill="{base}"/><rect x="13" y="28" width="5" height="9" fill="{hi}"/>'
+            f'<rect x="58" y="28" width="5" height="9" fill="{hi}"/><rect x="29" y="12" width="18" height="4" fill="{hi}"/>'
+        )
+    if style == "long_straight":
+        return (
+            f'<rect x="20" y="11" width="36" height="16" fill="{base}"/><rect x="17" y="21" width="9" height="31" fill="{base}"/>'
+            f'<rect x="50" y="21" width="9" height="31" fill="{base}"/><rect x="25" y="9" width="27" height="7" fill="{base}"/>'
+            f'<rect x="29" y="11" width="18" height="4" fill="{hi}"/><rect x="19" y="33" width="4" height="15" fill="{hi}"/>'
+        )
+    if style == "low_ponytail":
+        return (
+            f'<rect x="22" y="11" width="32" height="15" fill="{base}"/><rect x="50" y="20" width="8" height="12" fill="{base}"/>'
+            f'<rect x="55" y="29" width="8" height="21" fill="{base}"/><rect x="59" y="45" width="7" height="8" fill="{base}"/>'
+            f'<rect x="29" y="12" width="18" height="4" fill="{hi}"/><rect x="57" y="31" width="4" height="12" fill="{hi}"/>'
+        )
+    if style == "shoulder_wavy":
+        return (
+            f'<rect x="20" y="11" width="36" height="16" fill="{base}"/><rect x="17" y="21" width="9" height="23" fill="{base}"/>'
+            f'<rect x="50" y="21" width="9" height="23" fill="{base}"/><rect x="15" y="35" width="8" height="8" fill="{base}"/>'
+            f'<rect x="53" y="37" width="8" height="8" fill="{base}"/><rect x="29" y="12" width="18" height="4" fill="{hi}"/>'
+        )
+    if style == "locs":
+        return (
+            f'<rect x="22" y="10" width="32" height="16" fill="{base}"/><rect x="17" y="18" width="7" height="29" fill="{base}"/>'
+            f'<rect x="27" y="20" width="6" height="31" fill="{base}"/><rect x="43" y="20" width="6" height="31" fill="{base}"/>'
+            f'<rect x="52" y="18" width="7" height="29" fill="{base}"/><rect x="18" y="28" width="4" height="4" fill="{hi}"/>'
+            f'<rect x="28" y="34" width="4" height="4" fill="{hi}"/><rect x="44" y="29" width="4" height="4" fill="{hi}"/>'
+            f'<rect x="53" y="36" width="4" height="4" fill="{hi}"/>'
+        )
     return f'<rect x="22" y="15" width="31" height="10" fill="{base}"/><rect x="27" y="11" width="21" height="7" fill="{base}"/><rect x="30" y="13" width="15" height="3" fill="{hi}"/>'
 
 
@@ -220,7 +308,7 @@ def avatar_svg(config: Mapping | None, *, width: int = 150, pose: str = "idle", 
     """
     cfg = normalize_avatar_config(config)
     skin, skin_shadow = _SKIN[cfg["skin"]]
-    hair, hair_hi = _HAIR[cfg["hair"]]
+    hair, hair_hi = _HAIR_COLOR[cfg["hair_color"]]
     outfit, outfit_hi, lower = _OUTFIT[cfg["outfit"]]
     shoes = _SHOES[cfg["shoes"]]
     soft = cfg["style"] == "soft"
