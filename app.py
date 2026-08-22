@@ -33,16 +33,13 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.11.2"
+APP_RELEASE = "v43B Phase 2K.11.3"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
-PUBLIC_ASSET_BASE = "https://raw.githubusercontent.com/TealMichael/yahtzee-coach/main/"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
 YESTERDAY_RESULTS_STORAGE_PREFIX = "yc_yesterday_results_seen_v1"
 REMEMBER_DEVICE_DAYS = 30
 REMEMBER_COOKIE_MAX_AGE = REMEMBER_DEVICE_DAYS * 24 * 60 * 60
-APP_ICON_192_PATH = Path(__file__).with_name("home_icon_192.png")
-APP_ICON_512_PATH = Path(__file__).with_name("home_icon_512.png")
 
 st.set_page_config(
     page_title="Yahtzee Coach",
@@ -2011,6 +2008,10 @@ def initialize_daily_state():
         _reset_daily_local_attempt(today)
     if "app_mode" not in st.session_state:
         st.session_state.app_mode = "Daily Challenge"
+    elif st.session_state.app_mode not in {"Daily Challenge", "Practice", "My Player"}:
+        # Phase 2K.11.3 removed the old Add-to-Home-Screen mode. A browser tab
+        # that survived a deploy may still carry that legacy value in session state.
+        st.session_state.app_mode = "Daily Challenge"
     if "daily_attempt_id" not in st.session_state:
         st.session_state.daily_attempt_id = None
     if "daily_ready_to_submit" not in st.session_state:
@@ -2301,6 +2302,7 @@ def _activate_player(player, *, created: bool = False):
     st.session_state.daily_display_name = player.display_name
     st.session_state.player_auth_flash = ""
     if created:
+        st.session_state.app_mode = "My Player"
         st.session_state.avatar_editor_open = True
         st.session_state.avatar_editor_player_id = player.player_id
         st.session_state.avatar_draft = {}
@@ -2430,116 +2432,6 @@ def render_group_invite_controls(group):
         height=64,
     )
 
-
-def install_app_shell_metadata():
-    """Add Home Screen metadata using real public image URLs instead of temporary data/blob icons."""
-    apple_icon_url = f"{PUBLIC_ASSET_BASE}apple_touch_icon.png"
-    icon192_url = f"{PUBLIC_ASSET_BASE}home_icon_192.png"
-    icon512_url = f"{PUBLIC_ASSET_BASE}home_icon_512.png"
-    manifest = {
-        "name": "Yahtzee Coach",
-        "short_name": "Yahtzee Coach",
-        "description": "Daily Yahtzee decision coach with exact strategy, friend groups, and leaderboards.",
-        "start_url": PUBLIC_APP_URL,
-        "display": "standalone",
-        "background_color": "#061b14",
-        "theme_color": "#0b3b2e",
-        "icons": [
-            {"src": icon192_url, "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-            {"src": icon512_url, "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
-        ],
-    }
-    html_block = """
-        <script>
-        (function() {
-          const head = document.head;
-          function ensureLink(rel, href) {
-            let el = head.querySelector(`link[rel="${rel}"]`);
-            if (!el) {
-              el = document.createElement('link');
-              el.setAttribute('rel', rel);
-              head.appendChild(el);
-            }
-            el.setAttribute('href', href);
-            return el;
-          }
-          function ensureMeta(name, content) {
-            let el = head.querySelector(`meta[name="${name}"]`);
-            if (!el) {
-              el = document.createElement('meta');
-              el.setAttribute('name', name);
-              head.appendChild(el);
-            }
-            el.setAttribute('content', content);
-          }
-          let manifestUrl = window.__ycManifestUrl;
-          if (!manifestUrl) {
-            const blob = new Blob([__MANIFEST__], {type: 'application/manifest+json'});
-            manifestUrl = URL.createObjectURL(blob);
-            window.__ycManifestUrl = manifestUrl;
-          }
-          ensureLink('manifest', manifestUrl);
-          ensureLink('apple-touch-icon', __APPLE_ICON__);
-          ensureLink('icon', __ICON_192__);
-          ensureMeta('apple-mobile-web-app-capable', 'yes');
-          ensureMeta('mobile-web-app-capable', 'yes');
-          ensureMeta('apple-mobile-web-app-title', 'Yahtzee Coach');
-          ensureMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
-          ensureMeta('theme-color', '#0b3b2e');
-        })();
-        </script>
-        """
-    html_block = html_block.replace("__MANIFEST__", json.dumps(json.dumps(manifest)))
-    html_block = html_block.replace("__APPLE_ICON__", json.dumps(apple_icon_url))
-    html_block = html_block.replace("__ICON_192__", json.dumps(icon192_url))
-    st.html(html_block, unsafe_allow_javascript=True)
-
-
-def render_install_mode():
-    """Render a reliable third-mode Home Screen guide using native Streamlit controls."""
-    st.markdown("## 📲 Add Yahtzee Coach to your Home Screen")
-    left, center, right = st.columns([1, 1.1, 1])
-    with center:
-        st.image(str(APP_ICON_512_PATH), width=170)
-
-    st.markdown(
-        "Save **Yahtzee Coach** to your phone or computer for quick access with the custom teacher-die icon. "
-        "The final Add/Install action is controlled by your browser, so this page gives the exact route instead of showing a button that may do nothing."
-    )
-
-    ios_tab, android_tab, computer_tab = st.tabs(["🍎 iPhone / iPad", "🤖 Android", "💻 Computer"])
-
-    with ios_tab:
-        st.markdown("""
-**Safari**  
-1. Tap the **Share** button.  
-2. Scroll down and tap **Add to Home Screen**.  
-3. Leave **Open as Web App** on if it appears.  
-4. Tap **Add**.
-""")
-        st.caption("Apple requires those final system taps; the website cannot press Add to Home Screen automatically.")
-
-    with android_tab:
-        st.markdown("""
-**Chrome**  
-1. Tap the **⋮** browser menu.  
-2. Tap **Add to Home screen** or **Install app**.  
-3. Confirm the install.
-""")
-        st.caption("Chrome may also show its own install option when it considers the site installable.")
-
-    with computer_tab:
-        st.markdown("""
-**Chrome / Edge**  
-Use the browser's install option in the address bar or menu. In Chrome, look under **⋮ → Cast, save, and share → Install page as app**.
-
-**Safari on Mac**  
-Choose **File → Add to Dock**.
-""")
-
-    st.divider()
-    st.caption("Direct app link")
-    st.code(PUBLIC_APP_URL, language=None)
 
 def _daily_puzzle_ids():
     return [str(challenge.get("challenge_id", "")) for challenge in st.session_state.daily_challenges]
@@ -2705,7 +2597,9 @@ def _clear_avatar_widget_state(player_id: str | None = None):
     pid = str(player_id or st.session_state.get("active_player_id") or "")
     for category in AVATAR_CHOICES:
         st.session_state.pop(f"avatar_{category}_{pid}", None)
+        st.session_state.pop(f"avatar_choice_pills_{category}_{pid}", None)
     st.session_state.pop(f"avatar_creator_category_{pid}", None)
+    st.session_state.pop(f"avatar_category_pills_{pid}", None)
 
 
 def _open_avatar_editor():
@@ -2765,6 +2659,12 @@ def _avatar_medal_group_choice(groups, player_id: str):
 
 
 def render_player_avatar_creator():
+    """Compact, phone-first editor for the saved player sprite.
+
+    Keep the live sprite large, but keep controls intentionally compact. Text-only
+    pills avoid the oversized emoji/glyph rendering that some mobile browsers used
+    for the first creator navigation while still wrapping cleanly on narrow screens.
+    """
     player_id = str(st.session_state.get("active_player_id") or "")
     player_name = str(st.session_state.get("active_player_name") or "Player")
     if not player_id:
@@ -2775,18 +2675,14 @@ def render_player_avatar_creator():
         st.session_state.avatar_draft = _active_avatar_config(profile)
     draft = normalize_avatar_config(st.session_state.avatar_draft)
 
-    # Phase 2K.11.2 keeps the approved light retro preview as the visual target
-    # while broadening player representation. Native buttons remain reliable on mobile.
     st.markdown(
-        "<div style='border:3px solid #172033;border-radius:20px 20px 0 0;background:#fff9ea;"
-        "padding:16px 16px 10px;text-align:center;box-shadow:5px 5px 0 #d9d2c3;color:#172033'>"
-        "<div style='font:1000 28px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#ffc62f;"
-        "text-shadow:3px 0 #172033,-3px 0 #172033,0 3px #172033,0 -3px #172033,3px 3px #d86e16'>"
+        "<div style='border:3px solid #172033;border-radius:18px 18px 0 0;background:#fff9ea;"
+        "padding:13px 14px 8px;text-align:center;box-shadow:4px 4px 0 #d9d2c3;color:#172033'>"
+        "<div style='font:1000 24px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#ffc62f;"
+        "text-shadow:2px 0 #172033,-2px 0 #172033,0 2px #172033,0 -2px #172033,2px 2px #d86e16'>"
         "CREATE YOUR PLAYER</div>"
-        "<div style='margin-top:8px;font:900 12px ui-monospace,SFMono-Regular,Menlo,monospace'>"
-        "Build your champion. Roll in style.</div>"
-        "<div style='margin-top:5px;font:700 11px system-ui;color:#64748b'>"
-        "Pick a few details. Your player updates immediately and joins Pixel Mike in medal moments.</div>"
+        "<div style='margin-top:7px;font:800 11px system-ui;color:#64748b'>"
+        "Tap a category, choose a style, and watch your player update.</div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -2799,94 +2695,74 @@ def render_player_avatar_creator():
         unsafe_allow_html=True,
     )
 
-    groups = _load_player_groups()
-    if groups:
-        cabinet_group = _avatar_medal_group_choice(groups, player_id)
-        yesterday = _previous_daily_date_key(st.session_state.daily_date_key)
-        medals = _avatar_medals_for_group(cabinet_group.group_id if cabinet_group else None, yesterday)
-        st.markdown(
-            medal_counter_html(medals, group_name=cabinet_group.group_name if cabinet_group else ""),
-            unsafe_allow_html=True,
-        )
+    top_left, top_right = st.columns(2)
+    with top_left:
+        if st.button("🎲 Randomize", use_container_width=True, key="avatar_randomize"):
+            st.session_state.avatar_draft = {
+                category: random.choice(list(choices)) for category, choices in AVATAR_CHOICES.items()
+            }
+            # Clear choice-widget state so the newly randomized values become the
+            # visible defaults immediately instead of an old pill selection winning.
+            for category in AVATAR_CHOICES:
+                st.session_state.pop(f"avatar_choice_pills_{category}_{player_id}", None)
+            st.rerun()
+    with top_right:
+        if st.button("↩ Back", use_container_width=True, key="avatar_editor_back_top"):
+            _close_avatar_editor()
+            st.rerun()
 
-    if st.button("🎲 Randomize player", use_container_width=True, key="avatar_randomize"):
-        st.session_state.avatar_draft = {
-            category: random.choice(list(choices)) for category, choices in AVATAR_CHOICES.items()
-        }
-        st.rerun()
-
-    # Mobile-safe category navigation. Phase 2K.11.2 originally used symbol-heavy
-    # st.pills here; some phone/browser combinations promoted those glyphs into
-    # oversized emoji and squeezed the text labels out of view. Keep this boring
-    # on purpose: two rows of plain-text native buttons are predictable everywhere.
     category_options = list(AVATAR_CHOICES)
     category_key = f"avatar_creator_category_{player_id}"
     if st.session_state.get(category_key) not in category_options:
         st.session_state[category_key] = "hair"
 
-    st.markdown("**Customize**")
-    for offset in range(0, len(category_options), 3):
-        cols = st.columns(3)
-        for col, category in zip(cols, category_options[offset:offset + 3]):
-            with col:
-                selected = st.session_state.get(category_key) == category
-                if st.button(
-                    CATEGORY_LABELS[category].title(),
-                    use_container_width=True,
-                    type="primary" if selected else "secondary",
-                    key=f"avatar_category_{category}_{player_id}",
-                ):
-                    st.session_state[category_key] = category
-                    st.rerun()
-
-    selected_category = st.session_state.get(category_key) or "hair"
-    st.markdown(
-        f"<div style='margin:8px 0 7px;padding:7px 10px;border:2px solid #172033;border-radius:10px;"
-        f"background:#2468b4;color:white;font:1000 12px ui-monospace,SFMono-Regular,Menlo,monospace;"
-        f"box-shadow:3px 3px 0 #a9b5c6'>{CATEGORY_LABELS[selected_category]}</div>",
-        unsafe_allow_html=True,
+    selected_category = st.pills(
+        "Customize",
+        options=category_options,
+        default=st.session_state.get(category_key),
+        format_func=lambda category: CATEGORY_LABELS[category].title(),
+        selection_mode="single",
+        key=f"avatar_category_pills_{player_id}",
     )
+    if selected_category and selected_category != st.session_state.get(category_key):
+        st.session_state[category_key] = selected_category
+    selected_category = selected_category or st.session_state.get(category_key) or "hair"
 
     choices = AVATAR_CHOICES[selected_category]
-    items = list(choices.items())
-    for offset in range(0, len(items), 3):
-        cols = st.columns(3)
-        for col, (value, label) in zip(cols, items[offset:offset + 3]):
-            with col:
-                selected = draft[selected_category] == value
-                st.markdown(
-                    avatar_option_tile_html(selected_category, value, draft, selected=selected),
-                    unsafe_allow_html=True,
-                )
-                button_label = f"✓ {label}" if selected else label
-                if st.button(
-                    button_label,
-                    use_container_width=True,
-                    key=f"avatar_choice_{selected_category}_{value}_{player_id}",
-                    disabled=selected,
-                ):
-                    updated = dict(draft)
-                    updated[selected_category] = value
-                    st.session_state.avatar_draft = normalize_avatar_config(updated)
-                    st.rerun()
+    chosen_value = st.pills(
+        CATEGORY_LABELS[selected_category].title(),
+        options=list(choices),
+        default=draft[selected_category],
+        format_func=lambda value: choices[value],
+        selection_mode="single",
+        key=f"avatar_choice_pills_{selected_category}_{player_id}",
+        label_visibility="collapsed",
+    )
+    if chosen_value and chosen_value != draft[selected_category]:
+        updated = dict(draft)
+        updated[selected_category] = chosen_value
+        st.session_state.avatar_draft = normalize_avatar_config(updated)
+        st.rerun()
 
-    left, right = st.columns(2)
-    with left:
-        if st.button("Save & Continue", type="primary", use_container_width=True, key="avatar_save"):
-            try:
-                load_daily_store().save_player_avatar(player_id, st.session_state.avatar_draft)
-            except Exception as exc:
-                st.error("Your player couldn't be saved yet. Make sure the Phase 2K.11 Supabase step has been run.")
-                if database_check_enabled():
-                    st.caption(f"Avatar save detail: {type(exc).__name__}: {exc}")
-            else:
-                _cached_player_profile.clear()
-                st.session_state.player_auth_flash = "🎮 Your player is saved for future medal ceremonies."
-                _close_avatar_editor()
-                st.rerun()
-    with right:
-        if st.button("Not now" if not profile.get("avatar_setup_complete") else "Back", use_container_width=True, key="avatar_cancel"):
+    st.caption(f"Selected {CATEGORY_LABELS[selected_category].title()}: {choices[draft[selected_category]]}")
+
+    if st.button("Save Player", type="primary", use_container_width=True, key="avatar_save"):
+        try:
+            load_daily_store().save_player_avatar(player_id, st.session_state.avatar_draft)
+        except Exception as exc:
+            st.error("Your player couldn't be saved yet. Make sure the Phase 2K.11 Supabase step has been run.")
+            if database_check_enabled():
+                st.caption(f"Avatar save detail: {type(exc).__name__}: {exc}")
+        else:
+            _cached_player_profile.clear()
+            st.session_state.player_auth_flash = "🎮 Your player is saved for future medal ceremonies."
             _close_avatar_editor()
+            st.rerun()
+
+    if not profile.get("avatar_setup_complete"):
+        if st.button("Not now", use_container_width=True, key="avatar_cancel"):
+            _close_avatar_editor()
+            st.session_state.app_mode = "Daily Challenge"
             st.rerun()
 
     if profile.get("profile_unavailable"):
@@ -3016,24 +2892,11 @@ def render_player_identity_gate():
 
 
 def render_player_status_bar():
+    """Legacy helper retained for compatibility; account actions now live in My Player."""
     flash = st.session_state.get("player_auth_flash", "")
     if flash:
         st.info(flash)
         st.session_state.player_auth_flash = ""
-    name = st.session_state.get("active_player_name") or "Player"
-    profile = _active_player_profile()
-    left, middle, right = st.columns([4, 2, 2])
-    with left:
-        st.caption(f"👤 **{name}**")
-    with middle:
-        label = "🎨 My Player" if profile.get("avatar_setup_complete") else "🎨 Make Sprite"
-        if st.button(label, use_container_width=True, key="open_avatar_editor"):
-            _open_avatar_editor()
-            st.rerun()
-    with right:
-        if st.button("Sign out", use_container_width=True, key="player_sign_out"):
-            _sign_out_player()
-            st.rerun()
 
 
 
@@ -4211,10 +4074,6 @@ def render_daily_mode():
     if not st.session_state.get("active_player_id"):
         render_player_identity_gate()
         return
-    render_player_status_bar()
-    if st.session_state.get("avatar_editor_open"):
-        render_player_avatar_creator()
-        return
     if not sync_daily_attempt_from_database():
         return
     if not st.session_state.daily_started:
@@ -4230,6 +4089,78 @@ def render_daily_mode():
         return
     st.caption("Your Daily progress saves automatically.")
     render_daily_question()
+
+
+def render_my_player_mode():
+    """Profile home for avatar editing, medal cabinets, and account actions."""
+    if not st.session_state.get("active_player_id"):
+        st.markdown(
+            "<div class='practice-hero'><div class='practice-title'>🎨 My Player</div>"
+            "<div class='practice-subtitle'>Create a player after signing in to the Daily Challenge.</div></div>",
+            unsafe_allow_html=True,
+        )
+        st.info("Sign in or create a player from Daily Challenge first.")
+        st.button(
+            "Go to Daily Challenge",
+            type="primary",
+            use_container_width=True,
+            key="my_player_to_daily_signin",
+            on_click=_set_app_mode,
+            args=("Daily Challenge",),
+        )
+        return
+
+    flash = st.session_state.get("player_auth_flash", "")
+    if flash:
+        st.success(flash)
+        st.session_state.player_auth_flash = ""
+
+    if st.session_state.get("avatar_editor_open"):
+        render_player_avatar_creator()
+        return
+
+    player_id = str(st.session_state.get("active_player_id") or "")
+    player_name = str(st.session_state.get("active_player_name") or "Player")
+    profile = _active_player_profile()
+    avatar = _active_avatar_config(profile)
+
+    st.markdown(
+        "<div class='practice-hero'><div class='practice-title'>🎨 My Player</div>"
+        f"<div class='practice-subtitle'>{html.escape(player_name)} · your sprite and medal cabinet</div></div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        avatar_preview_html(
+            avatar,
+            player_name=player_name,
+            setup_complete=bool(profile.get("avatar_setup_complete")),
+        ),
+        unsafe_allow_html=True,
+    )
+
+    groups = _load_player_groups()
+    if groups:
+        cabinet_group = _avatar_medal_group_choice(groups, player_id)
+        yesterday = _previous_daily_date_key(st.session_state.daily_date_key)
+        medals = _avatar_medals_for_group(cabinet_group.group_id if cabinet_group else None, yesterday)
+        st.markdown(
+            medal_counter_html(medals, group_name=cabinet_group.group_name if cabinet_group else ""),
+            unsafe_allow_html=True,
+        )
+    else:
+        st.caption("Join or create a friend group from Daily Challenge to start a medal cabinet.")
+
+    edit_label = "Edit Player" if profile.get("avatar_setup_complete") else "Create My Player"
+    if st.button(edit_label, type="primary", use_container_width=True, key="my_player_edit"):
+        _open_avatar_editor()
+        st.rerun()
+
+    with st.expander("Account", expanded=False):
+        st.caption(f"Signed in as {player_name}")
+        if st.button("Sign out", use_container_width=True, key="player_sign_out"):
+            _sign_out_player()
+            st.session_state.app_mode = "Daily Challenge"
+            st.rerun()
 
 
 @st.fragment
@@ -4456,22 +4387,23 @@ if process_pending_group_invite():
 render_pending_remember_cookie_command()
 # Install near the top so dice taps stay visually anchored on mobile.
 # Dice taps are fragment-scoped in Phase 2K.5, so the old full-rerun scroll guard is no longer needed.
-install_app_shell_metadata()
 st.markdown("<div id='app-top-anchor'></div>", unsafe_allow_html=True)
 st.markdown("<h1 class='top-title'>🎲 Yahtzee Coach</h1>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>Hold Strategy Trainer</div>", unsafe_allow_html=True)
 
 mode = st.radio(
     "Mode",
-    options=["Daily Challenge", "Practice", "📲 Add to Home Screen"],
+    options=["Daily Challenge", "Practice", "My Player"],
     horizontal=True,
     key="app_mode",
     label_visibility="collapsed",
 )
-if mode == "📲 Add to Home Screen":
-    player_note = "Keep Yahtzee Coach one tap away"
-elif mode == "Practice":
+if mode == "Practice":
     player_note = "Unlimited hold-strategy practice"
+elif mode == "My Player":
+    player_note = "Your sprite · your all-time medals"
+    if not st.session_state.get("active_player_id"):
+        player_note = "Sign in from Daily Challenge to create your player"
 elif st.session_state.get("active_player_id"):
     player_note = f"Today's Daily · {st.session_state.get('active_player_name')}"
 else:
@@ -4483,6 +4415,6 @@ if mode == "Daily Challenge":
 elif mode == "Practice":
     render_practice_mode()
 else:
-    render_install_mode()
+    render_my_player_mode()
 
 render_help_feedback_footer()
