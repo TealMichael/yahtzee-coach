@@ -11,7 +11,7 @@ def require(ok, message):
 
 def run():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
-    require('APP_RELEASE = "v43B Phase 2K.12.1"' in app, "release label is Phase 2K.12.1")
+    require('APP_RELEASE = "v43B Phase 2K.12.2"' in app, "release label is Phase 2K.12.2")
     require('options=["Daily Challenge", "Practice", "My Player"]' in app, "top selector is Daily / Practice / My Player")
     require('📲 Add to Home Screen' not in app and 'def render_install_mode(' not in app, "Add-to-Home-Screen feature is removed")
     require('def render_my_player_mode()' in app, "My Player has a dedicated top-level page")

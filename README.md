@@ -1,16 +1,19 @@
-# Yahtzee Coach v43B Phase 2K.12.1 — Mobile Creator Readability Hotfix
+# Yahtzee Coach v43B Phase 2K.12.2 — Duplicate Dice Selection Hotfix
 
-This is the full current app. It preserves Phase 2K.12 scorecard realism and all earlier game/social/avatar work.
+This is the full current app. It preserves Phase 2K.12 scorecard realism, the Phase 2K.12.1 creator/hair expansion, and all earlier game/social/avatar work.
 
 ## What changed
-- Character creator no longer uses horizontally squeezed Streamlit pills for categories or choices.
-- Creator now uses two full-width, mobile-safe select boxes: one for the category and one for the option.
-- Full labels such as `Long Waves`, `White Headband`, and `Purple Skirt` remain readable on narrow phones.
-- Live avatar preview, Randomize, Save Player, medal history, and all avatar choices are unchanged.
+- Daily and Practice no longer use `st.pills` to select dice.
+- Each physical die is now its own independently keyed Streamlit button.
+- Matching dice remain visually identical, but tapping one duplicate cannot select another duplicate.
+- Saved holds, Back/Edit, exact grading, and persistence continue to use the same hold-value multiset as before.
+
+## Regression example
+For dice `2,3,3,4,4`, tapping the 2, one 3, and one 4 saves exactly `2,3,4`.
 
 ## Scope
-Runtime change from Phase 2K.12: `app.py` only.
-No Yahtzee strategy, puzzle generation, scorecard-realism logic, persistence, avatar artwork, medal logic, or Supabase schema changed.
+Runtime change from the live Phase 2K.12.1 Hair Expansion build: `app.py` only.
+No strategy math, puzzle generation, scorecard realism, persistence, avatar/medal logic, or Supabase schema changed.
 
 ## Deployment
-No Supabase migration. Upload the contents of `UPLOAD_TO_GITHUB` to the repo root, or when updating directly from 2K.12, replacing `app.py` is sufficient.
+No Supabase migration. Copy the contents of `UPLOAD_TO_GITHUB` into the repo, commit, and push with GitHub Desktop.

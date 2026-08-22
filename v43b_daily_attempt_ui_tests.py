@@ -66,7 +66,7 @@ def run():
     checks.append(("final submit explicitly completes database attempt", "Submit final Daily Challenge" in source and "load_daily_store().complete_attempt(attempt_id)" in source))
     checks.append(("ten saved choices no longer auto-complete on resume", "len(resume_state.answers) == 10 and not resume_state.attempt.complete" not in source))
     checks.append(("official reset control is removed", "Reset today's local demo attempt" not in source))
-    checks.append(("cross-player held dice state is cleared", 'startswith(("daily_held_", "daily_dice_pills_"))' in source))
+    checks.append(("cross-player held dice state is cleared", 'startswith(("daily_held_", "daily_dice_"))' in source))
     checks.append(("Practice remains independent", "def render_practice_mode():" in source and "Open Practice without signing in" in source))
     checks.append(("real social leaderboard remains active", "_cached_group_daily_snapshot(" in source and "render_leaderboard_cards(board, allow_review=False)" in source))
 

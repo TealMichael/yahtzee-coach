@@ -14,8 +14,8 @@ checks = [
     ('session progress rail exists', "class='progress-rail'" in APP),
     ('mobile hold cards stack', '.hold-compare { grid-template-columns:1fr;' in APP),
     ('mobile coach steps stack', '.coach-three { grid-template-columns:1fr;' in APP),
-    ('working dice pills preserved', 'selected_indices = st.pills(' in APP),
-    ('duplicate-dice labels preserved', 'zero-width spaces make duplicate dice tappable separately' in APP.lower()),
+    ('independent dice buttons preserved', '_render_independent_dice_picker(' in APP and 'toggle_die_index(' in APP),
+    ('duplicate dice positions are keyed independently', 'key=f"{key_prefix}_die_{die_index}"' in APP),
     ('dice scroll guard preserved', 'install_dice_scroll_guard()' in APP),
 ]
 

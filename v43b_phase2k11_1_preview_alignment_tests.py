@@ -17,7 +17,7 @@ def run():
     avatar = (ROOT / "player_avatar.py").read_text(encoding="utf-8")
     retro = (ROOT / "retro_podium.py").read_text(encoding="utf-8")
 
-    require('APP_RELEASE = "v43B Phase 2K.12.1"' in app, "visual alignment patch has its own release label")
+    require('APP_RELEASE = "v43B Phase 2K.12.2"' in app, "visual alignment patch has its own release label")
     require("CREATE YOUR PLAYER" in app and "Tap a category, choose a style" in app, "creator keeps the approved light retro direction in a tighter mobile layout")
     require("avatar_creator_category_" in app and "chosen_value = st.selectbox(" in app, "creator keeps category-first customization with readable mobile controls")
     require("grid-template-columns:repeat(3,1fr)" in avatar, "medal counter keeps clean three-column preview layout")

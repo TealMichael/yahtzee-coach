@@ -43,7 +43,7 @@ def run():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
     supabase = (ROOT / "supabase_daily_store.py").read_text(encoding="utf-8")
     retro = (ROOT / "retro_podium.py").read_text(encoding="utf-8")
-    require('APP_RELEASE = "v43B Phase 2K.12.1"' in app, "hotfix release label is current")
+    require('APP_RELEASE = "v43B Phase 2K.12.2"' in app, "hotfix release label is current")
     require("Same score to the hundredth = a real tie" in app, "ranking explanation tells players the actual rule")
     require("You're tied for #{rank} of {completed} today." in app, "today banner is tie-aware")
     require('rank_value = f"T-{rank} of {len(board)}"' in app, "result card uses T-rank for a tie")

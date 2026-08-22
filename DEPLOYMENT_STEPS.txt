@@ -1,11 +1,11 @@
-Yahtzee Coach v43B Phase 2K.12.1
+YAHTZEE COACH v43B PHASE 2K.12.2 — DUPLICATE DICE SELECTION HOTFIX
 
-GitHub Desktop:
-1. Copy the contents of UPLOAD_TO_GITHUB into your local Yahtzee Coach repository.
-2. GitHub Desktop should show app.py plus release/test documentation changes.
-3. Commit with: v43B Phase 2K.12.1 - fix mobile character creator readability
-4. Push origin.
+1. No Supabase migration is required.
+2. Copy the contents of UPLOAD_TO_GITHUB into your local Yahtzee Coach repository.
+3. In GitHub Desktop, confirm the only production/runtime file changed is app.py. Test/docs files also change for the new regression/version contract.
+4. Commit to main.
+5. Push origin.
+6. Streamlit should redeploy automatically.
 
-If your repo is already on Phase 2K.12, replacing app.py alone is sufficient for the runtime hotfix.
-
-No Supabase step is required.
+Suggested GitHub commit message:
+v43B Phase 2K.12.2 - fix duplicate dice selection

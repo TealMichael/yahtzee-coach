@@ -1,15 +1,20 @@
-Yahtzee Coach v43B Phase 2K.12.1 test summary
+Yahtzee Coach v43B Phase 2K.12.2 test summary
 
-RESULT: Mobile creator hotfix regressions pass, Daily versioning passes, and exhaustive exact-policy integration passes.
+RESULT: 53/53 current automated test suites pass.
 
-Phase 2K.12.1 targeted coverage verifies:
-- category selector uses a full-width readable select box
-- avatar choice selector uses a full-width readable select box
-- creator no longer uses squeezed pills for categories or choices
-- full human-readable labels remain intact
-- giant vertical option cards are not reintroduced
-- live avatar draft still updates immediately
-- existing My Player navigation and UI-polish contracts remain intact
+New Phase 2K.12.2 duplicate-dice coverage verifies:
+- 2,3,3,4,4: tapping one 3 saves exactly one 3
+- the second identical 3 appears only after its own physical die is tapped
+- releasing either duplicate leaves the other independently selected duplicate intact
+- 5,5,5,6,6 supports independent matching-die selection
+- 6,6,6,6,6 can hold exactly 1, 2, 3, 4, or 5 physical dice, then release them individually
+- Back/Edit reconstructs exact saved multiplicity
+- Daily and Practice no longer use st.pills for dice input
+- each die widget key contains its physical position
+- Daily persistence continues to save the exact selected hold multiset
+- scroll preservation recognizes the new Daily and Practice pickers
+
+All existing Daily, Practice, persistence, social, scorecard realism, coaching, tie, avatar, medal, and UI regressions pass.
 
 Exact integration passes:
 - 420 exact scorecard states × 252 canonical rolls × 2 roll stages
@@ -17,23 +22,21 @@ Exact integration passes:
 - 840/840 representative expanded-bank reports route through exact mode
 - unsupported states still fail safely to legacy coaching
 
-Game-freeze checksum comparison against Phase 2K.12:
-- yahtzee_engine.py: identical
-- exact_runtime.py: identical
-- exact_mode.py: identical
-- puzzle_bank.py: identical
-- daily_challenge.py: identical
-- daily_store.py: identical
-- supabase_daily_store.py: identical
-- session_learning.py: identical
-- practice_progress.py: identical
-- player_avatar.py: identical
-- retro_podium.py: identical
-- exact_policy.npz: identical
-- puzzle_bank.npz: identical
-- challenge_catalog.npz: identical
-
-Only runtime file changed: app.py
+Protected strategy/puzzle files are unchanged from Phase 2K.12.1 Hair Expansion baseline:
+- yahtzee_engine.py
+- exact_runtime.py
+- exact_mode.py
+- puzzle_bank.py
+- daily_challenge.py
+- daily_store.py
+- supabase_daily_store.py
+- session_learning.py
+- practice_progress.py
+- player_avatar.py
+- retro_podium.py
+- exact_policy.npz
+- puzzle_bank.npz
+- challenge_catalog.npz
 
 Exact-policy SHA-256:
 cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b

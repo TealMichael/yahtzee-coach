@@ -12,8 +12,8 @@ checks = [
     ("mobile progress becomes two by two", ".progress-rail { grid-template-columns:repeat(2, minmax(0,1fr));" in APP),
     ("mobile mastery polish", ".mastery-card { padding:0.64rem 0.66rem;" in APP),
     ("visible hold rank preserved", "🏆 Hold rank:" in APP and "class='rank-chip'" in APP),
-    ("working dice pills preserved", "selected_indices = st.pills(" in APP),
-    ("duplicate dice protection preserved", "zero-width spaces make duplicate dice tappable separately" in APP.lower()),
+    ("independent dice buttons preserved", "_render_independent_dice_picker(" in APP and "toggle_die_index(" in APP),
+    ("duplicate dice protection preserved", 'key=f"{key_prefix}_die_{die_index}"' in APP),
     ("scroll guard preserved", "install_dice_scroll_guard()" in APP),
 ]
 

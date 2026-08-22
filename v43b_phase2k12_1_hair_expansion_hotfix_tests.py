@@ -68,7 +68,7 @@ def run():
     require("selected_category = st.selectbox(" in creator and "chosen_value = st.selectbox(" in creator, "mobile-safe full-label controls remain unchanged")
     require("st.pills(" not in creator, "hair expansion does not bring back squeezed mobile pills")
 
-    print("Phase 2K.12.1 hair expansion hotfix checks passed")
+    print("Phase 2K.12.2 hair expansion hotfix checks passed")
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ def sha(name):
 def run():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
 
-    require('APP_RELEASE = "v43B Phase 2K.12.1"' in app, "UI polish release has its own release label")
+    require('APP_RELEASE = "v43B Phase 2K.12.2"' in app, "UI polish release has its own release label")
     require(set(AVATAR_CHOICES["style"]) == {"classic", "soft"}, "creator offers two unlabeled base character silhouettes")
     for hair in ("ponytail", "bob", "waves", "bun", "braids"):
         require(hair in AVATAR_CHOICES["hair"], f"inclusive hairstyle {hair} is available")

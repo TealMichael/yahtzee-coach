@@ -1,10 +1,10 @@
-Yahtzee Coach current release: v43B Phase 2K.12.1
+Yahtzee Coach current release: v43B Phase 2K.12.2
 
-Primary change: mobile character-creator readability hotfix.
+Primary change: duplicate-dice selection hotfix.
 
-- Replaced squeezed Streamlit pills in the avatar creator with full-width select boxes.
-- Category and option labels remain fully readable on narrow phones.
-- Live preview and all avatar/medal behavior remain intact.
-- Phase 2K.12 scorecard realism is unchanged.
-- app.py is the only runtime file changed from Phase 2K.12.
+- Daily and Practice use five independently keyed die-position buttons.
+- Duplicate face values never share selection state.
+- Hold persistence and Back/Edit remain multiplicity-safe.
+- Phase 2K.12 scorecard realism and Phase 2K.12.1 creator/hair expansion remain intact.
+- app.py is the only production/runtime file changed from the Phase 2K.12.1 Hair Expansion baseline.
 - No Supabase migration.

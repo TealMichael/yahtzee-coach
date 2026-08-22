@@ -33,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.12.1"
+APP_RELEASE = "v43B Phase 2K.12.2"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -698,8 +698,7 @@ st.markdown(
 
 
 
-    /* V11 dice picker override: keep the working st.pills behavior, but make the dice visually large.
-       Streamlit has used both stPills and stButtonGroup test ids, so target both. */
+    /* Legacy V11 pill styling retained harmlessly for cached markup; live dice input now uses position-keyed buttons. */
     div[data-testid="stButtonGroup"],
     div[data-testid="stPills"] {
         width:100% !important;
@@ -835,6 +834,64 @@ st.markdown(
         border-radius:14px;
         min-height:2.55rem;
         font-weight:850;
+    }
+
+    /* Phase 2K.12.2: each physical die is a separately keyed Streamlit button.
+       Scope the square-die styling to the picker container so duplicate face values never share widget identity. */
+    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stHorizontalBlock"],
+    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stHorizontalBlock"] {
+        gap:0.42rem !important;
+        align-items:center !important;
+        justify-content:center !important;
+        flex-wrap:nowrap !important;
+    }
+    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="column"],
+    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="column"] {
+        min-width:0 !important;
+    }
+    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button,
+    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button {
+        width:100% !important;
+        min-width:0 !important;
+        height:clamp(54px, 16vw, 66px) !important;
+        min-height:clamp(54px, 16vw, 66px) !important;
+        max-height:clamp(54px, 16vw, 66px) !important;
+        padding:0 !important;
+        border-radius:15px !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        -webkit-tap-highlight-color:transparent !important;
+    }
+    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button p,
+    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button p {
+        font-size:clamp(2.65rem, 11vw, 3.4rem) !important;
+        line-height:1 !important;
+        margin:0 !important;
+        padding:0 !important;
+        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
+    }
+    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="secondary"],
+    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="secondary"] {
+        background:#f8fafc !important;
+        color:#111827 !important;
+        border:2px solid #d1d5db !important;
+        box-shadow:0 4px 0 #c7c9cc, 0 7px 14px rgba(0,0,0,0.16) !important;
+    }
+    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="secondary"] p,
+    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="secondary"] p {
+        color:#111827 !important;
+    }
+    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="primary"],
+    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="primary"] {
+        background:#ff4b4b !important;
+        color:#ffffff !important;
+        border:2px solid #ff4b4b !important;
+        box-shadow:0 4px 0 #b91c1c, 0 7px 14px rgba(255,75,75,0.25) !important;
+    }
+    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="primary"] p,
+    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="primary"] p {
+        color:#ffffff !important;
     }
 
     .grade-row { display:flex; gap:0.7rem; align-items:center; margin-bottom:0.58rem; }
@@ -1216,9 +1273,63 @@ def hold_label(hold):
     return "keep " + ", ".join(str(d) for d in hold)
 
 
-def unique_dice_label(index, die):
-    # Zero-width spaces make duplicate dice tappable separately while looking identical.
-    return DICE_FACE.get(int(die), str(die)) + ("\u200b" * (index + 1))
+def _normalize_die_indices(indices, dice_count):
+    """Return unique, in-range die positions in stable order."""
+    seen = set()
+    normalized = []
+    for raw_index in indices or []:
+        try:
+            index = int(raw_index)
+        except (TypeError, ValueError):
+            continue
+        if index < 0 or index >= int(dice_count) or index in seen:
+            continue
+        seen.add(index)
+        normalized.append(index)
+    return sorted(normalized)
+
+
+def toggle_die_index(indices, die_index, dice_count):
+    """Toggle exactly one physical die position, even when several dice show the same value."""
+    selected = set(_normalize_die_indices(indices, dice_count))
+    die_index = int(die_index)
+    if die_index < 0 or die_index >= int(dice_count):
+        return sorted(selected)
+    if die_index in selected:
+        selected.remove(die_index)
+    else:
+        selected.add(die_index)
+    return sorted(selected)
+
+
+def _toggle_held_die(held_key, die_index, dice_count):
+    """Streamlit callback for one independently keyed die button."""
+    st.session_state[held_key] = toggle_die_index(
+        st.session_state.get(held_key, []),
+        die_index,
+        dice_count,
+    )
+
+
+def _render_independent_dice_picker(dice, held_key, key_prefix, disabled=False):
+    """Render five position-keyed die buttons; duplicate face values remain independent."""
+    selected = _normalize_die_indices(st.session_state.get(held_key, []), len(dice))
+    st.session_state[held_key] = selected
+    with st.container(key=f"{key_prefix}_picker"):
+        columns = st.columns(len(dice), gap="small")
+        for die_index, (column, die) in enumerate(zip(columns, dice)):
+            with column:
+                st.button(
+                    DICE_FACE.get(int(die), str(die)),
+                    type="primary" if die_index in selected else "secondary",
+                    use_container_width=True,
+                    disabled=disabled,
+                    key=f"{key_prefix}_die_{die_index}",
+                    help=f"Die {die_index + 1}: {int(die)}. Tap to {'release' if die_index in selected else 'hold'}.",
+                    on_click=_toggle_held_die,
+                    args=(held_key, die_index, len(dice)),
+                )
+    return _normalize_die_indices(st.session_state.get(held_key, []), len(dice))
 
 
 def extract_line(report, prefix):
@@ -1622,7 +1733,9 @@ def install_dice_scroll_guard():
             function isDiceTap(target) {
                 if (!target || !target.closest) { return false; }
                 return !!target.closest(
-                    'div[data-testid="stPills"] button, div[data-testid="stButtonGroup"] button, button[role="checkbox"]'
+                    'div[class*="st-key-daily_dice_"][class*="_picker"] button, '
+                    + 'div[class*="st-key-practice_dice_"][class*="_picker"] button, '
+                    + 'div[data-testid="stPills"] button, div[data-testid="stButtonGroup"] button, button[role="checkbox"]'
                 );
             }
 
@@ -1996,7 +2109,7 @@ def _reset_daily_local_attempt(date_key: str | None = None):
     st.session_state.daily_display_name = st.session_state.get("daily_display_name", "You") or "You"
     # Held-die widget state is local UI state and must never leak between players/dates.
     for key in list(st.session_state.keys()):
-        if str(key).startswith(("daily_held_", "daily_dice_pills_")):
+        if str(key).startswith(("daily_held_", "daily_dice_")):
             del st.session_state[key]
 
 
@@ -3347,7 +3460,7 @@ def _daily_widget_keys(index: int) -> tuple[str, str]:
     date_key = st.session_state.daily_date_key
     return (
         f"daily_held_{date_key}_{index}",
-        f"daily_dice_pills_{date_key}_{index}",
+        f"daily_dice_{date_key}_{index}",
     )
 
 
@@ -3361,9 +3474,10 @@ def _saved_hold_indices(index: int) -> list[int]:
 
 def _reset_daily_widget_to_saved(index: int):
     """Discard an un-saved UI change when navigating backward."""
-    held_key, pills_key = _daily_widget_keys(index)
-    if pills_key in st.session_state:
-        del st.session_state[pills_key]
+    held_key, dice_key_prefix = _daily_widget_keys(index)
+    for key in list(st.session_state.keys()):
+        if str(key).startswith(f"{dice_key_prefix}_die_"):
+            del st.session_state[key]
     st.session_state[held_key] = _saved_hold_indices(index)
 
 
@@ -3453,20 +3567,14 @@ def _daily_choice_fragment():
 
     st.markdown("<div class='practice-question'>Which dice would you keep? <span class='muted'>Tap to select.</span></div>", unsafe_allow_html=True)
 
-    held_key, pills_key = _daily_widget_keys(index)
+    held_key, dice_key_prefix = _daily_widget_keys(index)
     if held_key not in st.session_state:
         st.session_state[held_key] = _saved_hold_indices(index)
-    selected_indices = st.pills(
-        "Daily dice to hold",
-        options=list(range(len(dice))),
-        default=st.session_state.get(held_key, []),
-        format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
-        selection_mode="multi",
-        key=pills_key,
-        label_visibility="collapsed",
+    selected_indices = _render_independent_dice_picker(
+        dice,
+        held_key,
+        dice_key_prefix,
     )
-    selected_indices = list(selected_indices or [])
-    st.session_state[held_key] = sorted(selected_indices)
     selected_hold = selected_hold_from_indices(dice, selected_indices)
     st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 
@@ -4180,18 +4288,12 @@ def _practice_choice_fragment():
     held_key = f"held_indices_{round_id}"
     if held_key not in st.session_state:
         st.session_state[held_key] = []
-    selected_indices = st.pills(
-        "Dice to hold",
-        options=list(range(len(dice))),
-        default=st.session_state.get(held_key, []),
-        format_func=lambda die_index: unique_dice_label(die_index, dice[die_index]),
-        selection_mode="multi",
-        key=f"dice_pills_{round_id}",
-        label_visibility="collapsed",
+    selected_indices = _render_independent_dice_picker(
+        dice,
+        held_key,
+        f"practice_dice_{round_id}",
         disabled=answer_submitted,
     )
-    selected_indices = list(selected_indices or [])
-    st.session_state[held_key] = sorted(selected_indices)
     selected_hold = selected_hold_from_indices(dice, selected_indices)
     st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 
