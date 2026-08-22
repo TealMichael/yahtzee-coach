@@ -33,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.12.3"
+APP_RELEASE = "v43B Phase 2K.12.4"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -836,68 +836,87 @@ st.markdown(
         font-weight:850;
     }
 
-    /* Phase 2K.12.3: position-keyed dice in Streamlit's responsive horizontal flex container. */
-    div[class*="st-key-daily_dice_"][class*="_picker"],
-    div[class*="st-key-practice_dice_"][class*="_picker"] {
-        width:100% !important;
-        margin:0.48rem auto 0.70rem auto !important;
+    /* Phase 2K.12.4: restore the approved large-die look while keeping position-keyed buttons.
+       Each die widget has its own st-key-* CSS class, so duplicates stay independent. */
+    div[class*="st-key-daily_dice_"][class*="_die_"],
+    div[class*="st-key-practice_dice_"][class*="_die_"] {
+        flex:0 0 auto !important;
+        width:clamp(58px, 17vw, 68px) !important;
+        min-width:clamp(58px, 17vw, 68px) !important;
+        max-width:clamp(58px, 17vw, 68px) !important;
     }
-    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button,
-    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button {
-        width:54px !important;
-        min-width:54px !important;
-        max-width:54px !important;
-        height:54px !important;
-        min-height:54px !important;
-        max-height:54px !important;
+    div[class*="st-key-daily_dice_"][class*="_die_"] div[data-testid="stButton"],
+    div[class*="st-key-practice_dice_"][class*="_die_"] div[data-testid="stButton"] {
+        width:100% !important;
+    }
+    div[class*="st-key-daily_dice_"][class*="_die_"] div[data-testid="stButton"] > button,
+    div[class*="st-key-practice_dice_"][class*="_die_"] div[data-testid="stButton"] > button {
+        width:clamp(58px, 17vw, 68px) !important;
+        min-width:clamp(58px, 17vw, 68px) !important;
+        max-width:clamp(58px, 17vw, 68px) !important;
+        height:clamp(58px, 17vw, 68px) !important;
+        min-height:clamp(58px, 17vw, 68px) !important;
+        max-height:clamp(58px, 17vw, 68px) !important;
         padding:0 !important;
-        border-radius:14px !important;
+        margin:0 !important;
+        border-radius:15px !important;
         display:flex !important;
         align-items:center !important;
         justify-content:center !important;
         -webkit-tap-highlight-color:transparent !important;
+        overflow:hidden !important;
     }
-    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button p,
-    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button p {
-        font-size:2.6rem !important;
-        line-height:1 !important;
+    div[class*="st-key-daily_dice_"][class*="_die_"] div[data-testid="stButton"] > button *,
+    div[class*="st-key-practice_dice_"][class*="_die_"] div[data-testid="stButton"] > button * {
+        font-size:clamp(3.05rem, 13vw, 3.9rem) !important;
+        line-height:0.95 !important;
         margin:0 !important;
         padding:0 !important;
-        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2", sans-serif !important;
+        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
         font-weight:500 !important;
     }
-    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="secondary"],
-    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="secondary"] {
+    div[class*="st-key-daily_dice_"][class*="_die_"] div[data-testid="stButton"] > button[kind="secondary"],
+    div[class*="st-key-practice_dice_"][class*="_die_"] div[data-testid="stButton"] > button[kind="secondary"] {
         background:#f8fafc !important;
         color:#111827 !important;
         border:2px solid #d1d5db !important;
         box-shadow:0 4px 0 #c7c9cc, 0 7px 14px rgba(0,0,0,0.16) !important;
     }
-    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="secondary"] p,
-    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="secondary"] p {
+    div[class*="st-key-daily_dice_"][class*="_die_"] div[data-testid="stButton"] > button[kind="secondary"] *,
+    div[class*="st-key-practice_dice_"][class*="_die_"] div[data-testid="stButton"] > button[kind="secondary"] * {
         color:#111827 !important;
     }
-    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="primary"],
-    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="primary"] {
+    div[class*="st-key-daily_dice_"][class*="_die_"] div[data-testid="stButton"] > button[kind="primary"],
+    div[class*="st-key-practice_dice_"][class*="_die_"] div[data-testid="stButton"] > button[kind="primary"] {
         background:#ff4b4b !important;
         color:#ffffff !important;
         border:2px solid #ff4b4b !important;
         box-shadow:0 4px 0 #b91c1c, 0 7px 14px rgba(255,75,75,0.25) !important;
     }
-    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="primary"] p,
-    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="primary"] p {
+    div[class*="st-key-daily_dice_"][class*="_die_"] div[data-testid="stButton"] > button[kind="primary"] *,
+    div[class*="st-key-practice_dice_"][class*="_die_"] div[data-testid="stButton"] > button[kind="primary"] * {
         color:#ffffff !important;
     }
-    @media (max-width:360px) {
-        div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button,
-        div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button {
-            width:48px !important; min-width:48px !important; max-width:48px !important;
-            height:48px !important; min-height:48px !important; max-height:48px !important;
-            border-radius:12px !important;
+    div[class*="st-key-daily_dice_"][class*="_die_"] div[data-testid="stButton"] > button:active,
+    div[class*="st-key-practice_dice_"][class*="_die_"] div[data-testid="stButton"] > button:active {
+        transform:translateY(3px) !important;
+    }
+    @media (max-width:380px) {
+        div[class*="st-key-daily_dice_"][class*="_die_"],
+        div[class*="st-key-practice_dice_"][class*="_die_"],
+        div[class*="st-key-daily_dice_"][class*="_die_"] div[data-testid="stButton"] > button,
+        div[class*="st-key-practice_dice_"][class*="_die_"] div[data-testid="stButton"] > button {
+            width:clamp(54px, 16.2vw, 62px) !important;
+            min-width:clamp(54px, 16.2vw, 62px) !important;
+            max-width:clamp(54px, 16.2vw, 62px) !important;
+            height:clamp(54px, 16.2vw, 62px) !important;
+            min-height:clamp(54px, 16.2vw, 62px) !important;
+            max-height:clamp(54px, 16.2vw, 62px) !important;
+            border-radius:14px !important;
         }
-        div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button p,
-        div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button p {
-            font-size:2.25rem !important;
+        div[class*="st-key-daily_dice_"][class*="_die_"] div[data-testid="stButton"] > button *,
+        div[class*="st-key-practice_dice_"][class*="_die_"] div[data-testid="stButton"] > button * {
+            font-size:clamp(2.8rem, 12vw, 3.4rem) !important;
         }
     }
 
@@ -1335,7 +1354,7 @@ def _render_independent_dice_picker(dice, held_key, key_prefix, disabled=False):
             st.button(
                 DICE_FACE.get(int(die), str(die)),
                 type="primary" if die_index in selected else "secondary",
-                width=54,
+                width="content",
                 disabled=disabled,
                 key=f"{key_prefix}_die_{die_index}",
                 help=f"Die {die_index + 1}: {int(die)}. Tap to {'release' if die_index in selected else 'hold'}.",

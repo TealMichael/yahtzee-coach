@@ -1,10 +1,4 @@
-Yahtzee Coach current release: v43B Phase 2K.12.2
-
-Primary change: duplicate-dice selection hotfix.
-
-- Daily and Practice use five independently keyed die-position buttons.
-- Duplicate face values never share selection state.
-- Hold persistence and Back/Edit remain multiplicity-safe.
-- Phase 2K.12 scorecard realism and Phase 2K.12.1 creator/hair expansion remain intact.
-- app.py is the only production/runtime file changed from the Phase 2K.12.1 Hair Expansion baseline.
-- No Supabase migration.
+Current release: v43B Phase 2K.12.4 — Restored Large Dice Hotfix.
+Runtime delta from Phase 2K.12.3: app.py only.
+The duplicate-dice logic remains position-keyed; this release restores the approved pre-bug dice dimensions and face-glyph sizing.
+No Supabase migration.

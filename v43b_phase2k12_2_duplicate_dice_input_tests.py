@@ -85,6 +85,6 @@ require('key=f"{key_prefix}_die_{die_index}"' in SOURCE, "each die button key co
 require(SOURCE.count("_render_independent_dice_picker(") >= 3, "shared independent picker is used by Daily and Practice")
 require('chosen_hold=selected_hold' in SOURCE, "Daily persistence saves the exact selected hold multiplicity")
 require('st-key-daily_dice_' in SOURCE and 'st-key-practice_dice_' in SOURCE, "scroll guard/styling recognizes both independent pickers")
-require('APP_RELEASE = "v43B Phase 2K.12.3"' in SOURCE, "release label advanced to Phase 2K.12.3")
+require('APP_RELEASE = "v43B Phase 2K.12.4"' in SOURCE, "later hotfix release label is current")
 
 print("\nPhase 2K.12.3 duplicate-dice input regressions: PASS")

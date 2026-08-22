@@ -1,4 +1,4 @@
-YAHTZEE COACH v43B PHASE 2K.12.2 — DUPLICATE DICE SELECTION HOTFIX
+YAHTZEE COACH v43B PHASE 2K.12.4 — RESTORED LARGE DICE HOTFIX
 
 1. No Supabase migration is required.
 2. Copy the contents of UPLOAD_TO_GITHUB into your local Yahtzee Coach repository.
@@ -8,4 +8,4 @@ YAHTZEE COACH v43B PHASE 2K.12.2 — DUPLICATE DICE SELECTION HOTFIX
 6. Streamlit should redeploy automatically.
 
 Suggested GitHub commit message:
-v43B Phase 2K.12.2 - fix duplicate dice selection
+v43B Phase 2K.12.4 - restore large dice while keeping duplicate selection fixed
