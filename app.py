@@ -33,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.12.2"
+APP_RELEASE = "v43B Phase 2K.12.3"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -836,28 +836,22 @@ st.markdown(
         font-weight:850;
     }
 
-    /* Phase 2K.12.2: each physical die is a separately keyed Streamlit button.
-       Scope the square-die styling to the picker container so duplicate face values never share widget identity. */
-    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stHorizontalBlock"],
-    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stHorizontalBlock"] {
-        gap:0.42rem !important;
-        align-items:center !important;
-        justify-content:center !important;
-        flex-wrap:nowrap !important;
-    }
-    div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="column"],
-    div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="column"] {
-        min-width:0 !important;
+    /* Phase 2K.12.3: position-keyed dice in Streamlit's responsive horizontal flex container. */
+    div[class*="st-key-daily_dice_"][class*="_picker"],
+    div[class*="st-key-practice_dice_"][class*="_picker"] {
+        width:100% !important;
+        margin:0.48rem auto 0.70rem auto !important;
     }
     div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button,
     div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button {
-        width:100% !important;
-        min-width:0 !important;
-        height:clamp(54px, 16vw, 66px) !important;
-        min-height:clamp(54px, 16vw, 66px) !important;
-        max-height:clamp(54px, 16vw, 66px) !important;
+        width:54px !important;
+        min-width:54px !important;
+        max-width:54px !important;
+        height:54px !important;
+        min-height:54px !important;
+        max-height:54px !important;
         padding:0 !important;
-        border-radius:15px !important;
+        border-radius:14px !important;
         display:flex !important;
         align-items:center !important;
         justify-content:center !important;
@@ -865,11 +859,12 @@ st.markdown(
     }
     div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button p,
     div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button p {
-        font-size:clamp(2.65rem, 11vw, 3.4rem) !important;
+        font-size:2.6rem !important;
         line-height:1 !important;
         margin:0 !important;
         padding:0 !important;
-        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
+        font-family:-apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2", sans-serif !important;
+        font-weight:500 !important;
     }
     div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="secondary"],
     div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="secondary"] {
@@ -892,6 +887,18 @@ st.markdown(
     div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="primary"] p,
     div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button[kind="primary"] p {
         color:#ffffff !important;
+    }
+    @media (max-width:360px) {
+        div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button,
+        div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button {
+            width:48px !important; min-width:48px !important; max-width:48px !important;
+            height:48px !important; min-height:48px !important; max-height:48px !important;
+            border-radius:12px !important;
+        }
+        div[class*="st-key-daily_dice_"][class*="_picker"] div[data-testid="stButton"] > button p,
+        div[class*="st-key-practice_dice_"][class*="_picker"] div[data-testid="stButton"] > button p {
+            font-size:2.25rem !important;
+        }
     }
 
     .grade-row { display:flex; gap:0.7rem; align-items:center; margin-bottom:0.58rem; }
@@ -1312,23 +1319,29 @@ def _toggle_held_die(held_key, die_index, dice_count):
 
 
 def _render_independent_dice_picker(dice, held_key, key_prefix, disabled=False):
-    """Render five position-keyed die buttons; duplicate face values remain independent."""
+    """Render five position-keyed die buttons in a responsive horizontal flex container."""
     selected = _normalize_die_indices(st.session_state.get(held_key, []), len(dice))
     st.session_state[held_key] = selected
-    with st.container(key=f"{key_prefix}_picker"):
-        columns = st.columns(len(dice), gap="small")
-        for die_index, (column, die) in enumerate(zip(columns, dice)):
-            with column:
-                st.button(
-                    DICE_FACE.get(int(die), str(die)),
-                    type="primary" if die_index in selected else "secondary",
-                    use_container_width=True,
-                    disabled=disabled,
-                    key=f"{key_prefix}_die_{die_index}",
-                    help=f"Die {die_index + 1}: {int(die)}. Tap to {'release' if die_index in selected else 'hold'}.",
-                    on_click=_toggle_held_die,
-                    args=(held_key, die_index, len(dice)),
-                )
+    # Horizontal containers are adaptive on narrow screens; unlike st.columns they
+    # don't turn five small dice into oversized horizontally scrolling columns.
+    with st.container(
+        key=f"{key_prefix}_picker",
+        horizontal=True,
+        horizontal_alignment="center",
+        vertical_alignment="center",
+        gap="xsmall",
+    ):
+        for die_index, die in enumerate(dice):
+            st.button(
+                DICE_FACE.get(int(die), str(die)),
+                type="primary" if die_index in selected else "secondary",
+                width=54,
+                disabled=disabled,
+                key=f"{key_prefix}_die_{die_index}",
+                help=f"Die {die_index + 1}: {int(die)}. Tap to {'release' if die_index in selected else 'hold'}.",
+                on_click=_toggle_held_die,
+                args=(held_key, die_index, len(dice)),
+            )
     return _normalize_die_indices(st.session_state.get(held_key, []), len(dice))
 
 
