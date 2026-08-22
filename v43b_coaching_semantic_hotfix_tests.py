@@ -12,7 +12,7 @@ def run():
         ("if _is_open(scorecard, \"yahtzee\")" in exact and "powerful matching core" in exact, "four matching dice mention Yahtzee only when relevant"),
         ("may activate forced-upper/Joker" in exact or "can activate the forced-upper/Joker" in exact, "extra-Yahtzee language does not overstate Joker scoring"),
         ("teaching_takeaway" in exact and "teaching_takeaway" in app, "Daily Review can show the full reusable teaching takeaway"),
-        ("APP_RELEASE = \"v43B Phase 2K.12\"" in app, "release label is 2K.9.1"),
+        ("APP_RELEASE = \"v43B Phase 2K.12.1\"" in app, "release label is 2K.9.1"),
     ]
     for ok, name in checks:
         print(("PASS" if ok else "FAIL"), name)

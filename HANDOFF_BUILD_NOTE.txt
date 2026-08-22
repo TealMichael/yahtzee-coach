@@ -1,21 +1,10 @@
-Yahtzee Coach current release: v43B Phase 2K.12
+Yahtzee Coach current release: v43B Phase 2K.12.1
 
-Primary change: conservative scorecard-realism eligibility for generated puzzles.
+Primary change: mobile character-creator readability hotfix.
 
-Locked decisions:
-- Do NOT require perfect historical play.
-- Keep zeros, weak scores, missed bonuses, ugly boards, and questionable-but-plausible histories.
-- Filter only Simulated Game contexts that mathematically prove an earlier Yahtzee while Yahtzee is still open.
-- Curated Edge Case contexts remain available.
-- Do not alter exact strategy math or protected bank binaries.
-- Daily realism is forward-only from 2026-08-22; Aug 21 and earlier challenge IDs are preserved.
-- November 5, 2026 selector failure is fixed by relaxing only the soft weekly Joker-family preference when a hard slot otherwise has no candidate.
-
-Audit facts:
-- 14 / 420 scorecard contexts flagged.
-- 193,551 / 200,140 Daily-eligible situations retained (96.7%).
-- Phase 2K.12 60-day regression: 0 flagged histories in generated Daily puzzles.
-- Practice regression: 0 flagged histories in 400 sampled challenges while curated edges still surfaced.
-- Nov 5 now generates while retaining fixed roll/stage/difficulty/origin composition.
-
-No Supabase migration.
+- Replaced squeezed Streamlit pills in the avatar creator with full-width select boxes.
+- Category and option labels remain fully readable on narrow phones.
+- Live preview and all avatar/medal behavior remain intact.
+- Phase 2K.12 scorecard realism is unchanged.
+- app.py is the only runtime file changed from Phase 2K.12.
+- No Supabase migration.

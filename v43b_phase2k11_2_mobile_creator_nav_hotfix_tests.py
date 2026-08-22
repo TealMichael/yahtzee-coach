@@ -16,15 +16,15 @@ def run():
     creator = app[start:end]
 
     require("CATEGORY_ICONS" not in creator, "creator contains no emoji/symbol category icons")
-    require('selected_category = st.pills(' in creator, "creator uses compact text-only category pills")
-    require('format_func=lambda category: CATEGORY_LABELS[category].title()' in creator, "category pills show plain readable text")
-    require('chosen_value = st.pills(' in creator, "choices use compact wrapping pills instead of giant card stacks")
+    require('selected_category = st.selectbox(' in creator, "creator uses a mobile-safe readable category select box")
+    require('format_func=lambda category: CATEGORY_LABELS[category].title()' in creator, "category selector shows full plain readable text")
+    require('chosen_value = st.selectbox(' in creator, "choices use a mobile-safe readable select box instead of squeezed pills or giant cards")
     require("avatar_option_tile_html" not in creator, "mobile creator no longer renders a full-size card for every option")
     require('st.columns(3)' not in creator, "mobile creator no longer relies on three-column controls that stack vertically")
     for label in ("CHARACTER", "HAIR", "OUTFIT", "SKIN", "ACCESSORY", "SHOES"):
         require(label in (ROOT / "player_avatar.py").read_text(encoding="utf-8"), f"plain-text category label {label} remains available")
 
-    print("Phase 2K.11.3 compact mobile creator checks passed")
+    print("Mobile creator navigation safety checks passed")
 
 
 if __name__ == "__main__":

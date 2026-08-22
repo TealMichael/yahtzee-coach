@@ -1,18 +1,11 @@
-YAHTZEE COACH v43B PHASE 2K.12 — SCORECARD REALISM
+Yahtzee Coach v43B Phase 2K.12.1
 
-1. No Supabase migration is required.
-2. Replace/update the repository from this release's UPLOAD_TO_GITHUB folder.
-3. With GitHub Desktop, review the changed files before committing. Runtime changes should be limited to:
-   - app.py (release label only)
-   - puzzle_bank.py (realism eligibility + safe Daily fallback)
-   - daily_challenge.py (forward-only Daily version boundary)
-4. Commit and Push origin.
-5. Streamlit should redeploy automatically.
+GitHub Desktop:
+1. Copy the contents of UPLOAD_TO_GITHUB into your local Yahtzee Coach repository.
+2. GitHub Desktop should show app.py plus release/test documentation changes.
+3. Commit with: v43B Phase 2K.12.1 - fix mobile character creator readability
+4. Push origin.
 
-Suggested GitHub commit message:
-v43B Phase 2K.12 - make puzzle scorecards more realistic
+If your repo is already on Phase 2K.12, replacing app.py alone is sufficient for the runtime hotfix.
 
-IMPORTANT DATE SAFETY
-- August 21, 2026 and every earlier Daily remain on their original generator/version and challenge IDs.
-- The new realism filter begins with the August 22, 2026 Daily.
-- If August 22 has already been played on the OLD deployment before you push this release, do not deploy it mid-day; bump the effective boundary first so saved attempts are never reinterpreted.
+No Supabase step is required.

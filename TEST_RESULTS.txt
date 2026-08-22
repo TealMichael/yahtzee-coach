@@ -1,28 +1,39 @@
-Yahtzee Coach v43B Phase 2K.12 test summary
+Yahtzee Coach v43B Phase 2K.12.1 test summary
 
-RESULT: 50/50 current automated test suites pass after updating the intended release/version contracts.
+RESULT: Mobile creator hotfix regressions pass, Daily versioning passes, and exhaustive exact-policy integration passes.
 
-New Phase 2K.12 coverage verifies:
-- exactly 14 of 420 contexts are flagged by the conservative passed-up-open-Yahtzee rule
-- 193,551 of 200,140 Daily-eligible situations remain available (96.7%)
-- Aug 19, Aug 20, and Aug 21 challenge IDs remain exactly unchanged
-- Aug 22 begins the new Daily version forward-only
-- 60 generated Dailies contain zero flagged histories while preserving the locked 5/5 roll, stage, difficulty, and 9/1 origin mixes
-- Bank It or Break It remains occasional
-- curated edge cases remain available
-- Practice sampling contains zero flagged simulated histories
-- Nov 5, 2026 now generates successfully without relaxing hard composition rules
+Phase 2K.12.1 targeted coverage verifies:
+- category selector uses a full-width readable select box
+- avatar choice selector uses a full-width readable select box
+- creator no longer uses squeezed pills for categories or choices
+- full human-readable labels remain intact
+- giant vertical option cards are not reintroduced
+- live avatar draft still updates immediately
+- existing My Player navigation and UI-polish contracts remain intact
 
-Exact integration still passes:
+Exact integration passes:
 - 420 exact scorecard states × 252 canonical rolls × 2 roll stages
 - all 3,669,120 legal hold values audited
 - 840/840 representative expanded-bank reports route through exact mode
 - unsupported states still fail safely to legacy coaching
 
-Protected binaries are unchanged:
-- exact_policy.npz
-- puzzle_bank.npz
-- challenge_catalog.npz
+Game-freeze checksum comparison against Phase 2K.12:
+- yahtzee_engine.py: identical
+- exact_runtime.py: identical
+- exact_mode.py: identical
+- puzzle_bank.py: identical
+- daily_challenge.py: identical
+- daily_store.py: identical
+- supabase_daily_store.py: identical
+- session_learning.py: identical
+- practice_progress.py: identical
+- player_avatar.py: identical
+- retro_podium.py: identical
+- exact_policy.npz: identical
+- puzzle_bank.npz: identical
+- challenge_catalog.npz: identical
+
+Only runtime file changed: app.py
 
 Exact-policy SHA-256:
 cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b

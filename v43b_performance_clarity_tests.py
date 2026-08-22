@@ -23,7 +23,7 @@ def run():
     score_box = section(app, "def score_box_html", "def score_grid_html")
 
     checks = [
-        ("release is Phase 2K.9.1", 'APP_RELEASE = "v43B Phase 2K.12"' in app),
+        ("release is Phase 2K.9.1", 'APP_RELEASE = "v43B Phase 2K.12.1"' in app),
         ("Daily dice controls are fragment-scoped", "@st.fragment\ndef _daily_choice_fragment" in app),
         ("Practice dice controls are fragment-scoped", "@st.fragment\ndef _practice_choice_fragment" in app),
         ("old full-rerun dice guard is no longer installed", app.count("install_dice_scroll_guard()") == 1),

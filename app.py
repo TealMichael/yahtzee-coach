@@ -33,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.12"
+APP_RELEASE = "v43B Phase 2K.12.1"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -2705,6 +2705,7 @@ def render_player_avatar_creator():
             # visible defaults immediately instead of an old pill selection winning.
             for category in AVATAR_CHOICES:
                 st.session_state.pop(f"avatar_choice_pills_{category}_{player_id}", None)
+                st.session_state.pop(f"avatar_choice_select_{category}_{player_id}", None)
             st.rerun()
     with top_right:
         if st.button("↩ Back", use_container_width=True, key="avatar_editor_back_top"):
@@ -2716,29 +2717,32 @@ def render_player_avatar_creator():
     if st.session_state.get(category_key) not in category_options:
         st.session_state[category_key] = "hair"
 
-    selected_category = st.pills(
+    # Mobile-safe controls: Streamlit pills/segmented buttons aggressively squeeze
+    # labels on narrow screens ("Curly" -> "C.."), which made the creator hard to
+    # understand on iPhone. Two normal select boxes keep every label fully readable
+    # while preserving the large live avatar preview above.
+    current_category = st.session_state.get(category_key) or "hair"
+    selected_category = st.selectbox(
         "Customize",
         options=category_options,
-        default=st.session_state.get(category_key),
+        index=category_options.index(current_category),
         format_func=lambda category: CATEGORY_LABELS[category].title(),
-        selection_mode="single",
-        key=f"avatar_category_pills_{player_id}",
+        key=f"avatar_category_select_{player_id}",
     )
-    if selected_category and selected_category != st.session_state.get(category_key):
+    if selected_category != st.session_state.get(category_key):
         st.session_state[category_key] = selected_category
-    selected_category = selected_category or st.session_state.get(category_key) or "hair"
 
     choices = AVATAR_CHOICES[selected_category]
-    chosen_value = st.pills(
+    choice_options = list(choices)
+    selected_value = draft[selected_category]
+    chosen_value = st.selectbox(
         CATEGORY_LABELS[selected_category].title(),
-        options=list(choices),
-        default=draft[selected_category],
+        options=choice_options,
+        index=choice_options.index(selected_value),
         format_func=lambda value: choices[value],
-        selection_mode="single",
-        key=f"avatar_choice_pills_{selected_category}_{player_id}",
-        label_visibility="collapsed",
+        key=f"avatar_choice_select_{selected_category}_{player_id}",
     )
-    if chosen_value and chosen_value != draft[selected_category]:
+    if chosen_value != draft[selected_category]:
         updated = dict(draft)
         updated[selected_category] = chosen_value
         st.session_state.avatar_draft = normalize_avatar_config(updated)

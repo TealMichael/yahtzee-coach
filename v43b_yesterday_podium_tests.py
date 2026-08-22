@@ -22,7 +22,7 @@ def complete(store, player_id, challenge_id, total_loss):
 def run():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
     checks = [
-        ('APP_RELEASE = "v43B Phase 2K.12"' in app, "release advances to Phase 2K.11"),
+        ('APP_RELEASE = "v43B Phase 2K.12.1"' in app, "release advances to Phase 2K.11"),
         ("Yesterday's Final Standings" in app, "new-day recap remains clearly final"),
         ("_challenge_set_id_for_date(yesterday)" in app, "yesterday's deterministic challenge id is preserved"),
         ("personal_medal_moment_html(" in app and "components.html(ceremony" in app, "next-day recap uses personal Pixel Mike medal moment"),
