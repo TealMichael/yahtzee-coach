@@ -161,7 +161,8 @@ def challenge_signature(challenge: dict) -> tuple:
 
 @lru_cache(maxsize=None)
 def _eligible_indices(*, roll_number: int | None = None, stage: str | None = None,
-                      skill_code: int | None = None, origin: str | None = None, daily: bool = False) -> np.ndarray:
+                      skill_code: int | None = None, origin: str | None = None, daily: bool = False,
+                      realistic: bool = False) -> np.ndarray:
     data = _data()
     rows = data["rows"]
     mask = rows["daily_eligible"].astype(bool) if daily else rows["practice_eligible"].astype(bool)
@@ -175,6 +176,8 @@ def _eligible_indices(*, roll_number: int | None = None, stage: str | None = Non
     if origin is not None:
         state_origins = data["origin"][rows["state_index"]]
         mask &= state_origins == origin
+    if realistic:
+        mask &= _realistic_state_mask()[rows["state_index"]]
     return np.flatnonzero(mask)
 
 
@@ -223,7 +226,7 @@ def generate_practice_challenge(
         # practice rather than matching natural dice-frequency distribution.
         available_skills = []
         for skill_code in range(len(data["skill_names"])):
-            idx = _eligible_indices(roll_number=roll_number, stage=stage, skill_code=skill_code, origin=origin)
+            idx = _eligible_indices(roll_number=roll_number, stage=stage, skill_code=skill_code, origin=origin, realistic=True)
             if len(idx):
                 available_skills.append((skill_code, idx, skill_weights.get(data["skill_names"][skill_code], 1.0)))
         if not available_skills:
@@ -232,7 +235,7 @@ def generate_practice_challenge(
             # stage/roll requirements.
             other_origin = "Curated Edge Case" if origin == "Simulated Game" else "Simulated Game"
             for skill_code in range(len(data["skill_names"])):
-                idx = _eligible_indices(roll_number=roll_number, stage=stage, skill_code=skill_code, origin=other_origin)
+                idx = _eligible_indices(roll_number=roll_number, stage=stage, skill_code=skill_code, origin=other_origin, realistic=True)
                 if len(idx):
                     available_skills.append((skill_code, idx, skill_weights.get(data["skill_names"][skill_code], 1.0)))
         if not available_skills:
@@ -269,11 +272,71 @@ def generate_practice_challenge(
             continue
         return challenge
 
-    return fallback if fallback is not None else _challenge_from_row(data["rows"][0])
+    if fallback is not None:
+        return fallback
+    realistic_indices = _eligible_indices(realistic=True)
+    if len(realistic_indices):
+        return _challenge_from_row(data["rows"][int(realistic_indices[0])])
+    return _challenge_from_row(data["rows"][0])
 
 
 DAILY_2K9_EFFECTIVE_DATE = date(2026, 8, 19)
+DAILY_REALISM_EFFECTIVE_DATE = date(2026, 8, 22)
 BANK_BREAK_THEME = "Bank It or Break It?"
+
+# These historical category scores mathematically prove that all five dice on
+# that earlier turn matched.  When the scorecard came from an ordinary
+# simulated game and Yahtzee is still open, that history is distracting rather
+# than merely imperfect: a reasonable player would have taken the open 50.
+# Curated edge cases remain exempt so unusual teaching positions stay possible.
+_PROVEN_YAHTZEE_UPPER_SCORES = {
+    0: 5,   # Ones
+    1: 10,  # Twos
+    2: 15,  # Threes
+    3: 20,  # Fours
+    4: 25,  # Fives
+    5: 30,  # Sixes
+}
+_PROVEN_YAHTZEE_THREE_KIND_SCORES = {5, 30}
+_PROVEN_YAHTZEE_FOUR_KIND_SCORES = {5, 15, 20, 30}
+_PROVEN_YAHTZEE_CHANCE_SCORES = {5, 30}
+
+
+def _scorecard_proves_passed_up_open_yahtzee(state_index: int) -> bool:
+    """Return True only for indisputable simulated-game history errors.
+
+    This is intentionally conservative.  Ugly scores, zeros, missed bonuses,
+    and questionable-but-plausible past choices remain available.  We reject
+    only a simulated scorecard where a filled category mathematically proves an
+    earlier Yahtzee while the Yahtzee box is still open.
+    """
+    data = _data()
+    state_index = int(state_index)
+    if str(data["origin"][state_index]) != "Simulated Game":
+        return False
+    if str(data["yahtzee_status"][state_index]) != "Open":
+        return False
+
+    row = data["scorecards"][state_index]
+    for category_index, forced_score in _PROVEN_YAHTZEE_UPPER_SCORES.items():
+        if int(row[category_index]) == forced_score:
+            return True
+    if int(row[6]) in _PROVEN_YAHTZEE_THREE_KIND_SCORES:
+        return True
+    if int(row[7]) in _PROVEN_YAHTZEE_FOUR_KIND_SCORES:
+        return True
+    if int(row[12]) in _PROVEN_YAHTZEE_CHANCE_SCORES:
+        return True
+    return False
+
+
+@lru_cache(maxsize=1)
+def _realistic_state_mask() -> np.ndarray:
+    data = _data()
+    return np.array([
+        not _scorecard_proves_passed_up_open_yahtzee(index)
+        for index in range(len(data["state_keys"]))
+    ], dtype=bool)
 
 
 def _hold_size_from_code(code: int) -> int:
@@ -436,11 +499,11 @@ def _weekly_family_targets(date_key: str) -> set[str]:
 
 
 @lru_cache(maxsize=8)
-def _bank_break_indices(outcome: str, roll_number: int = 2) -> tuple[int, ...]:
+def _bank_break_indices(outcome: str, roll_number: int = 2, realistic: bool = False) -> tuple[int, ...]:
     data = _data()
     rows = data["rows"]
     matches: list[int] = []
-    for idx in _eligible_indices(roll_number=roll_number, daily=False).tolist():
+    for idx in _eligible_indices(roll_number=roll_number, daily=False, realistic=realistic).tolist():
         row = rows[idx]
         if _bank_break_kind(row) == outcome:
             matches.append(idx)
@@ -455,7 +518,7 @@ def _try_practice_bank_break(avoid_titles: set[str], avoid_signatures: set[tuple
     data = _data()
     preferred_roll = 2 if random.random() < 0.60 else 1
     for outcome in random.sample(["BANK", "BREAK"], k=2):
-        indices = list(_bank_break_indices(outcome, preferred_roll))
+        indices = list(_bank_break_indices(outcome, preferred_roll, realistic=True))
         if not indices:
             continue
         for _ in range(24):
@@ -473,10 +536,10 @@ def _try_practice_bank_break(avoid_titles: set[str], avoid_signatures: set[tuple
 
 
 def _special_bank_break_candidates(*, stage: str, roll_number: int, origin: str, difficulty: str,
-                                   outcome: str) -> list[int]:
+                                   outcome: str, realistic: bool = False) -> list[int]:
     data = _data()
     rows = data["rows"]
-    candidate_idx = _eligible_indices(roll_number=roll_number, stage=stage, origin=origin, daily=False)
+    candidate_idx = _eligible_indices(roll_number=roll_number, stage=stage, origin=origin, daily=False, realistic=realistic)
     matches: list[int] = []
     for idx in candidate_idx.tolist():
         row = rows[idx]
@@ -599,6 +662,8 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
     data = _data()
     rows = data["rows"]
     rng = random.Random(_daily_seed(str(date_key)))
+    day = date.fromisoformat(str(date_key))
+    realism_enabled = day >= DAILY_REALISM_EFFECTIVE_DATE
 
     stage_plan = ["Opening", "Opening", "Midgame", "Midgame", "Midgame",
                   "Late Game", "Late Game", "Late Game", "True Endgame", "True Endgame"]
@@ -614,7 +679,7 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
     target_bank_break = _bank_break_day_plan(str(date_key))
     target_families = _weekly_family_targets(str(date_key))
     messy_roll_target = _stable_daily_random(
-        "messy-roll-presence", date.fromisoformat(str(date_key))
+        "messy-roll-presence", day
     ).random() < 0.60
 
     # Reserve one compatible slot for Bank It or Break It when today's soft
@@ -633,6 +698,7 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
                 origin=origin_plan[slot],
                 difficulty=difficulty_plan[slot],
                 outcome=target_bank_break,
+                realistic=realism_enabled,
             )
             if found:
                 special_slot = slot
@@ -665,10 +731,14 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
         if slot == special_slot:
             candidate_list = [special_index] if special_index is not None else []
         else:
-            candidate_idx = _eligible_indices(roll_number=roll_number, stage=stage, origin=origin, daily=True)
+            candidate_idx = _eligible_indices(
+                roll_number=roll_number, stage=stage, origin=origin, daily=True, realistic=realism_enabled
+            )
             candidate_list = candidate_idx.tolist()
             if not candidate_list:
-                candidate_idx = _eligible_indices(roll_number=roll_number, stage=stage, daily=True)
+                candidate_idx = _eligible_indices(
+                    roll_number=roll_number, stage=stage, daily=True, realistic=realism_enabled
+                )
                 candidate_list = candidate_idx.tolist()
             rng.shuffle(candidate_list)
 
@@ -760,6 +830,44 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
                 best_score = score
                 best_index = idx
 
+        if best_index is None and slot != special_slot:
+            # Weekly family targets are intentionally soft.  A rare slot (for
+            # example, curated True Endgame + Punishing) can contain only Joker
+            # candidates.  In that case, allow an unplanned Joker rather than
+            # failing the entire Daily.  All hard composition rules remain
+            # locked: stage, roll, difficulty, origin, uniqueness, and the
+            # Bank-It-or-Break-It schedule are still enforced.
+            for idx in candidate_list[:30000]:
+                row = rows[idx]
+                state_index = int(row["state_index"])
+                if idx in used_rows or state_index in used_states:
+                    continue
+                if reserved_special_state is not None and state_index == reserved_special_state:
+                    continue
+                diff = data["difficulty_names"][int(row["difficulty_code"])]
+                if diff != target_difficulty:
+                    continue
+                if _bank_break_kind(row) is not None:
+                    continue
+
+                skill_code = int(row["skill_code"])
+                skill_name = data["skill_names"][skill_code]
+                score = 0.0
+                if skill_name in target_families:
+                    score += 4.0
+                seen = skill_counts.get(skill_code, 0)
+                score += 2.5 if seen == 0 else (0.15 if seen == 1 else -3.0 * (seen - 1))
+                tie_count = int(row["tie_count"])
+                if tie_count > 1 and target_difficulty != "Knife-edge":
+                    score -= 5.0
+                gap = float(row["top_gap"])
+                if 0.15 <= gap <= 4.0:
+                    score += 3.0
+                score += rng.random() * 0.01
+                if score > best_score:
+                    best_score = score
+                    best_index = idx
+
         if best_index is None:
             raise RuntimeError("Daily challenge selector could not satisfy its Phase 2K.9 balance constraints.")
 
@@ -774,7 +882,8 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
         challenge["mode"] = "Daily Challenge"
         challenge["daily_date"] = str(date_key)
         challenge["daily_number"] = len(chosen) + 1
-        raw_id = f"42.6-2K9|{date_key}|{challenge['bank_state_key']}|{challenge['dice']}|{challenge['roll_number']}"
+        generation_tag = "42.6-2K12" if realism_enabled else "42.6-2K9"
+        raw_id = f"{generation_tag}|{date_key}|{challenge['bank_state_key']}|{challenge['dice']}|{challenge['roll_number']}"
         challenge["challenge_id"] = sha256(raw_id.encode("utf-8")).hexdigest()[:16]
         chosen.append(challenge)
 
@@ -786,6 +895,7 @@ def generate_daily_challenge_set(date_key: str, count: int = 10) -> list[dict]:
 
     Historical determinism is intentionally preserved so yesterday recaps and
     saved friend results keep resolving to the exact challenge that was played.
+    The conservative scorecard-realism filter begins forward-only on Aug 22, 2026.
     """
     day = date.fromisoformat(str(date_key))
     if day < DAILY_2K9_EFFECTIVE_DATE:

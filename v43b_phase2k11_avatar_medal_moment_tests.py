@@ -36,8 +36,8 @@ def run():
     migration = (ROOT / "v43b_phase2k11_player_avatar_migration.sql").read_text(encoding="utf-8")
     retro = (ROOT / "retro_podium.py").read_text(encoding="utf-8")
 
-    require('APP_RELEASE = "v43B Phase 2K.11.2"' in app, "release advances to Phase 2K.11.1 visual alignment patch")
-    require("CREATE YOUR PLAYER" in app and "🎲 Randomize player" in app, "light avatar creator is available")
+    require('APP_RELEASE = "v43B Phase 2K.12"' in app, "release advances to Phase 2K.11.1 visual alignment patch")
+    require("CREATE YOUR PLAYER" in app and "🎲 Randomize" in app, "light avatar creator is available")
     for category in ("hair", "outfit", "skin", "accessory", "shoes"):
         require(category in AVATAR_CHOICES and len(AVATAR_CHOICES[category]) >= 4, f"{category} has a small useful option set")
     require("avatar_config jsonb" in migration and "avatar_setup_complete" in migration, "avatar choices persist with one additive migration")

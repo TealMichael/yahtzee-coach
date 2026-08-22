@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Focused v43B Phase 2I install/navigation regression checks."""
+"""Regression checks for the Phase 2K.11.3 retirement of the install-mode UI."""
 
 from pathlib import Path
 
@@ -10,16 +10,13 @@ ROOT = Path(__file__).parent
 def run():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
     checks = [
-        ("Home Screen is a third main navigation choice", 'options=["Daily Challenge", "Practice", "📲 Add to Home Screen"]' in app),
+        ("main navigation is Daily / Practice / My Player", 'options=["Daily Challenge", "Practice", "My Player"]' in app),
         ("Daily remains first/default mode", 'st.session_state.app_mode = "Daily Challenge"' in app),
-        ("install content is no longer injected on Daily/Practice home", 'render_install_app_control()' not in app),
-        ("install mode uses native Streamlit UI", 'def render_install_mode(' in app and 'st.tabs(["🍎 iPhone / iPad", "🤖 Android", "💻 Computer"])' in app),
-        ("custom mascot icon is visible in install mode", 'st.image(str(APP_ICON_512_PATH)' in app),
-        ("iPhone instructions name required Safari path", 'Tap the **Share** button' in app and '**Add to Home Screen**' in app and '**Open as Web App**' in app),
-        ("Android instructions are present", '**Add to Home screen** or **Install app**' in app),
-        ("desktop Chrome path is present", 'Cast, save, and share → Install page as app' in app),
-        ("Mac Safari path is present", 'File → Add to Dock' in app),
-        ("no fake install action button remains", 'Show install steps' not in app and 'Install app now' not in app),
+        ("legacy Add-to-Home-Screen navigation is removed", '📲 Add to Home Screen' not in app),
+        ("legacy install page renderer is removed", 'def render_install_mode(' not in app),
+        ("legacy install metadata injection is removed", 'def install_app_shell_metadata(' not in app and 'apple-mobile-web-app-title' not in app),
+        ("old browser-session install mode safely falls back to Daily", 'st.session_state.app_mode not in {"Daily Challenge", "Practice", "My Player"}' in app),
+        ("public app URL remains for invites/sharing", 'PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"' in app),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

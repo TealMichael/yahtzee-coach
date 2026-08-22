@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from daily_challenge import (
     DAILY_CHALLENGE_VERSION,
+    PHASE2K9_DAILY_CHALLENGE_VERSION,
     LEGACY_DAILY_CHALLENGE_VERSION,
     best_exact_streak,
     build_leaderboard,
@@ -27,8 +28,10 @@ def run():
     checks.append(("same date is deterministic", [c["challenge_id"] for c in c1] == [c["challenge_id"] for c in c2]))
     checks.append(("five Roll 1 and five Roll 2", [c["roll_number"] for c in c1].count(1) == 5 and [c["roll_number"] for c in c1].count(2) == 5))
     checks.append(("legacy daily version preserved", all(c["daily_version"] == LEGACY_DAILY_CHALLENGE_VERSION for c in c1)))
-    new_daily = daily_challenges("2026-08-19")
-    checks.append(("2K.9 daily version begins forward-only", all(c["daily_version"] == DAILY_CHALLENGE_VERSION for c in new_daily)))
+    phase2k9_daily = daily_challenges("2026-08-19")
+    checks.append(("2K.9 daily version begins forward-only", all(c["daily_version"] == PHASE2K9_DAILY_CHALLENGE_VERSION for c in phase2k9_daily)))
+    realism_daily = daily_challenges("2026-08-22")
+    checks.append(("2K.12 realism version begins forward-only", all(c["daily_version"] == DAILY_CHALLENGE_VERSION for c in realism_daily)))
     checks.append(("set id stable", challenge_set_id("2026-08-08", c1) == challenge_set_id("2026-08-08", c2)))
 
     records = [fake_record(x) for x in [0, 0, .2, 0, 0, 0, 1.2, 0, .5, 0]]

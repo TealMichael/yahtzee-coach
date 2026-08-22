@@ -20,8 +20,10 @@ from zoneinfo import ZoneInfo
 from puzzle_bank import generate_daily_challenge_set
 
 LEGACY_DAILY_CHALLENGE_VERSION = "43A-bank42.6"
-DAILY_CHALLENGE_VERSION = "43B-bank42.6-2K9"
+PHASE2K9_DAILY_CHALLENGE_VERSION = "43B-bank42.6-2K9"
+DAILY_CHALLENGE_VERSION = "43B-bank42.6-2K12"
 DAILY_2K9_EFFECTIVE_DATE = date(2026, 8, 19)
+DAILY_REALISM_EFFECTIVE_DATE = date(2026, 8, 22)
 DAILY_TIMEZONE = "America/New_York"
 TIE_TOLERANCE = 1e-9
 
@@ -66,7 +68,11 @@ def current_daily_date_key(now: datetime | None = None, timezone_name: str = DAI
 
 def daily_challenge_version(date_key: str) -> str:
     day = date.fromisoformat(str(date_key))
-    return DAILY_CHALLENGE_VERSION if day >= DAILY_2K9_EFFECTIVE_DATE else LEGACY_DAILY_CHALLENGE_VERSION
+    if day >= DAILY_REALISM_EFFECTIVE_DATE:
+        return DAILY_CHALLENGE_VERSION
+    if day >= DAILY_2K9_EFFECTIVE_DATE:
+        return PHASE2K9_DAILY_CHALLENGE_VERSION
+    return LEGACY_DAILY_CHALLENGE_VERSION
 
 
 def daily_challenges(date_key: str) -> list[dict]:

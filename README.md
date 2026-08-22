@@ -1,41 +1,42 @@
-# Yahtzee Coach v43B Phase 2K.11.2 — Pre-Deployment Player Polish
+# Yahtzee Coach v43B Phase 2K.12 — Scorecard Realism
 
-Phase 2K.11.2 finishes the **My Player + Personal Medal Moments** retention feature before deployment. This is still presentation/social icing only; the Yahtzee game and exact strategy layer are frozen.
+Phase 2K.12 makes generated puzzle scorecards feel more like believable Yahtzee games without changing the exact strategy engine or flattening the puzzle pool.
 
 ## What changed
 
-- **Broader character creation.** Two unlabeled base character silhouettes (`Classic` and `Soft`) work with every hairstyle, outfit, skin tone, accessory, and shoe choice.
-- **More hairstyle representation.** Ponytail, bob, long waves, high bun, and braids join the existing curly/spiky/short/sweep/buzz choices.
-- **More outfit variety.** Teal Sport and Purple Skirt join the existing six looks.
-- **No gender gate.** Players simply choose the sprite pieces that look right to them; the app never asks Male/Female.
-- **Per-group medal cabinet.** My Player now has its own group selector when a player belongs to multiple friend groups. Medal totals stay separate by group, and browsing this selector cannot switch the active Daily competition group.
-- **Medals sit directly under the player preview** in My Player, matching the personal medal moment hierarchy.
-- **Avatar render safety regression.** Every creator option is rendered in idle, medal-receive, and celebration poses during automated testing.
-- **Hard game-freeze hash guards.** The regression suite now fails if any protected game/strategy file changes during a presentation-only release.
+- Added a conservative scorecard-plausibility filter for normal Simulated Game puzzles.
+- A simulated scorecard is filtered only when a filled category mathematically proves an earlier Yahtzee while the Yahtzee box is still open.
+- This catches distracting histories such as Sixes = 30 or Fives = 25 with Yahtzee still open, plus the small set of 3K/4K/Chance totals that can only come from five matching dice.
+- Curated Edge Case scorecards remain exempt so deliberately unusual teaching positions stay available.
+- Practice uses the realism filter immediately.
+- Daily uses the filter forward-only beginning 2026-08-22. August 21 and all earlier Dailies remain unchanged.
+- Added a safe selector fallback for rare dates where a hard Daily slot has only Joker candidates even though Joker was not in that week's soft family target. Hard composition rules remain locked.
 
-## Supabase
+## Variety impact
 
-There is **no new Phase 2K.11.2 migration**. The avatar JSON column added by Phase 2K.11 is flexible enough to accept the new `style` field and new option values.
+The audit found only 14 of 420 scorecard contexts with an indisputable passed-up-open-Yahtzee history. After filtering them, 193,551 of 200,140 Daily-eligible situations remain available (96.7%).
 
-If you have **not** already run Phase 2K.11, run `RUN_THIS_ONCE_IN_SUPABASE_Phase2K11.sql` once before deployment. If it is already applied, do nothing in Supabase.
+The locked Daily structure remains:
+- 5 Roll 1 / 5 Roll 2
+- 2 Opening / 3 Midgame / 3 Late Game / 2 True Endgame
+- 2 Clear / 3 Medium / 2 Hard / 2 Punishing / 1 Knife-edge
+- 9 Simulated Game / 1 Curated Edge Case
+- Bank It or Break It remains occasional and balanced
 
-## Game / strategy freeze
+## Strategy safety
 
-Byte-for-byte unchanged from Phase 2K.11.1:
-
+Unchanged:
 - `yahtzee_engine.py`
 - `exact_runtime.py`
 - `exact_mode.py`
-- `puzzle_bank.py`
-- `daily_challenge.py`
-- `daily_store.py`
-- `supabase_daily_store.py`
-- `session_learning.py`
-- `practice_progress.py`
 - `exact_policy.npz`
 - `puzzle_bank.npz`
 - `challenge_catalog.npz`
+- persistence stores, player/avatar system, medal system, and UI from 2K.11.3
 
-Protected exact-policy SHA-256:
-
+Exact-policy SHA-256 remains:
 `cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b`
+
+## Supabase
+
+No Supabase migration is required for Phase 2K.12.

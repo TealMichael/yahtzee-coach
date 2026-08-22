@@ -29,7 +29,7 @@ def run():
         ("Returning Player is the first/default identity tab", 'st.tabs(["Returning Player", "Create Player"])' in identity),
         ("identity page removes version/database language", "v43B" not in identity and "Phase 2" not in identity and "database" not in identity and "secure hash" not in identity),
         ("identity page keeps simple private-PIN reassurance", "Your PIN is private." in identity),
-        ("signed-in status is compact", 'st.caption(f"👤 **{name}**")' in app and "permanent v43B player" not in app),
+        ("signed-in account controls are off the Daily page", "def render_my_player_mode():" in app and "Signed in as {player_name}" in app and "permanent v43B player" not in app),
         ("Daily intro removes prototype/version badges", "prototype-badge" not in intro and "v43B" not in intro and "official attempt" not in intro),
         ("completed hero removes saved/progress implementation chatter", "Challenge ID" not in results and "10/10 submitted" not in results and "100% saved" not in results),
         ("completed page hierarchy starts result then share then friends", share_pos < social_pos < review_pos),

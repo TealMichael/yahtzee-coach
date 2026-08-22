@@ -7,6 +7,7 @@ import random
 
 from daily_challenge import (
     DAILY_CHALLENGE_VERSION,
+    PHASE2K9_DAILY_CHALLENGE_VERSION,
     LEGACY_DAILY_CHALLENGE_VERSION,
     challenge_set_id,
     daily_challenges,
@@ -41,9 +42,11 @@ def _pattern(dice):
 def test_forward_only_version_boundary():
     legacy = daily_challenges("2026-08-18")
     current = daily_challenges("2026-08-19")
+    realism = daily_challenges("2026-08-22")
     assert [item["challenge_id"] for item in legacy] == LEGACY_AUG18_IDS
     assert all(item["daily_version"] == LEGACY_DAILY_CHALLENGE_VERSION for item in legacy)
-    assert all(item["daily_version"] == DAILY_CHALLENGE_VERSION for item in current)
+    assert all(item["daily_version"] == PHASE2K9_DAILY_CHALLENGE_VERSION for item in current)
+    assert all(item["daily_version"] == DAILY_CHALLENGE_VERSION for item in realism)
     assert challenge_set_id("2026-08-18", legacy).startswith("2026-08-18-")
     assert challenge_set_id("2026-08-19", current).startswith("2026-08-19-")
     print("PASS 2K.9 forward-only boundary preserves the exact Aug 18 Daily and historical version")

@@ -1,35 +1,21 @@
-Yahtzee Coach current release: v43B Phase 2K.11.2
+Yahtzee Coach current release: v43B Phase 2K.12
 
-This is the FINAL WEEKEND BUILD replacement for Phase 2K.11.2.
+Primary change: conservative scorecard-realism eligibility for generated puzzles.
 
-MOBILE CREATOR NAVIGATION FIX:
-- Do not restore the old symbol-heavy st.pills category selector.
-- Some phones/browsers promoted those glyphs into oversized emoji and hid the category text.
-- Create Your Player now uses two rows of three plain-text native buttons: Character, Hair, Outfit, Skin, Accessory, Shoes.
-- Selected category is indicated with native primary-button styling.
-- Selected-category heading is text-only.
+Locked decisions:
+- Do NOT require perfect historical play.
+- Keep zeros, weak scores, missed bonuses, ugly boards, and questionable-but-plausible histories.
+- Filter only Simulated Game contexts that mathematically prove an earlier Yahtzee while Yahtzee is still open.
+- Curated Edge Case contexts remain available.
+- Do not alter exact strategy math or protected bank binaries.
+- Daily realism is forward-only from 2026-08-22; Aug 21 and earlier challenge IDs are preserved.
+- November 5, 2026 selector failure is fixed by relaxing only the soft weekly Joker-family preference when a hard slot otherwise has no candidate.
 
-LOCKED PRODUCT DIRECTION:
-- Personal reward moment stays simple: Pixel Mike + signed-in player's sprite + one medal + All-Time Medals.
-- Light retro preview remains the art-direction source of truth.
-- No stadium/podium production, audio, or unnecessary animation.
-- Character creator stays lightweight and category-first.
-- Two unlabeled base character silhouettes are available; every hairstyle/outfit/skin/accessory/shoe works with either.
+Audit facts:
+- 14 / 420 scorecard contexts flagged.
+- 193,551 / 200,140 Daily-eligible situations retained (96.7%).
+- Phase 2K.12 60-day regression: 0 flagged histories in generated Daily puzzles.
+- Practice regression: 0 flagged histories in 400 sampled challenges while curated edges still surfaced.
+- Nov 5 now generates while retaining fixed roll/stage/difficulty/origin composition.
 
-MEDAL CABINETS:
-- Medals remain derived from real historical Daily standings; do not store duplicate medal totals.
-- Medal totals are group-specific.
-- My Player can browse group-specific medal cabinets without changing the active Daily group.
-
-SUPABASE:
-- No new 2K.11.2 migration.
-- Existing RUN_THIS_ONCE_IN_SUPABASE_Phase2K11.sql remains the only avatar schema step.
-
-GAME / STRATEGY FREEZE:
-The mobile navigation fix changes app.py presentation only. The exact solver, puzzle generator, Daily generator, stores, session/practice state, and protected banks remain frozen.
-
-VALIDATION:
-- 48/48 automated suites pass.
-- 210 avatar style/option/pose renders validated.
-- Exhaustive exact integration passes all 3,669,120 legal hold values.
-- exact_policy.npz SHA-256 remains cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b.
+No Supabase migration.

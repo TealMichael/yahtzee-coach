@@ -1,20 +1,30 @@
-Yahtzee Coach v43B Phase 2K.11.2 FINAL weekend build test summary
+Yahtzee Coach v43B Phase 2K.12 test summary
 
-RESULT: PASS
+RESULT: 50/50 current automated test suites pass after updating the intended release/version contracts.
 
-- 48/48 current automated test suites pass.
-- New mobile creator navigation regression verifies:
-  - Create Your Player no longer uses st.pills for category navigation.
-  - No symbol/emoji category icons remain in that navigation/header.
-  - Six categories render as two three-column rows of plain-text native buttons.
-  - Selected category uses native primary-button highlighting.
-- Phase 2K.11.2 avatar safety regression still validates 210 style/option/pose renders.
-- Multi-group medal-cabinet regression remains green.
-- Game-freeze SHA-256 guards remain green for the exact engine, Daily/puzzle generator, stores, session/practice state, and protected data banks.
-- Exhaustive exact-policy integration passes all 3,669,120 legal hold values.
-- Exact-first routing, Daily generation, Bank It or Break It, tie ranking, close-call coaching, share colors, persistence, social/friends, login, scorecard, Practice, yesterday results, avatar persistence, and medal history regressions remain green.
+New Phase 2K.12 coverage verifies:
+- exactly 14 of 420 contexts are flagged by the conservative passed-up-open-Yahtzee rule
+- 193,551 of 200,140 Daily-eligible situations remain available (96.7%)
+- Aug 19, Aug 20, and Aug 21 challenge IDs remain exactly unchanged
+- Aug 22 begins the new Daily version forward-only
+- 60 generated Dailies contain zero flagged histories while preserving the locked 5/5 roll, stage, difficulty, and 9/1 origin mixes
+- Bank It or Break It remains occasional
+- curated edge cases remain available
+- Practice sampling contains zero flagged simulated histories
+- Nov 5, 2026 now generates successfully without relaxing hard composition rules
 
-Protected exact-policy SHA-256:
+Exact integration still passes:
+- 420 exact scorecard states × 252 canonical rolls × 2 roll stages
+- all 3,669,120 legal hold values audited
+- 840/840 representative expanded-bank reports route through exact mode
+- unsupported states still fail safely to legacy coaching
+
+Protected binaries are unchanged:
+- exact_policy.npz
+- puzzle_bank.npz
+- challenge_catalog.npz
+
+Exact-policy SHA-256:
 cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b
 
-No new Phase 2K.11.2 Supabase migration is required.
+No Supabase migration is required.

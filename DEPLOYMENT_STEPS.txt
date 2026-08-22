@@ -1,33 +1,18 @@
-YAHTZEE COACH v43B PHASE 2K.11.2 — FINAL WEEKEND DEPLOYMENT
-Mobile Player Creator Navigation Fix Included
+YAHTZEE COACH v43B PHASE 2K.12 — SCORECARD REALISM
 
-SUPABASE:
-- There is NO new Phase 2K.11.2 migration.
-- If Phase 2K.11 has never been deployed, run RUN_THIS_ONCE_IN_SUPABASE_Phase2K11.sql once first.
-- If that migration is already applied, skip Supabase completely.
+1. No Supabase migration is required.
+2. Replace/update the repository from this release's UPLOAD_TO_GITHUB folder.
+3. With GitHub Desktop, review the changed files before committing. Runtime changes should be limited to:
+   - app.py (release label only)
+   - puzzle_bank.py (realism eligibility + safe Daily fallback)
+   - daily_challenge.py (forward-only Daily version boundary)
+4. Commit and Push origin.
+5. Streamlit should redeploy automatically.
 
-DEPLOY:
-1. Upload ALL files inside UPLOAD_TO_GITHUB/ to the ROOT of the GitHub repo.
-2. Commit with:
-   v43B Phase 2K.11.2 - fix mobile player creator navigation
-3. Wait for Streamlit to redeploy.
+Suggested GitHub commit message:
+v43B Phase 2K.12 - make puzzle scorecards more realistic
 
-LIVE TEST — CREATE YOUR PLAYER
-1. Sign in and open 🎨 Make Sprite / 🎨 My Player.
-2. Confirm Customize shows two clean rows of plain-text buttons:
-     Character | Hair | Outfit
-     Skin | Accessory | Shoes
-3. Confirm there are NO oversized emoji/glyph category buttons.
-4. Tap each category and confirm the selected button highlights and its visual choices appear below.
-5. Confirm both Character styles work with the hairstyle/outfit/skin/accessory/shoe choices.
-6. Confirm Randomize and Save & Continue still work.
-7. If the player belongs to multiple groups, verify the Medal cabinet selector changes only the cabinet being viewed, not the active Daily group.
-
-LIVE TEST — MEDAL MOMENT
-1. Use a player with finalized group results yesterday and an unstarted Daily today.
-2. Confirm Pixel Mike + saved player sprite + medal handoff render cleanly.
-3. Confirm All-Time Medals appear under the character and tie behavior matches the official leaderboard.
-4. Confirm SKIP/tap-to-finish, reduced motion, and PLAY TODAY'S 10 still work.
-
-GAME FREEZE CHECK:
-Do not expect ANY change to puzzles, exact holds, Points Lost, Daily composition, coaching math, Practice strategy, scorecard behavior, persistence, friends, or tie ranking. This final fix is character-creator presentation only.
+IMPORTANT DATE SAFETY
+- August 21, 2026 and every earlier Daily remain on their original generator/version and challenge IDs.
+- The new realism filter begins with the August 22, 2026 Daily.
+- If August 22 has already been played on the OLD deployment before you push this release, do not deploy it mid-day; bump the effective boundary first so saved attempts are never reinterpreted.

@@ -30,9 +30,9 @@ def run():
         ("fresh schema allows guarded pre-submit updates", "guard_daily_answer_update" in schema and "Completed Daily answers cannot be changed" in schema),
         ("fresh schema still blocks deletes", "prevent_daily_answer_delete" in schema and "Daily answers cannot be deleted" in schema),
         ("migration replaces old no-update trigger", "drop trigger if exists daily_answers_no_update" in migration and "daily_answers_update_guard" in migration),
-        ("home-screen button is visible outside active run", "📲 Add Yahtzee Coach to your Home Screen" in app and "Add to Home Screen" in app),
-        ("iOS and Android install instructions exist", "🍎 iPhone / iPad" in app and "🤖 Android" in app and "Add to Home screen" in app),
-        ("home-screen help does not falsely promise forced install", "cannot press Add to Home Screen automatically" in app),
+        ("My Player is a top-level mode beside Daily and Practice", 'options=["Daily Challenge", "Practice", "My Player"]' in app),
+        ("Add-to-Home-Screen UI has been fully retired", "Add to Home Screen" not in app and "render_install_mode" not in app),
+        ("signed-out My Player points users back to Daily sign-in", "Sign in or create a player from Daily Challenge first." in app),
     ]
 
     failed = [name for name, ok in checks if not ok]
