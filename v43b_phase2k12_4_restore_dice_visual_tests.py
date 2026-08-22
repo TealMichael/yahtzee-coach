@@ -3,7 +3,6 @@ import ast
 
 ROOT = Path(__file__).resolve().parent
 SOURCE = (ROOT / "app.py").read_text(encoding="utf-8")
-OLD_SOURCE = Path('/mnt/data/yc_dice_old/UPLOAD_TO_GITHUB/app.py').read_text(encoding='utf-8') if Path('/mnt/data/yc_dice_old/UPLOAD_TO_GITHUB/app.py').exists() else ''
 
 
 def require(condition, message):
@@ -21,33 +20,23 @@ def function_source(name):
 
 picker = function_source("_render_independent_dice_picker")
 
-# Duplicate-safe interaction remains position keyed.
-require('key=f"{key_prefix}_die_{die_index}"' in picker, "each physical die retains its own widget key")
-require("on_click=_toggle_held_die" in picker, "independent die callback remains in place")
-require("st.pills(" not in SOURCE, "dice input does not regress to st.pills")
-require("st.columns(" not in picker, "dice input does not regress to mobile-hostile columns")
+# Phase 2K.12.5 restores the exact pre-fix widget, not an approximation with st.button.
+require("st.pills(" in picker, "actual pre-fix st.pills dice widget is restored")
+require("st.button(" not in picker, "dice faces are not rendered through undersized native buttons")
+require("format_func=" not in picker, "visual restoration does not revive the duplicate format_func bug")
 
-# Visual target is explicitly restored from the approved pre-bug dice sizing.
-require("Phase 2K.12.4: restore the approved large-die look" in SOURCE, "large-die restoration CSS is release scoped")
-require('div[class*="st-key-daily_dice_"][class*="_die_"]' in SOURCE, "daily dice are styled through stable per-widget key classes")
-require('div[class*="st-key-practice_dice_"][class*="_die_"]' in SOURCE, "practice dice are styled through stable per-widget key classes")
-require("width:clamp(58px, 17vw, 68px)" in SOURCE, "normal dice restore approved 58-68px sizing")
-require("height:clamp(58px, 17vw, 68px)" in SOURCE, "normal dice restore approved square height")
-require("font-size:clamp(3.05rem, 13vw, 3.9rem)" in SOURCE, "die face glyphs restore approved large size")
-require("width:clamp(54px, 16.2vw, 62px)" in SOURCE, "small-phone dice restore approved responsive sizing")
-require("font-size:clamp(2.8rem, 12vw, 3.4rem)" in SOURCE, "small-phone die faces remain large")
-require('width="content"' in picker, "native button width no longer fights CSS sizing")
-require('APP_RELEASE = "v43B Phase 2K.12.4"' in SOURCE, "release label is Phase 2K.12.4")
+# Exact old CSS values from the working pre-fix pill renderer.
+for token in [
+    'div[data-testid="stPills"] div[role="group"]',
+    "gap:0.52rem !important",
+    "width:clamp(56px, 16.5vw, 68px) !important",
+    "height:clamp(56px, 16.5vw, 68px) !important",
+    "font-size:clamp(2.85rem, 11.5vw, 3.55rem) !important",
+    "width:clamp(54px, 16.2vw, 62px) !important",
+    "font-size:clamp(2.8rem, 12vw, 3.4rem) !important",
+]:
+    require(token in SOURCE, f"pre-fix dice visual token is present: {token}")
 
-# If the baseline is available, assert the critical dimensions are literally the same values.
-if OLD_SOURCE:
-    for token in [
-        "width:clamp(58px, 17vw, 68px)",
-        "height:clamp(58px, 17vw, 68px)",
-        "font-size:clamp(3.05rem, 13vw, 3.9rem)",
-        "width:clamp(54px, 16.2vw, 62px)",
-        "font-size:clamp(2.8rem, 12vw, 3.4rem)",
-    ]:
-        require(token in OLD_SOURCE and token in SOURCE, f"restored CSS token matches pre-bug dice: {token}")
+require('APP_RELEASE = "v43B Phase 2K.12.5"' in SOURCE, "release label is Phase 2K.12.5")
 
-print("\nPhase 2K.12.4 restored dice visual regressions: PASS")
+print("\nPhase 2K.12.5 restored dice visual regressions: PASS")

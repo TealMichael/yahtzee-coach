@@ -1,4 +1,4 @@
-Current release: v43B Phase 2K.12.4 — Restored Large Dice Hotfix.
-Runtime delta from Phase 2K.12.3: app.py only.
-The duplicate-dice logic remains position-keyed; this release restores the approved pre-bug dice dimensions and face-glyph sizing.
+Current release: v43B Phase 2K.12.5 — Exact Old Dice Restoration Hotfix.
+Runtime delta from Phase 2K.12.4: app.py only.
+Daily and Practice use the exact pre-fix st.pills dice renderer/CSS again; duplicate safety is preserved through unique underlying option strings without format_func.
 No Supabase migration.

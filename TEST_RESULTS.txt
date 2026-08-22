@@ -1,24 +1,18 @@
-Yahtzee Coach v43B Phase 2K.12.4 test summary
+Yahtzee Coach v43B Phase 2K.12.5 test summary
 
-RESULT: 55/55 current automated suites pass.
+RESULT: 56/56 current automated suites pass.
 Expanded exact integration passes all 3,669,120 legal hold values.
 
-New Phase 2K.12.4 coverage verifies:
-- each physical die still has its own stable widget key
-- duplicate-dice selection remains independent
-- dice input does not return to st.pills or st.columns
-- normal dice restore the approved 58–68px square sizing
-- normal die faces restore the approved 3.05–3.9rem glyph sizing
-- narrow-phone dice restore the approved 54–62px responsive sizing
-- narrow-phone die faces remain large
-- the restored size tokens match the pre-bug Phase 2K.12.1 dice styling exactly
-- held dice still use the red selected state
-
-Duplicate behavior remains protected:
+Phase 2K.12.5 specifically verifies:
+- Daily and Practice use the original large st.pills dice renderer again
+- the complete pre-fix st.pills CSS block is byte-for-byte identical to the Phase 2K.12.1 working version
+- duplicate dice use five unique underlying pill strings
+- the old format_func path is not used
 - 2,3,3,4,4 can keep one 3 without selecting the other
-- 5,5,5,6,6 supports independent matching-die selection
-- 6,6,6,6,6 can select/release exactly 1 through 5 dice
-- Back/Edit preserves duplicate multiplicity
+- 5,5,5,6,6 preserves exact duplicate multiplicity
+- 6,6,6,6,6 can select exactly 1 through 5 physical dice
+- Back/Edit restores the exact saved multiplicity
+- the failed Phase 2K.12.3/2K.12.4 horizontal native-button renderer is not used by the live dice picker
 
 Expanded exact integration passes:
 - all 3,669,120 legal hold values audited

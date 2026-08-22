@@ -1,4 +1,4 @@
-"""Phase 2K.12.3 regression tests for position-keyed duplicate-die input."""
+"""Phase 2K.12.5 regression tests for duplicate-safe dice input."""
 from __future__ import annotations
 
 import ast
@@ -19,16 +19,27 @@ def load_functions(*names):
         raise AssertionError(f"Missing helper functions: {sorted(missing)}")
     module = ast.Module(body=wanted, type_ignores=[])
     ast.fix_missing_locations(module)
-    namespace = {}
+    namespace = {
+        "DICE_FACE": {1: "⚀", 2: "⚁", 3: "⚂", 4: "⚃", 5: "⚄", 6: "⚅"},
+    }
     exec(compile(module, str(APP_PATH), "exec"), namespace)
     return [namespace[name] for name in names]
 
 
-_normalize, toggle_die_index, selected_hold_from_indices, hold_indices_from_values = load_functions(
+(
+    _normalize,
+    selected_hold_from_indices,
+    hold_indices_from_values,
+    unique_dice_label,
+    _dice_pill_options,
+    _indices_from_dice_pill_selection,
+) = load_functions(
     "_normalize_die_indices",
-    "toggle_die_index",
     "selected_hold_from_indices",
     "hold_indices_from_values",
+    "unique_dice_label",
+    "_dice_pill_options",
+    "_indices_from_dice_pill_selection",
 )
 
 
@@ -38,53 +49,46 @@ def require(condition, message):
     print(f"PASS: {message}")
 
 
-# The real-world reported case: 2,3,3,4,4. One physical 3 must stay one 3.
+# Real reported case: visually identical duplicate faces must be distinct underlying pills.
 dice = [2, 3, 3, 4, 4]
-selected = []
-for index in (0, 1, 3):
-    selected = toggle_die_index(selected, index, len(dice))
-require(selected == [0, 1, 3], "2,3,3,4,4 keeps exactly the three tapped physical dice")
-require(selected_hold_from_indices(dice, selected) == [2, 3, 4], "one tapped 3 saves as one 3, not two")
+options = _dice_pill_options(dice)
+require(len(options) == 5 and len(set(options)) == 5, "all five physical dice have unique underlying pill values")
+require(options[1].replace("\u200b", "") == options[2].replace("\u200b", "") == "⚂", "duplicate 3s remain visually identical")
+require(options[3].replace("\u200b", "") == options[4].replace("\u200b", "") == "⚃", "duplicate 4s remain visually identical")
 
-# Tapping the other identical 3 is a separate action and produces the second 3 only then.
-selected = toggle_die_index(selected, 2, len(dice))
-require(selected == [0, 1, 2, 3], "second identical 3 has its own position state")
-require(selected_hold_from_indices(dice, selected) == [2, 3, 3, 4], "second 3 appears only after its own tap")
-selected = toggle_die_index(selected, 1, len(dice))
-require(selected_hold_from_indices(dice, selected) == [2, 3, 4], "releasing first 3 leaves the independently selected second 3")
+selected = [options[0], options[1], options[3]]
+indices = _indices_from_dice_pill_selection(dice, selected)
+require(indices == [0, 1, 3], "2,3,3,4,4 maps exactly the three tapped physical pills")
+require(selected_hold_from_indices(dice, indices) == [2, 3, 4], "one tapped 3 saves as one 3, not two")
 
-# Another duplicate-heavy family.
-dice = [5, 5, 5, 6, 6]
-selected = []
-for index in (1, 4):
-    selected = toggle_die_index(selected, index, len(dice))
-require(selected == [1, 4], "5,5,5,6,6 supports individual matching-die selection")
-require(selected_hold_from_indices(dice, selected) == [5, 6], "duplicate-heavy hold preserves exact multiplicity")
+selected.append(options[2])
+indices = _indices_from_dice_pill_selection(dice, selected)
+require(selected_hold_from_indices(dice, indices) == [2, 3, 3, 4], "second 3 appears only after its own pill is selected")
 
-# Nightmare case: all five faces identical. Every position must still be independently selectable.
+# Nightmare case: five identical faces are still five independently addressable options.
 dice = [6, 6, 6, 6, 6]
-selected = []
-for expected_count, index in enumerate(range(5), start=1):
-    selected = toggle_die_index(selected, index, len(dice))
-    require(len(selected) == expected_count, f"all-six roll can select exactly {expected_count} physical dice")
-    require(selected_hold_from_indices(dice, selected) == [6] * expected_count, f"all-six roll saves exactly {expected_count} sixes")
-for expected_count, index in zip(range(4, -1, -1), range(5)):
-    selected = toggle_die_index(selected, index, len(dice))
-    require(len(selected) == expected_count, f"all-six roll can release back to exactly {expected_count} physical dice")
+options = _dice_pill_options(dice)
+require(len(set(options)) == 5, "five sixes remain five distinct underlying pill options")
+for count in range(1, 6):
+    indices = _indices_from_dice_pill_selection(dice, options[:count])
+    require(indices == list(range(count)), f"all-six roll can select exactly {count} physical dice")
+    require(selected_hold_from_indices(dice, indices) == [6] * count, f"all-six roll saves exactly {count} sixes")
 
-# Back/Edit reconstruction is multiplicity-safe even though saved holds store values, not identities.
+# Back/Edit reconstruction remains multiplicity-safe.
 dice = [2, 3, 3, 4, 4]
 saved_hold = [2, 3, 4]
 restored = hold_indices_from_values(dice, saved_hold)
-require(len(restored) == 3, "Back/Edit restores three physical dice for a three-die saved hold")
-require(selected_hold_from_indices(dice, restored) == saved_hold, "Back/Edit preserves duplicate multiplicity exactly")
+require(selected_hold_from_indices(dice, restored) == saved_hold, "Back/Edit preserves duplicate multiplicity")
 
-# Source-level UI contract: no value-keyed pills; both modes use the position-keyed picker.
-require("st.pills(" not in SOURCE, "Daily and Practice no longer use st.pills for dice input")
-require('key=f"{key_prefix}_die_{die_index}"' in SOURCE, "each die button key contains its physical position")
-require(SOURCE.count("_render_independent_dice_picker(") >= 3, "shared independent picker is used by Daily and Practice")
-require('chosen_hold=selected_hold' in SOURCE, "Daily persistence saves the exact selected hold multiplicity")
-require('st-key-daily_dice_' in SOURCE and 'st-key-practice_dice_' in SOURCE, "scroll guard/styling recognizes both independent pickers")
-require('APP_RELEASE = "v43B Phase 2K.12.4"' in SOURCE, "later hotfix release label is current")
+# Source contract: restore the old pill UI but eliminate the buggy format_func path.
+picker_start = SOURCE.index("def _render_independent_dice_picker")
+picker_end = SOURCE.index("\ndef extract_line", picker_start)
+picker = SOURCE[picker_start:picker_end]
+require("st.pills(" in picker, "dice input uses the original large st.pills renderer")
+require("format_func=" not in picker, "dice input does not use the old buggy format_func path")
+require("options=options" in picker, "unique pill strings are the actual widget options")
+require("_indices_from_dice_pill_selection" in picker, "pill selections map back to physical positions")
+require('chosen_hold=selected_hold' in SOURCE, "Daily persistence saves exact selected hold multiplicity")
+require('APP_RELEASE = "v43B Phase 2K.12.5"' in SOURCE, "release label is Phase 2K.12.5")
 
-print("\nPhase 2K.12.3 duplicate-dice input regressions: PASS")
+print("\nPhase 2K.12.5 duplicate-dice input regressions: PASS")

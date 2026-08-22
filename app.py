@@ -33,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.12.4"
+APP_RELEASE = "v43B Phase 2K.12.5"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -698,7 +698,8 @@ st.markdown(
 
 
 
-    /* Legacy V11 pill styling retained harmlessly for cached markup; live dice input now uses position-keyed buttons. */
+    /* V11 dice picker override: keep the working st.pills behavior, but make the dice visually large.
+       Streamlit has used both stPills and stButtonGroup test ids, so target both. */
     div[data-testid="stButtonGroup"],
     div[data-testid="stPills"] {
         width:100% !important;
@@ -836,8 +837,8 @@ st.markdown(
         font-weight:850;
     }
 
-    /* Phase 2K.12.4: restore the approved large-die look while keeping position-keyed buttons.
-       Each die widget has its own st-key-* CSS class, so duplicates stay independent. */
+    /* Phase 2K.12.4 legacy position-button styling retained harmlessly.
+       Phase 2K.12.5 uses the original st.pills renderer above for the exact pre-fix dice appearance. */
     div[class*="st-key-daily_dice_"][class*="_die_"],
     div[class*="st-key-practice_dice_"][class*="_die_"] {
         flex:0 0 auto !important;
@@ -1337,31 +1338,52 @@ def _toggle_held_die(held_key, die_index, dice_count):
     )
 
 
+def unique_dice_label(index, die):
+    # Zero-width spaces make duplicate dice visually identical but internally unique.
+    return DICE_FACE.get(int(die), str(die)) + ("\u200b" * (index + 1))
+
+
+def _dice_pill_options(dice):
+    """Return five visually identical-to-old but internally unique pill values."""
+    return [unique_dice_label(index, die) for index, die in enumerate(dice)]
+
+
+def _indices_from_dice_pill_selection(dice, selected_options):
+    """Map the unique pill values back to physical die positions."""
+    options = _dice_pill_options(dice)
+    index_by_option = {option: index for index, option in enumerate(options)}
+    return _normalize_die_indices(
+        [index_by_option[option] for option in (selected_options or []) if option in index_by_option],
+        len(dice),
+    )
+
+
 def _render_independent_dice_picker(dice, held_key, key_prefix, disabled=False):
-    """Render five position-keyed die buttons in a responsive horizontal flex container."""
+    """Render the original large pill dice while keeping duplicate dice position-safe.
+
+    Phase 2K.12.5 deliberately restores the exact pre-fix st.pills renderer.  The
+    old duplicate bug came through the format_func path, so each pill is now a
+    unique underlying string and no format_func is used.  The zero-width suffix
+    makes two equal faces look identical while Streamlit still treats them as
+    five distinct physical options.
+    """
     selected = _normalize_die_indices(st.session_state.get(held_key, []), len(dice))
-    st.session_state[held_key] = selected
-    # Horizontal containers are adaptive on narrow screens; unlike st.columns they
-    # don't turn five small dice into oversized horizontally scrolling columns.
-    with st.container(
-        key=f"{key_prefix}_picker",
-        horizontal=True,
-        horizontal_alignment="center",
-        vertical_alignment="center",
-        gap="xsmall",
-    ):
-        for die_index, die in enumerate(dice):
-            st.button(
-                DICE_FACE.get(int(die), str(die)),
-                type="primary" if die_index in selected else "secondary",
-                width="content",
-                disabled=disabled,
-                key=f"{key_prefix}_die_{die_index}",
-                help=f"Die {die_index + 1}: {int(die)}. Tap to {'release' if die_index in selected else 'hold'}.",
-                on_click=_toggle_held_die,
-                args=(held_key, die_index, len(dice)),
-            )
-    return _normalize_die_indices(st.session_state.get(held_key, []), len(dice))
+    options = _dice_pill_options(dice)
+    default_options = [options[index] for index in selected]
+    widget_key = f"{key_prefix}_pills_v2"
+
+    selected_options = st.pills(
+        "Dice to hold",
+        options=options,
+        default=default_options,
+        selection_mode="multi",
+        key=widget_key,
+        label_visibility="collapsed",
+        disabled=disabled,
+    )
+    selected_indices = _indices_from_dice_pill_selection(dice, selected_options)
+    st.session_state[held_key] = selected_indices
+    return selected_indices
 
 
 def extract_line(report, prefix):
@@ -3508,7 +3530,8 @@ def _reset_daily_widget_to_saved(index: int):
     """Discard an un-saved UI change when navigating backward."""
     held_key, dice_key_prefix = _daily_widget_keys(index)
     for key in list(st.session_state.keys()):
-        if str(key).startswith(f"{dice_key_prefix}_die_"):
+        key_text = str(key)
+        if key_text.startswith(f"{dice_key_prefix}_die_") or key_text == f"{dice_key_prefix}_pills_v2":
             del st.session_state[key]
     st.session_state[held_key] = _saved_hold_indices(index)
 

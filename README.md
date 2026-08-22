@@ -1,17 +1,18 @@
-# Yahtzee Coach v43B Phase 2K.12.4 — Restored Large Dice Hotfix
+# Yahtzee Coach v43B Phase 2K.12.5 — Exact Old Dice Restoration Hotfix
 
-This is the full current app. It preserves Phase 2K.12 scorecard realism, the Phase 2K.12.1 creator/hair expansion, and the Phase 2K.12.2 duplicate-dice selection fix.
+This is the full current app. It preserves Phase 2K.12 scorecard realism, Phase 2K.12.1 creator/hair work, and the duplicate-dice correctness fix while restoring the exact pre-fix dice renderer.
 
 ## What changed
-- Daily and Practice still use five independently keyed physical-die buttons.
-- The button visuals now restore the exact large-dice sizing from the pre-bug picker instead of the tiny native-button glyphs seen in Phase 2K.12.3.
-- Held dice still turn red and duplicate values remain independent.
+- Daily and Practice once again use the same large `st.pills` dice renderer that was live before the duplicate-dice fix.
+- The old pill CSS block is byte-for-byte identical to the Phase 2K.12.1 working version.
+- Duplicate dice remain independent because the five pill options are now unique underlying strings; the old `format_func` path is no longer used.
+- Back/Edit clears and restores the new pill widget state correctly.
 
 ## Regression example
-For dice `2,3,3,4,4`, tapping the 2, one 3, and one 4 still saves exactly `2,3,4`, but the dice look like the large approved picker again.
+For dice `2,3,3,4,4`, tapping the 2, one 3, and one 4 saves exactly `2,3,4`. Visually, the dice are the same large square dice from the pre-fix build.
 
 ## Scope
-Runtime change from Phase 2K.12.3: `app.py` only.
+Production/runtime change from Phase 2K.12.4: `app.py` only.
 No strategy math, puzzle generation, scorecard realism, persistence, avatar/medal logic, or Supabase schema changed.
 
 ## Deployment

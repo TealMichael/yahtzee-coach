@@ -1,11 +1,11 @@
-YAHTZEE COACH v43B PHASE 2K.12.4 — RESTORED LARGE DICE HOTFIX
+YAHTZEE COACH v43B PHASE 2K.12.5 — EXACT OLD DICE RESTORATION HOTFIX
 
 1. No Supabase migration is required.
 2. Copy the contents of UPLOAD_TO_GITHUB into your local Yahtzee Coach repository.
-3. In GitHub Desktop, confirm the only production/runtime file changed is app.py. Test/docs files also change for the new regression/version contract.
+3. In GitHub Desktop, confirm the only production/runtime file changed is app.py. Test/docs files also change for the corrected regression contract.
 4. Commit to main.
 5. Push origin.
 6. Streamlit should redeploy automatically.
 
 Suggested GitHub commit message:
-v43B Phase 2K.12.4 - restore large dice while keeping duplicate selection fixed
+v43B Phase 2K.12.5 - restore exact old dice appearance with duplicate-safe selection
