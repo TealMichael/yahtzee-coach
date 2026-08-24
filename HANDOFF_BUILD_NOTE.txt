@@ -1,4 +1,5 @@
-Current release: v43B Phase 2K.12.5 — Exact Old Dice Restoration Hotfix.
-Runtime delta from Phase 2K.12.4: app.py only.
-Daily and Practice use the exact pre-fix st.pills dice renderer/CSS again; duplicate safety is preserved through unique underlying option strings without format_func.
+Current release: v43B Phase 2K.13 — Pure Performance Pass.
+Known-good source of truth: v43B Phase 2K.12.5.
+Runtime delta: app.py, daily_challenge.py, puzzle_bank.py only.
+No gameplay/UI output changes. Daily IDs and seeded Practice output were compared against 2K.12.5 and preserved.
 No Supabase migration.

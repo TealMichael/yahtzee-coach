@@ -1,24 +1,26 @@
-Yahtzee Coach v43B Phase 2K.12.5 test summary
+Yahtzee Coach v43B Phase 2K.13 test summary
 
-RESULT: 56/56 current automated suites pass.
-Expanded exact integration passes all 3,669,120 legal hold values.
+RESULT: 57/57 current automated test suites PASS.
 
-Phase 2K.12.5 specifically verifies:
-- Daily and Practice use the original large st.pills dice renderer again
-- the complete pre-fix st.pills CSS block is byte-for-byte identical to the Phase 2K.12.1 working version
-- duplicate dice use five unique underlying pill strings
-- the old format_func path is not used
-- 2,3,3,4,4 can keep one 3 without selecting the other
-- 5,5,5,6,6 preserves exact duplicate multiplicity
-- 6,6,6,6,6 can select exactly 1 through 5 physical dice
-- Back/Edit restores the exact saved multiplicity
-- the failed Phase 2K.12.3/2K.12.4 horizontal native-button renderer is not used by the live dice picker
+Performance-specific verification:
+- Daily challenge templates are cached process-wide but deep-copied per session.
+- Locked Daily challenge IDs preserved on historical/current/future dates.
+- 31-date baseline-vs-optimized Daily challenge-ID comparison: identical.
+- 50-puzzle seeded Practice baseline-vs-optimized comparison: identical.
+- Dice-pattern optimization verified against all 7,776 possible five-die rolls.
+- Phase 2K.12 scorecard-realism suite: PASS.
+- Phase 2K.9 puzzle-balance suite: PASS.
+- Puzzle-bank 31-day variety/readiness audit: PASS.
+- Exact integration exhaustive audit: 3,669,120 legal hold values PASS.
 
-Expanded exact integration passes:
-- all 3,669,120 legal hold values audited
-- exact strategy/puzzle files remain unchanged
+Benchmark on the same environment:
+- Baseline unique-date Daily generation average: 494.5 ms.
+- Phase 2K.13 unique-date Daily generation average: 348.7 ms.
+- Baseline repeat same-date Daily call: 489.9 ms.
+- Phase 2K.13 repeat same-date Daily call: 0.15 ms.
 
-Exact-policy SHA-256:
-cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b
-
-No Supabase migration is required.
+Protected runtime/data files verified byte-for-byte unchanged from 2K.12.5:
+yahtzee_engine.py, exact_runtime.py, exact_mode.py, daily_store.py,
+supabase_daily_store.py, session_learning.py, practice_progress.py,
+player_avatar.py, retro_podium.py, exact_policy.npz, puzzle_bank.npz,
+challenge_catalog.npz.

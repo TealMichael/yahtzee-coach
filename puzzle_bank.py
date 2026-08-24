@@ -343,9 +343,12 @@ def _hold_size_from_code(code: int) -> int:
     return sum((int(code) >> ((face - 1) * 3)) & 0b111 for face in range(1, 7))
 
 
-def _dice_pattern(values: Iterable[int]) -> str:
-    dice = tuple(int(value) for value in values)
-    counts = sorted((dice.count(face) for face in range(1, 7) if dice.count(face)), reverse=True)
+@lru_cache(maxsize=512)
+def _dice_pattern_cached(dice: tuple[int, ...]) -> str:
+    counts_by_face = [0] * 6
+    for value in dice:
+        counts_by_face[int(value) - 1] += 1
+    counts = sorted((count for count in counts_by_face if count), reverse=True)
     if counts == [5]:
         return "Yahtzee"
     if counts == [4, 1]:
@@ -361,6 +364,16 @@ def _dice_pattern(values: Iterable[int]) -> str:
     return "All different"
 
 
+def _dice_pattern(values: Iterable[int]) -> str:
+    return _dice_pattern_cached(tuple(int(value) for value in values))
+
+
+@lru_cache(maxsize=512)
+def _dice_pattern_for_roll_id(roll_id: int) -> str:
+    """Reuse the tiny finite set of roll patterns inside large selector scans."""
+    return _dice_pattern(tuple(int(value) for value in _data()["rolls"][int(roll_id)]))
+
+
 def _bank_break_kind(row) -> str | None:
     """Classify exact-supported made-Full-House decisions without changing policy data."""
     data = _data()
@@ -368,7 +381,7 @@ def _bank_break_kind(row) -> str | None:
     roll_id = int(row["roll_id"])
     if int(data["scorecards"][state_index][8]) >= 0:  # Full House is already filled.
         return None
-    if _dice_pattern(data["rolls"][roll_id]) != "Full House":
+    if _dice_pattern_for_roll_id(roll_id) != "Full House":
         return None
     return "BANK" if _hold_size_from_code(int(row["best_hold_code"])) == 5 else "BREAK"
 
@@ -744,6 +757,13 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
 
         best_index = None
         best_score = -10**9
+        # These values depend only on already-chosen slots, so calculating them
+        # for every candidate wastes work without changing any selection rule.
+        chosen_live_yahtzees = sum(1 for item in chosen if item.get("yahtzee_status") == "Live 50")
+        chosen_earned_bonus = sum(1 for item in chosen if item.get("bonus_status") == "Earned")
+        chosen_messy = sum(
+            1 for item in chosen if _dice_pattern(item.get("dice", [])) == "All different"
+        )
         for idx in candidate_list[:30000]:
             row = rows[idx]
             state_index = int(row["state_index"])
@@ -786,8 +806,6 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
             else:
                 score -= 3.0 * (seen - 1)
 
-            chosen_live_yahtzees = sum(1 for item in chosen if item.get("yahtzee_status") == "Live 50")
-            chosen_earned_bonus = sum(1 for item in chosen if item.get("bonus_status") == "Earned")
             state_ytz = str(data["yahtzee_status"][state_index])
             state_bonus = str(data["bonus_status"][state_index])
             if state_ytz == "Live 50":
@@ -805,11 +823,8 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
             # Messier rolls are a soft preference, not a quota. The old selector
             # made 97% of Daily dice show a pair/triple/etc.; this gives straight
             # fragments and open-board rerolls a fairer chance to appear.
-            pattern = _dice_pattern(data["rolls"][int(row["roll_id"])])
+            pattern = _dice_pattern_for_roll_id(int(row["roll_id"]))
             if pattern == "All different":
-                chosen_messy = sum(
-                    1 for item in chosen if _dice_pattern(item.get("dice", [])) == "All different"
-                )
                 if messy_roll_target and chosen_messy == 0:
                     score += 0.45
                 else:

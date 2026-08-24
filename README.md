@@ -1,19 +1,23 @@
-# Yahtzee Coach v43B Phase 2K.12.5 — Exact Old Dice Restoration Hotfix
+# Yahtzee Coach v43B Phase 2K.13 — Pure Performance Pass
 
-This is the full current app. It preserves Phase 2K.12 scorecard realism, Phase 2K.12.1 creator/hair work, and the duplicate-dice correctness fix while restoring the exact pre-fix dice renderer.
+This is the full current app based on the known-good Phase 2K.12.5 build. Phase 2K.13 changes only internal performance behavior; gameplay, puzzle selection outputs, UI, scoring, coaching, persistence, avatars, medals, and Supabase behavior are preserved.
 
 ## What changed
-- Daily and Practice once again use the same large `st.pills` dice renderer that was live before the duplicate-dice fix.
-- The old pill CSS block is byte-for-byte identical to the Phase 2K.12.1 working version.
-- Duplicate dice remain independent because the five pill options are now unique underlying strings; the old `format_func` path is no longer used.
-- Back/Edit clears and restores the new pill widget state correctly.
+- Cache the deterministic Daily 10 once per date for the shared Streamlit process, then deep-copy it for each player session.
+- Reduce repeated pure-Python work inside the Daily selector without changing any scoring rule, RNG call, or candidate preference.
+- Remove tracked Python bytecode/cache files and add `.gitignore` protection so they do not return.
 
-## Regression example
-For dice `2,3,3,4,4`, tapping the 2, one 3, and one 4 saves exactly `2,3,4`. Visually, the dice are the same large square dice from the pre-fix build.
+## Measured effect
+On the same benchmark environment:
+- Five uncached Daily dates averaged about 494.5 ms each in Phase 2K.12.5 and about 348.7 ms in Phase 2K.13.
+- Asking for the same Daily again fell from about 489.9 ms to about 0.15 ms because the deterministic template is reused.
+- Repository payload drops by roughly 0.8 MB by removing `__pycache__` artifacts.
 
-## Scope
-Production/runtime change from Phase 2K.12.4: `app.py` only.
-No strategy math, puzzle generation, scorecard realism, persistence, avatar/medal logic, or Supabase schema changed.
+## No behavior drift
+- Key historical/current/future Daily challenge-set IDs remain locked.
+- A 31-date comparison produced identical Daily challenge IDs against Phase 2K.12.5.
+- A seeded 50-puzzle Practice sequence was identical against Phase 2K.12.5.
+- The exact strategy engine and protected `.npz` artifacts are byte-for-byte unchanged.
 
 ## Deployment
-No Supabase migration. Copy the contents of `UPLOAD_TO_GITHUB` into the repo, commit, and push with GitHub Desktop.
+No Supabase migration. Replace/update the repository from `UPLOAD_TO_GITHUB`, commit, and push with GitHub Desktop.

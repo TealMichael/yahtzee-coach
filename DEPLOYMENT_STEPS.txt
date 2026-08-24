@@ -1,11 +1,11 @@
-YAHTZEE COACH v43B PHASE 2K.12.5 — EXACT OLD DICE RESTORATION HOTFIX
+YAHTZEE COACH v43B PHASE 2K.13 — PURE PERFORMANCE PASS
 
 1. No Supabase migration is required.
 2. Copy the contents of UPLOAD_TO_GITHUB into your local Yahtzee Coach repository.
-3. In GitHub Desktop, confirm the only production/runtime file changed is app.py. Test/docs files also change for the corrected regression contract.
+3. In GitHub Desktop, review the changes. Runtime changes are app.py, daily_challenge.py, and puzzle_bank.py. .gitignore is added and tracked __pycache__ files should disappear.
 4. Commit to main.
 5. Push origin.
 6. Streamlit should redeploy automatically.
 
 Suggested GitHub commit message:
-v43B Phase 2K.12.5 - restore exact old dice appearance with duplicate-safe selection
+v43B Phase 2K.13 - improve performance with no gameplay or UI changes

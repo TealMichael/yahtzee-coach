@@ -10,10 +10,12 @@ coverage; the live v43B Phase 2D app uses Supabase friend groups and real result
 """
 
 from dataclasses import dataclass
+from copy import deepcopy
 from datetime import date, datetime
 from hashlib import sha256
 import math
 import random
+from functools import lru_cache
 from typing import Mapping, Sequence
 from zoneinfo import ZoneInfo
 
@@ -75,15 +77,26 @@ def daily_challenge_version(date_key: str) -> str:
     return LEGACY_DAILY_CHALLENGE_VERSION
 
 
-def daily_challenges(date_key: str) -> list[dict]:
-    """Return the deterministic Daily 10, decorated with its date-safe version id."""
+@lru_cache(maxsize=16)
+def _cached_daily_challenge_template(date_key: str) -> tuple[dict, ...]:
+    """Build one deterministic Daily template per date for the shared app process.
+
+    Every player receives the same Daily 10, so recomputing the selector for each
+    new Streamlit session only wastes CPU.  The public helper returns a deep copy
+    below so no session can mutate the shared cached template.
+    """
     challenges = generate_daily_challenge_set(str(date_key), count=10)
     version = daily_challenge_version(str(date_key))
     for number, challenge in enumerate(challenges, start=1):
         challenge["daily_number"] = number
         challenge["daily_version"] = version
         challenge["daily_date"] = str(date_key)
-    return challenges
+    return tuple(challenges)
+
+
+def daily_challenges(date_key: str) -> list[dict]:
+    """Return an isolated copy of the deterministic Daily 10 for this session."""
+    return deepcopy(list(_cached_daily_challenge_template(str(date_key))))
 
 
 def challenge_set_id(date_key: str, challenges: Sequence[Mapping]) -> str:

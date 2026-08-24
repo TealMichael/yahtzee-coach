@@ -26,6 +26,6 @@ require("format_func=" not in picker, "restored pill renderer avoids duplicate-s
 require("selection_mode=\"multi\"" in picker, "five physical dice can be selected independently")
 require("div[data-testid=\"stPills\"]" in SOURCE, "pre-fix pill CSS remains present")
 require("flex-wrap:nowrap" in SOURCE, "old one-row dice layout is protected")
-require('APP_RELEASE = "v43B Phase 2K.12.5"' in SOURCE, "release label is Phase 2K.12.5")
+require('APP_RELEASE = "v43B Phase 2K.13"' in SOURCE, "release label is Phase 2K.12.5")
 
 print("\nPhase 2K.12.5 mobile dice layout regressions: PASS")
