@@ -81,7 +81,7 @@ require(all(_dice_pattern(roll) == reference_pattern(list(roll)) for roll in pro
         "dice-pattern optimization preserves all 7,776 possible five-die rolls")
 
 app = (ROOT / "app.py").read_text(encoding="utf-8")
-require('APP_RELEASE = "v43B Phase 2K.13"' in app, "release label is Phase 2K.13")
+require('APP_RELEASE = "v43B Phase 2K.13.1"' in app, "release label is Phase 2K.13")
 
 # Hard guards: no strategy, persistence, social, avatar, or binary-data implementation changed.
 EXPECTED_HASHES = {

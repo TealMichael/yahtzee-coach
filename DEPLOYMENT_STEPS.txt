@@ -1,11 +1,12 @@
-YAHTZEE COACH v43B PHASE 2K.13 — PURE PERFORMANCE PASS
+YAHTZEE COACH v43B PHASE 2K.13.1 — DEPLOYMENT
 
-1. No Supabase migration is required.
-2. Copy the contents of UPLOAD_TO_GITHUB into your local Yahtzee Coach repository.
-3. In GitHub Desktop, review the changes. Runtime changes are app.py, daily_challenge.py, and puzzle_bank.py. .gitignore is added and tracked __pycache__ files should disappear.
-4. Commit to main.
+1. In GitHub Desktop, open the Yahtzee Coach repository.
+2. Replace/update the repo from the contents of this UPLOAD_TO_GITHUB folder.
+3. Review the changes. Runtime change should be app.py only; test/release-note files also change/add.
+4. Commit to main with:
+   v43B Phase 2K.13.1 - speed up remembered auto-login
 5. Push origin.
-6. Streamlit should redeploy automatically.
+6. No Supabase migration is required.
 
-Suggested GitHub commit message:
-v43B Phase 2K.13 - improve performance with no gameplay or UI changes
+TESTING NOTE
+The first fresh launch after deployment may still use localStorage once to heal the cookie. Let it complete, fully close the tab/app, then reopen for the meaningful fast-path test.

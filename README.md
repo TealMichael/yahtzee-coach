@@ -1,23 +1,19 @@
-# Yahtzee Coach v43B Phase 2K.13 — Pure Performance Pass
+# Yahtzee Coach v43B Phase 2K.13.1 — Auto-Login Fast Path
 
-This is the full current app based on the known-good Phase 2K.12.5 build. Phase 2K.13 changes only internal performance behavior; gameplay, puzzle selection outputs, UI, scoring, coaching, persistence, avatars, medals, and Supabase behavior are preserved.
+This is a narrow performance patch on top of Phase 2K.13. It changes only the remembered-login startup path. Gameplay, UI, puzzles, scoring, exact strategy, persistence behavior, avatars, medals, and Supabase schema are unchanged.
 
 ## What changed
-- Cache the deterministic Daily 10 once per date for the shared Streamlit process, then deep-copy it for each player session.
-- Reduce repeated pure-Python work inside the Daily selector without changing any scoring rule, RNG call, or candidate preference.
-- Remove tracked Python bytecode/cache files and add `.gitignore` protection so they do not return.
+- The Components-v2 localStorage bridge now mirrors a valid remembered-device token into the existing secure SameSite first-party cookie.
+- On future fresh browser/Streamlit connections where that cookie is present, the app authenticates the cookie before mounting the localStorage bridge.
+- A successful cookie restore skips the localStorage component entirely, avoiding its browser-to-Python state update and extra script rerun.
+- A stale/invalid cookie does not block localStorage recovery; the app falls back to the durable localStorage token exactly as before.
+- Sign-out still revokes the server-side device session and clears both browser credentials.
 
-## Measured effect
-On the same benchmark environment:
-- Five uncached Daily dates averaged about 494.5 ms each in Phase 2K.12.5 and about 348.7 ms in Phase 2K.13.
-- Asking for the same Daily again fell from about 489.9 ms to about 0.15 ms because the deterministic template is reused.
-- Repository payload drops by roughly 0.8 MB by removing `__pycache__` artifacts.
+## First-launch behavior after deployment
+Existing remembered users may still take the old localStorage path once after this patch if their browser does not already have the cookie. That successful localStorage read now heals the cookie. The next fresh launch is the meaningful speed test.
 
-## No behavior drift
-- Key historical/current/future Daily challenge-set IDs remain locked.
-- A 31-date comparison produced identical Daily challenge IDs against Phase 2K.12.5.
-- A seeded 50-puzzle Practice sequence was identical against Phase 2K.12.5.
-- The exact strategy engine and protected `.npz` artifacts are byte-for-byte unchanged.
+## Safety
+No Supabase migration. All gameplay/data engines and protected NPZ files are byte-for-byte unchanged from Phase 2K.13.
 
-## Deployment
-No Supabase migration. Replace/update the repository from `UPLOAD_TO_GITHUB`, commit, and push with GitHub Desktop.
+## Tests
+58/58 automated suites pass, including the exhaustive 3,669,120 legal-hold exact-policy audit.

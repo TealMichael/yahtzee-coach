@@ -22,7 +22,7 @@ def run():
     app = (ROOT / "app.py").read_text()
     req = (ROOT / "requirements.txt").read_text()
 
-    checks.append(("later release preserves remembered-login bridge", 'APP_RELEASE = "v43B Phase 2K.13"' in app))
+    checks.append(("later release preserves remembered-login bridge", 'APP_RELEASE = "v43B Phase 2K.13.1"' in app))
     checks.append(("browser localStorage has a dedicated key", 'REMEMBER_STORAGE_KEY = "yc_remember_device_v2"' in app))
     checks.append(("uses Streamlit Components v2 bridge", 'st.components.v2.component(' in app and 'yahtzee_remember_storage' in app))
     checks.append(("bridge reads browser localStorage", 'window.localStorage.getItem(key)' in app))
@@ -36,7 +36,9 @@ def run():
     checks.append(("legacy secure same-site cookie remains fallback", 'SameSite=Lax; Secure' in app and 'st.context.cookies.get(REMEMBER_COOKIE_NAME' in app))
     checks.append(("PIN is never sent to localStorage bridge", 'return_pin' not in app[app.index('def render_remember_storage_bridge'):app.index('def render_pending_remember_cookie_command')]))
     checks.append(("Components-v2-capable Streamlit is required", 'streamlit>=1.52' in req))
-    checks.append(("bridge runs before restore", app.index('_remember_storage_state = render_remember_storage_bridge()') < app.index('_restore_remembered_player(_remember_storage_state)')))
+    main = app[app.rindex('\ninitialize_state()\n'):]
+    checks.append(("cookie fast path runs before localStorage fallback", main.index('_restore_remembered_cookie_fast_path(_remember_cookie_token)') < main.index('render_remember_storage_bridge()')))
+    checks.append(("localStorage fallback ignores a stale cookie already tried", '_restore_remembered_player(_remember_storage_state, cookie_token="")' in app))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

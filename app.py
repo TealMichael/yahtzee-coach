@@ -33,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.13"
+APP_RELEASE = "v43B Phase 2K.13.1"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -63,14 +63,23 @@ _remember_storage_component = st.components.v2.component(
       const action = data?.action || "read";
       const token = data?.token || "";
       const nonce = data?.nonce || "";
+      const cookieName = data?.cookie_name || "yc_remember_device_v1";
+      const cookieMaxAge = Number(data?.cookie_max_age || 0);
       let stored = "";
       try {
         if (action === "set" && token) {
           window.localStorage.setItem(key, token);
         } else if (action === "delete") {
           window.localStorage.removeItem(key);
+          document.cookie = `${cookieName}=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure`;
         }
         stored = window.localStorage.getItem(key) || "";
+        // Keep a first-party cookie synchronized with the durable localStorage
+        // token. On the next fresh Streamlit connection, Python can restore the
+        // player from the initial request without waiting for this component.
+        if (stored) {
+          document.cookie = `${cookieName}=${stored}; Path=/; Max-Age=${cookieMaxAge}; SameSite=Lax; Secure`;
+        }
       } catch (err) {
         stored = "";
       }
@@ -2275,6 +2284,8 @@ def render_remember_storage_bridge() -> dict:
                 "action": action,
                 "token": token,
                 "nonce": nonce,
+                "cookie_name": REMEMBER_COOKIE_NAME,
+                "cookie_max_age": REMEMBER_COOKIE_MAX_AGE,
             },
             default={"payload": default_payload},
             on_payload_change=lambda: None,
@@ -2407,12 +2418,38 @@ def render_pending_remember_cookie_command():
     st.session_state.remember_cookie_command = None
 
 
-def _restore_remembered_player(storage_state: dict | None = None):
-    """Restore a player from localStorage first, with the old cookie as a fallback."""
+def _restore_remembered_cookie_fast_path(cookie_token: str) -> bool:
+    """Restore directly from the first-request cookie without mounting localStorage."""
+    if st.session_state.get("active_player_id") or st.session_state.get("remember_restore_checked"):
+        return False
+    token = str(cookie_token or "").strip()
+    if not token:
+        return False
+    try:
+        player = load_daily_store().authenticate_device_session(token)
+    except Exception as exc:
+        if database_check_enabled():
+            st.caption(f"Remembered-login cookie detail: {type(exc).__name__}: {exc}")
+        # Do not mark restore complete. The localStorage bridge may contain a
+        # newer valid token and remains the compatibility fallback.
+        return False
+    if player is None:
+        # A stale cookie must not suppress a potentially valid localStorage token.
+        return False
+    st.session_state.remember_restore_checked = True
+    _activate_player(player, created=False)
+    st.session_state.active_device_token = token
+    return True
+
+
+def _restore_remembered_player(storage_state: dict | None = None, *, cookie_token: str | None = None):
+    """Restore a player from localStorage first, with an optional cookie fallback."""
     if st.session_state.get("active_player_id") or st.session_state.get("remember_restore_checked"):
         return
     storage_state = storage_state or {}
-    cookie_token = _browser_remember_cookie()
+    if cookie_token is None:
+        cookie_token = _browser_remember_cookie()
+    cookie_token = str(cookie_token or "").strip()
     storage_token = str(storage_state.get("token") or "").strip()
     storage_ready = bool(storage_state.get("ready"))
 
@@ -4538,8 +4575,17 @@ def render_help_feedback_footer():
 initialize_state()
 initialize_daily_state()
 initialize_player_identity_state()
-_remember_storage_state = render_remember_storage_bridge()
-_restore_remembered_player(_remember_storage_state)
+_remember_cookie_token = _browser_remember_cookie()
+_remember_cookie_restored = _restore_remembered_cookie_fast_path(_remember_cookie_token)
+if _remember_cookie_restored:
+    # Skip the Components-v2 localStorage bridge entirely on the fast path.
+    # That avoids its browser -> Python state update and the extra script rerun.
+    _remember_storage_state = {"token": "", "ready": True}
+else:
+    _remember_storage_state = render_remember_storage_bridge()
+    # The cookie was already tried above. Let localStorage decide the fallback
+    # so a stale cookie cannot hide a newer valid browser token.
+    _restore_remembered_player(_remember_storage_state, cookie_token="")
 render_yesterday_result_storage_bridge()
 if _pending_invite_code():
     st.session_state.app_mode = "Daily Challenge"

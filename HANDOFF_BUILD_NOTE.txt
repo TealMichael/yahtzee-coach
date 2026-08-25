@@ -1,5 +1,3 @@
-Current release: v43B Phase 2K.13 — Pure Performance Pass.
-Known-good source of truth: v43B Phase 2K.12.5.
-Runtime delta: app.py, daily_challenge.py, puzzle_bank.py only.
-No gameplay/UI output changes. Daily IDs and seeded Practice output were compared against 2K.12.5 and preserved.
-No Supabase migration.
+Current release: v43B Phase 2K.13.1 — Auto-Login Fast Path.
+Known-good base: v43B Phase 2K.13 Pure Performance Pass.
+Scope: remembered-login startup only; no gameplay/UI/puzzle/persistence schema changes.

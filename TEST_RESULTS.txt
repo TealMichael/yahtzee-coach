@@ -1,26 +1,9 @@
-Yahtzee Coach v43B Phase 2K.13 test summary
+Yahtzee Coach v43B Phase 2K.13.1 test summary
 
-RESULT: 57/57 current automated test suites PASS.
-
-Performance-specific verification:
-- Daily challenge templates are cached process-wide but deep-copied per session.
-- Locked Daily challenge IDs preserved on historical/current/future dates.
-- 31-date baseline-vs-optimized Daily challenge-ID comparison: identical.
-- 50-puzzle seeded Practice baseline-vs-optimized comparison: identical.
-- Dice-pattern optimization verified against all 7,776 possible five-die rolls.
-- Phase 2K.12 scorecard-realism suite: PASS.
-- Phase 2K.9 puzzle-balance suite: PASS.
-- Puzzle-bank 31-day variety/readiness audit: PASS.
-- Exact integration exhaustive audit: 3,669,120 legal hold values PASS.
-
-Benchmark on the same environment:
-- Baseline unique-date Daily generation average: 494.5 ms.
-- Phase 2K.13 unique-date Daily generation average: 348.7 ms.
-- Baseline repeat same-date Daily call: 489.9 ms.
-- Phase 2K.13 repeat same-date Daily call: 0.15 ms.
-
-Protected runtime/data files verified byte-for-byte unchanged from 2K.12.5:
-yahtzee_engine.py, exact_runtime.py, exact_mode.py, daily_store.py,
-supabase_daily_store.py, session_learning.py, practice_progress.py,
-player_avatar.py, retro_podium.py, exact_policy.npz, puzzle_bank.npz,
-challenge_catalog.npz.
+PASS — 58/58 current automated suites.
+PASS — remembered-login cookie fast-path regression.
+PASS — localStorage still recovers from stale/missing cookies.
+PASS — sign-out still revokes and clears remembered credentials.
+PASS — all protected gameplay/data files unchanged from Phase 2K.13.
+PASS — exhaustive exact-policy audit: 3,669,120 legal hold values.
+PASS — exact policy SHA-256 remains cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b.
