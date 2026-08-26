@@ -1,10 +1,10 @@
-YAHTZEE COACH v43B PHASE 2K.13.3 — DEPLOYMENT
+YAHTZEE COACH v43B PHASE 2K.13.4 — DEPLOYMENT
 
 1. In GitHub Desktop, open the Yahtzee Coach repository.
 2. Replace/update the repo from the contents of this UPLOAD_TO_GITHUB folder.
-3. Review the changes. Runtime changes should be limited to app.py and exact_mode.py; test/release-note files also change/add.
+3. Review the changes. Runtime changes should be limited to app.py, exact_mode.py, and retro_podium.py; test/release-note files also change/add.
 4. Commit to main with:
-   v43B Phase 2K.13.3 - explain why correct holds win
+   v43B Phase 2K.13.4 - add podium names and detailed straight math
 5. Push origin.
 6. No Supabase migration is required.
 

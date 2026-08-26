@@ -98,6 +98,26 @@ def _medal_totals_html(totals: Mapping | None, group_name: str) -> str:
     </div>"""
 
 
+def _podium_names_html(board: Iterable[Mapping]) -> str:
+    rows = [dict(row) for row in board]
+    medals = {1: ("🥇", "GOLD"), 2: ("🥈", "SILVER"), 3: ("🥉", "BRONZE")}
+    columns: list[str] = []
+    for rank in (1, 2, 3):
+        names = [str(row.get("display_name") or "Player") for row in rows if _rank(row) == rank]
+        full_name = " / ".join(names) if names else "—"
+        visible_name = full_name if len(full_name) <= 28 else full_name[:25].rstrip() + "…"
+        emoji, label = medals[rank]
+        columns.append(
+            f"<div class='podium-name-cell' title='{escape(full_name)}'>"
+            f"<span>{emoji}</span><small>{label}</small><b>{escape(visible_name)}</b></div>"
+        )
+    return (
+        "<div class='yesterday-podium-names'>"
+        "<div class='podium-names-title'>YESTERDAY'S PODIUM</div>"
+        "<div class='podium-names-row'>" + "".join(columns) + "</div></div>"
+    )
+
+
 def personal_medal_moment_html(
     board: Iterable[Mapping],
     *,
@@ -120,6 +140,7 @@ def personal_medal_moment_html(
     )
     mike_svg = _pixel_mike()
     medal = _medal_html(medal_rank)
+    podium_names = _podium_names_html(rows)
     totals = _medal_totals_html(medal_totals, group_name)
     has_medal = "has-medal" if medal_rank else "no-medal-award"
     date = escape(date_label)
@@ -129,14 +150,14 @@ def personal_medal_moment_html(
 
     return f"""<!doctype html><html><head><meta charset='utf-8'><style>
     *{{box-sizing:border-box}}html,body{{margin:0;padding:0;background:transparent;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}}
-    .moment{{position:relative;height:510px;overflow:hidden;border:3px solid #172033;border-radius:20px;background:#fff9ea;color:#172033;box-shadow:0 8px 0 #d9d2c3;image-rendering:pixelated;cursor:pointer;user-select:none}}
+    .moment{{position:relative;height:560px;overflow:hidden;border:3px solid #172033;border-radius:20px;background:#fff9ea;color:#172033;box-shadow:0 8px 0 #d9d2c3;image-rendering:pixelated;cursor:pointer;user-select:none}}
     .moment:before{{content:'✦';position:absolute;left:7%;top:48px;color:#72a8d2;font-size:18px;text-shadow:330px 34px 0 #efad22,270px -28px 0 #72a8d2,40px 110px 0 #efad22;opacity:.9}}
     .skip{{position:absolute;z-index:20;right:12px;top:11px;border:2px solid #172033;background:#fffdf7;color:#172033;font:1000 10px ui-monospace;padding:6px 8px;box-shadow:2px 2px 0 #9aa6b6}}
     .top{{position:relative;z-index:3;text-align:center;padding:19px 54px 0}}
     .date{{font-size:8px;font-weight:1000;letter-spacing:.15em;color:#708096;text-transform:uppercase}}
     .headline{{margin:8px auto 0;max-width:420px;font-size:25px;line-height:1.02;font-weight:1000;color:#ffc62f;text-shadow:3px 0 #172033,-3px 0 #172033,0 3px #172033,0 -3px #172033,3px 3px #d86e16;letter-spacing:.02em}}
     .sub{{margin-top:9px;font:900 12px/1.2 ui-monospace;color:#172033}}
-    .scene{{position:absolute;left:4%;right:4%;top:118px;height:230px;display:grid;grid-template-columns:1fr 74px 1fr;align-items:end;z-index:4}}
+    .scene{{position:absolute;left:4%;right:4%;top:112px;height:220px;display:grid;grid-template-columns:1fr 74px 1fr;align-items:end;z-index:4}}
     .person{{text-align:center;position:relative;opacity:0;transform:translateY(10px);animation:enter .28s steps(4,end) .15s forwards}}
     .player-person{{animation-delay:.48s}}
     .sprite{{height:174px;display:flex;align-items:flex-end;justify-content:center}}
@@ -149,17 +170,22 @@ def personal_medal_moment_html(
     .shine{{position:absolute;right:-12px;top:31px;color:#f6b816;font-size:25px;opacity:0;animation:flash .34s steps(3,end) 1.28s forwards}}
     .medal-word{{margin-top:4px;font-size:9px;font-weight:1000;color:#526078}}
     .has-medal .player-person{{animation:enter .28s steps(4,end) .48s forwards,bounce .38s steps(3,end) 1.32s 2}}
-    .medal-totals{{position:absolute;z-index:5;left:8%;right:8%;bottom:52px;border:3px solid #172033;border-radius:12px;background:#18223a;color:#fff9ea;box-shadow:4px 4px 0 #98a4b4;padding:8px 10px 9px;opacity:0;transform:translateY(10px);animation:enter .24s steps(4,end) 1.62s forwards}}
+    .yesterday-podium-names{{position:absolute;z-index:5;left:8%;right:8%;bottom:145px;border:3px solid #172033;border-radius:12px;background:#fffdf7;color:#172033;box-shadow:4px 4px 0 #d2c8b7;padding:7px 10px 8px;opacity:0;transform:translateY(10px);animation:enter .24s steps(4,end) 1.48s forwards}}
+    .podium-names-title{{text-align:center;font-size:8px;font-weight:1000;letter-spacing:.10em;margin-bottom:5px;color:#526078}}
+    .podium-names-row{{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;gap:5px}}
+    .podium-name-cell{{min-width:0;border-right:1px dashed #c0b7a7}}.podium-name-cell:last-child{{border-right:0}}
+    .podium-name-cell span{{font-size:18px;display:block;line-height:1}}.podium-name-cell small{{display:block;font-size:7px;font-weight:1000;color:#708096;margin-top:1px}}.podium-name-cell b{{display:block;font-size:9px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+    .medal-totals{{position:absolute;z-index:5;left:8%;right:8%;bottom:45px;border:3px solid #172033;border-radius:12px;background:#18223a;color:#fff9ea;box-shadow:4px 4px 0 #98a4b4;padding:8px 10px 9px;opacity:0;transform:translateY(10px);animation:enter .24s steps(4,end) 1.70s forwards}}
     .medal-total-title{{text-align:center;font-size:9px;font-weight:1000;letter-spacing:.08em;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
     .medal-total-row{{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;gap:5px}}
     .medal-total-row>div{{border-right:1px dashed #536078}}.medal-total-row>div:last-child{{border-right:0}}
     .medal-total-row span{{font-size:20px;display:block;line-height:1}}.medal-total-row small{{display:block;font-size:7px;font-weight:1000;margin-top:2px}}.medal-total-row b{{display:block;font-size:19px;margin-top:1px}}
     .medal-total-row>div:nth-child(1) small{{color:#ffd23f}}.medal-total-row>div:nth-child(2) small{{color:#e5e7eb}}.medal-total-row>div:nth-child(3) small{{color:#e28a3e}}
-    .tap{{position:absolute;z-index:5;left:0;right:0;bottom:15px;text-align:center;font-size:8px;font-weight:1000;color:#708096;opacity:0;animation:enter .18s steps(2,end) 1.92s forwards}}
+    .tap{{position:absolute;z-index:5;left:0;right:0;bottom:12px;text-align:center;font-size:8px;font-weight:1000;color:#708096;opacity:0;animation:enter .18s steps(2,end) 2.00s forwards}}
     @keyframes enter{{to{{opacity:1;transform:none}}}}@keyframes medalIn{{0%{{opacity:0;transform:translateX(-30px)}}35%{{opacity:1}}100%{{opacity:1;transform:none}}}}@keyframes flash{{0%{{opacity:0;transform:scale(.4)}}55%{{opacity:1;transform:scale(1.25)}}100%{{opacity:0;transform:scale(1.75)}}}}@keyframes bounce{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-7px)}}}}
-    .moment.skip-now *{{animation:none!important}}.moment.skip-now .person,.moment.skip-now .medal-space,.moment.skip-now .medal-totals,.moment.skip-now .tap{{opacity:1!important;transform:none!important}}.moment.skip-now .handoff-medal{{transform:none!important}}.moment.skip-now .skip{{display:none}}
-    @media(max-width:420px){{.moment{{height:495px}}.headline{{font-size:21px}}.scene{{top:116px;grid-template-columns:1fr 58px 1fr}}.sprite svg{{width:142px}}.medal-totals{{left:5%;right:5%}}}}
-    @media(prefers-reduced-motion:reduce){{.moment *{{animation-duration:.01s!important;animation-delay:0s!important}}.person,.medal-space,.medal-totals,.tap{{opacity:1!important;transform:none!important}}.handoff-medal{{transform:none!important}}}}
+    .moment.skip-now *{{animation:none!important}}.moment.skip-now .person,.moment.skip-now .medal-space,.moment.skip-now .yesterday-podium-names,.moment.skip-now .medal-totals,.moment.skip-now .tap{{opacity:1!important;transform:none!important}}.moment.skip-now .handoff-medal{{transform:none!important}}.moment.skip-now .skip{{display:none}}
+    @media(max-width:420px){{.moment{{height:545px}}.headline{{font-size:21px}}.scene{{top:108px;grid-template-columns:1fr 58px 1fr}}.sprite svg{{width:142px}}.yesterday-podium-names,.medal-totals{{left:5%;right:5%}}}}
+    @media(prefers-reduced-motion:reduce){{.moment *{{animation-duration:.01s!important;animation-delay:0s!important}}.person,.medal-space,.yesterday-podium-names,.medal-totals,.tap{{opacity:1!important;transform:none!important}}.handoff-medal{{transform:none!important}}}}
     </style></head><body>
       <div class='moment {has_medal}' id='moment' role='group' aria-label='Yesterday medal moment'>
         <button class='skip' id='skip' type='button'>SKIP ›</button>
@@ -169,6 +195,7 @@ def personal_medal_moment_html(
           {medal}
           <div class='person player-person'><div class='sprite'>{player_svg}</div><div class='name'>{player}</div></div>
         </div>
+        {podium_names}
         {totals}
         <div class='tap'>TAP TO FINISH · PLAY TODAY'S 10 BELOW</div>
       </div>

@@ -33,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.13.3"
+APP_RELEASE = "v43B Phase 2K.13.4"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -1408,7 +1408,7 @@ def extract_section(report, header):
         "Roll 1 lookahead note:", "Game-aware note:", "Yahtzee-path note:",
         "What was good about your move?", "Bonus-chase check:",
         "Narrow upper-box note:", "Why was the optimal move better?",
-        "How close was it?", "Your idea vs. best idea:", "Teaching takeaway:", "Top exact holds:",
+        "Simple why:", "Math detail:", "How close was it?", "Your idea vs. best idea:", "Teaching takeaway:", "Top exact holds:",
         "Top Roll 1 options:", "Coach recommendation:",
     }
     capture = False
@@ -1995,6 +1995,7 @@ def render_result(report):
     idea_items = extract_section(report, "Your idea vs. best idea:")
     takeaway_items = extract_section(report, "Teaching takeaway:")
     simple_why_items = extract_section(report, "Simple why:")
+    math_detail_items = extract_section(report, "Math detail:")
     note_items = extract_section(report, "Narrow upper-box note:")
     top_holds = extract_section(report, "Top exact holds:")
     grade_class = GRADE_BADGE_CLASS.get(grade, "grade-b")
@@ -2068,6 +2069,8 @@ def render_result(report):
         )
         if closeness_items:
             st.markdown(f"**How close was it?** {closeness_items[0]}")
+        if math_detail_items:
+            st.markdown(f"**Detailed calculation:** {math_detail_items[0]}")
         if note_items:
             st.markdown("**Scorecard note**")
             st.markdown("<ul class='tight-list'>" + "".join(f"<li>{line}</li>" for line in note_items[:2]) + "</ul>", unsafe_allow_html=True)
@@ -3456,7 +3459,7 @@ def render_yesterday_final_standings_if_needed() -> bool:
             avatar_config=_active_avatar_config(profile),
             medal_totals=medals,
         )
-        components.html(ceremony, height=510, scrolling=False)
+        components.html(ceremony, height=560, scrolling=False)
         st.caption("Tap the medal moment or SKIP to jump to the finished screen. Silent by design.")
     else:
         st.markdown(
@@ -4028,6 +4031,8 @@ def _render_daily_review_body(answer, *, subject_name="You"):
     )
     simple_why_items = extract_section(report, "Simple why:")
     simple_why = simple_why_items[0] if simple_why_items else record.get("simple_why", "")
+    math_detail_items = extract_section(report, "Math detail:")
+    math_detail = math_detail_items[0] if math_detail_items else record.get("math_detail", "")
     practical_tie = 0.0 < loss <= 0.10
     if practical_tie:
         st.markdown(
@@ -4047,6 +4052,9 @@ def _render_daily_review_body(answer, *, subject_name="You"):
         else:
             why_label = "The tradeoff"
         st.markdown(f"**💡 {why_label}:** {simple_why}")
+    if math_detail:
+        with st.expander("📐 See the math", expanded=False):
+            st.markdown(math_detail)
     if lesson and not practical_tie:
         st.markdown(f"**🧠 Remember:** {lesson}")
     idea = record.get("adjustment", "")

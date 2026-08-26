@@ -1,8 +1,10 @@
-# Yahtzee Coach v43B Phase 2K.13.3 — Wife-Approved Optimal Coaching
+# Yahtzee Coach v43B Phase 2K.13.4 — Podium Names + Detailed Math Hotfix
 
-This release extends comparative coaching to correct answers and adds deeper Roll 1 endgame-straight explanations without changing the model or UI.
+This small hotfix adds yesterday's medalist names to the ceremony and optional detailed calculations for supported Roll 1 endgame-straight decisions.
 
 ## Coaching behavior
+- Daily exposes the extra calculation under a collapsed "See the math" control; Practice includes it inside Strategy details.
+- The calculation includes next-roll outcome counts, both-reroll probabilities, expected straight value, the full-game margin, and upper-bonus feasibility.
 - Correct answers compare against the alternative a player is most likely to wonder about.
 - Two-pair Full House decisions compare keeping both pairs with the winning hold.
 - Made Full Houses explain the exact bank-versus-break tradeoff.
@@ -15,9 +17,13 @@ This release extends comparative coaching to correct answers and adds deeper Rol
 - Treats 0.10 Points Lost or less as a practical tie while still reporting the exact answer.
 
 ## Unchanged
-Exact strategy, best holds, Points Lost, grading, puzzle selection, Daily/Practice flow, controls, visual layout, auto-login, Supabase behavior, avatars, medals, and protected data artifacts.
+Exact strategy, best holds, Points Lost, grading, puzzle selection, Daily/Practice flow, dice controls, auto-login, Supabase behavior, avatar designs, medal-award calculations, and protected data artifacts.
 
 ## Verification
-60/60 automated suites pass. The audits cover 840 correct decisions and 840 varied nonoptimal decisions, and the exhaustive exact-policy audit still covers all 3,669,120 legal hold values.
+61/61 automated suites pass. Medal-name/tie behavior and detailed math have dedicated regressions, and the exhaustive exact-policy audit still covers all 3,669,120 legal hold values.
+
+## Ceremony behavior
+- Yesterday's gold, silver, and bronze names appear beneath their medals.
+- Competition-ranking ties remain accurate and long names truncate safely.
 
 No Supabase migration is required.

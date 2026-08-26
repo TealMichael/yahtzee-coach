@@ -25,9 +25,9 @@ def run():
         {"player_id": "b", "display_name": "Stephanie", "rank": 1, "total_ev_loss": 1.774},
         {"player_id": "c", "display_name": "Paul", "rank": 3, "total_ev_loss": 2.72},
     ]
-    require('APP_RELEASE = "v43B Phase 2K.13.3"' in app, "later release preserves and simplifies the retro celebration")
+    require('APP_RELEASE = "v43B Phase 2K.13.4"' in app, "later release preserves and simplifies the retro celebration")
     require("from retro_podium import personal_medal_moment_html" in app, "app now uses personal medal moment renderer")
-    require("components.html(ceremony, height=510, scrolling=False)" in app, "personal moment stays lightweight")
+    require("components.html(ceremony, height=560, scrolling=False)" in app, "personal moment stays lightweight")
     require("mark_yesterday_ceremony_seen_now(today)" in app, "once-per-day behavior remains")
     require(medal_moment_copy(normal, "a") == ("YOU WON YESTERDAY!", "Can you defend the title?", 1), "gold hook is preserved")
     require(medal_moment_copy(normal, "b")[2] == 2 and medal_moment_copy(normal, "c")[2] == 3, "silver and bronze remain personal medal moments")

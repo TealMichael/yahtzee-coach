@@ -1,3 +1,3 @@
-Current release: v43B Phase 2K.13.3 — Wife-Approved Optimal Coaching.
-Known-good base: v43B Phase 2K.13.2 General Comparative Coaching.
-Scope: correct-answer comparisons and endgame-straight coaching only; no exact strategy, Points Lost, UI, puzzle, persistence, auto-login, or Supabase changes.
+Current release: v43B Phase 2K.13.4 — Podium Names + Detailed Math Hotfix.
+Known-good base: v43B Phase 2K.13.3 Wife-Approved Optimal Coaching.
+Scope: yesterday's medalist names and optional endgame-straight math detail only; no exact strategy, Points Lost, puzzle, persistence, auto-login, or Supabase changes.

@@ -1651,6 +1651,53 @@ def _endgame_straight_flexibility_explanation(
     )
 
 
+def _endgame_straight_math_detail(
+    scorecard: Mapping[str, int | None],
+    user_hold: Sequence[int],
+    optimal_hold: Sequence[int],
+    *,
+    points_lost: float,
+) -> str:
+    """Return the optional calculation behind the concise endgame lesson."""
+    user = canonical(user_hold)
+    optimal = canonical(optimal_hold)
+    rate_index = _STRUCTURE_RATE_INDEX["large_straight"]
+    user_immediate = _one_reroll_structure_rates(user)[rate_index]
+    optimal_immediate = _one_reroll_structure_rates(optimal)[rate_index]
+    user_total = 6 ** (5 - len(user))
+    optimal_total = 6 ** (5 - len(optimal))
+    user_hits = round(user_immediate * user_total)
+    optimal_hits = round(optimal_immediate * optimal_total)
+    user_two_roll = _two_reroll_large_straight_rate(user)
+    optimal_two_roll = _two_reroll_large_straight_rate(optimal)
+    straight_gain = max(0.0, optimal_two_roll - user_two_roll)
+    straight_points = straight_gain * 40.0
+
+    open_upper = next(
+        (key for key in _open_category_keys(scorecard) if key in set(UPPER_BY_FACE.values())),
+        None,
+    )
+    bonus = _upper_bonus_context(scorecard)
+    bonus_detail = ""
+    if open_upper:
+        upper_face = next(face for face, key in UPPER_BY_FACE.items() if key == open_upper)
+        upper_label = CATEGORY_LABELS[open_upper]
+        maximum_total = int(bonus["total"]) + upper_face * 5
+        if not bonus["earned"] and not bonus["alive"]:
+            bonus_detail = (
+                f" The upper bonus is unreachable: {bonus['total']} plus at most {upper_face * 5} in {upper_label} is {maximum_total}, "
+                f"so the released endpoint has no upper-bonus value."
+            )
+
+    return (
+        f"Immediate Large Straight: {_keeping_text(optimal)} succeeds on {optimal_hits} of {optimal_total} next rolls "
+        f"({optimal_immediate:.1%}); {_keeping_text(user)} succeeds on {user_hits} of {user_total} ({user_immediate:.1%}). "
+        f"After every Roll 2 result and the best final hold, the two-reroll chances are {optimal_two_roll:.1%} versus {user_two_roll:.1%}. "
+        f"That {straight_gain:.1%} probability gain is worth about {straight_points:.2f} expected Large Straight points, "
+        f"accounting for most of the model's {points_lost:.2f}-point full-game edge.{bonus_detail}"
+    )
+
+
 def _comparative_simple_why(
     scorecard: Mapping[str, int | None],
     user_hold: Sequence[int],
@@ -1885,6 +1932,14 @@ def build_exact_report(
     if not is_optimal:
         best_idea = simple_why
     takeaway = _clear_takeaway_for_family(coaching_family, takeaway)
+    math_detail = ""
+    if coaching_family == "true_endgame_straight_flexibility":
+        math_detail = _endgame_straight_math_detail(
+            scorecard,
+            user_hold,
+            display_optimal,
+            points_lost=points_lost,
+        )
 
     if is_optimal:
         recommendation = f"Yes — {hold_text(display_optimal)}. {visible_reason}"
@@ -1925,13 +1980,17 @@ def build_exact_report(
         "",
         "Simple why:",
         f"- {simple_why}",
+    ]
+    if math_detail:
+        report.extend(["", "Math detail:", f"- {math_detail}"])
+    report.extend([
         "",
         "How close was it?",
         f"- {closeness}",
         "- Expected game points means the average final-game score over all possible future rolls and optimal future decisions from this scorecard state.",
         "",
         "What was good about your move?",
-    ]
+    ])
 
     for line in _pattern_lines(dice, user_hold, scorecard):
         report.append(f"- {line}")
@@ -1990,6 +2049,7 @@ def build_exact_report(
         "adjustment": adjustment,
         "simple_why": simple_why,
         "coaching_family": coaching_family,
+        "math_detail": math_detail,
         "instructive_alternative": hold_text(instructive_alternative["hold"]) if instructive_alternative else "",
         "instructive_alternative_gap": float(instructive_gap) if instructive_gap is not None else None,
         "instructive_alternative_kind": instructive_kind,
