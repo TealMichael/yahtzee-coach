@@ -1,6 +1,8 @@
-Yahtzee Coach v43B Phase 2K.13.2 test summary
+Yahtzee Coach v43B Phase 2K.13.3 test summary
 
-PASS — 59/59 current automated suites.
+PASS — 60/60 current automated suites.
+PASS — 840 correct decisions compare against a meaningful alternative.
+PASS — two-pair Full House, made Full House bank/break, and Roll 1 endgame-straight regressions.
 PASS — comparative coaching audit across 840 varied positions and 19 coaching families.
 PASS — close calls, made hands, Joker rules, dead bonuses, straight routes, matching routes, and honest solver-only fallbacks.
 PASS — Daily and Practice practical-tie language at 0.10 Points Lost or less.

@@ -1248,6 +1248,44 @@ def _one_reroll_structure_rates(hold: tuple[int, ...]) -> tuple[float, ...]:
     return tuple(hits[key] / total for key in _STRUCTURE_RATE_INDEX)
 
 
+@lru_cache(maxsize=252)
+def _best_final_roll_large_straight_rate(dice: tuple[int, ...]) -> float:
+    """Best Large Straight probability after seeing Roll 2.
+
+    This is explanatory category math only. The full-game policy table remains
+    the source of truth for the actual hold ranking.
+    """
+    rolled = canonical(dice)
+    counts = Counter(rolled)
+    best = 0.0
+    count_ranges = [range(counts.get(face, 0) + 1) for face in range(1, 7)]
+    for kept_counts in product(*count_ranges):
+        hold = tuple(
+            face
+            for face, count in enumerate(kept_counts, start=1)
+            for _ in range(count)
+        )
+        rate = _one_reroll_structure_rates(hold)[_STRUCTURE_RATE_INDEX["large_straight"]]
+        best = max(best, rate)
+    return best
+
+
+@lru_cache(maxsize=512)
+def _two_reroll_large_straight_rate(hold: tuple[int, ...]) -> float:
+    """Exact chance to finish a Large Straight with two rerolls remaining.
+
+    The first hold is fixed; after the next roll, the best Large-Straight-only
+    continuation is chosen for the final reroll.
+    """
+    held = canonical(hold)
+    fresh = 5 - len(held)
+    total = 6 ** fresh
+    return sum(
+        _best_final_roll_large_straight_rate(canonical(held + reroll))
+        for reroll in product(range(1, 7), repeat=fresh)
+    ) / total
+
+
 def _keeping_text(hold: Sequence[int]) -> str:
     held = canonical(hold)
     return "rerolling everything" if not held else "keeping " + _format_faces(held)
@@ -1413,6 +1451,206 @@ def _margin_verdict(points_lost: float, optimal_hold: Sequence[int]) -> str:
     return f"Across the rest of the game, the exact model values {optimal_text} {points_lost:.2f} expected points higher."
 
 
+def _strict_runner_up(
+    results: Sequence[dict],
+    best_value: float,
+    *,
+    exclude: Sequence[int] = (),
+) -> dict | None:
+    excluded = canonical(exclude)
+    return next(
+        (
+            result
+            for result in results
+            if canonical(result["hold"]) != excluded
+            and best_value - float(result["strategy_value"]) > TIE_TOLERANCE
+        ),
+        None,
+    )
+
+
+def _instructive_optimal_alternative(
+    dice: Sequence[int],
+    scorecard: Mapping[str, int | None],
+    optimal_hold: Sequence[int],
+    results: Sequence[dict],
+) -> tuple[dict | None, str]:
+    """Choose the alternative a player is most likely to wonder about."""
+    optimal = canonical(optimal_hold)
+    best_value = float(results[0]["strategy_value"])
+    by_hold = {canonical(result["hold"]): result for result in results}
+    counts = Counter(canonical(dice))
+
+    if _is_open(scorecard, "full_house"):
+        # A made Full House is fundamentally a bank-versus-break decision.
+        if sorted(counts.values(), reverse=True) == [3, 2]:
+            bank_hold = canonical(dice)
+            if bank_hold != optimal:
+                candidate = by_hold.get(bank_hold)
+                if candidate and best_value - float(candidate["strategy_value"]) > TIE_TOLERANCE:
+                    return candidate, "made_full_house"
+            else:
+                candidate = _strict_runner_up(results, best_value, exclude=optimal)
+                if candidate:
+                    return candidate, "made_full_house"
+
+        # With two pairs showing, keeping both pairs is the question humans
+        # naturally ask even when it is not the numerical second-place hold.
+        pair_faces = sorted(face for face, count in counts.items() if count == 2)
+        if len(pair_faces) >= 2:
+            both_pairs = canonical([pair_faces[0], pair_faces[0], pair_faces[1], pair_faces[1]])
+            if both_pairs != optimal:
+                candidate = by_hold.get(both_pairs)
+                if candidate and best_value - float(candidate["strategy_value"]) > TIE_TOLERANCE:
+                    return candidate, "two_pair_full_house"
+
+    return _strict_runner_up(results, best_value, exclude=optimal), "runner_up"
+
+
+def _alternative_evidence_text(text: str, optimal_hold: Sequence[int]) -> str:
+    winner = _keeping_text(optimal_hold)
+    return (
+        text.replace("Your hold", "The alternative")
+        .replace("your hold", "the alternative")
+        .replace("The model's hold", winner.capitalize())
+        .replace("the model's hold", winner)
+    )
+
+
+def _optimal_choice_explanation(
+    dice: Sequence[int],
+    scorecard: Mapping[str, int | None],
+    optimal_hold: Sequence[int],
+    alternative: Mapping[str, object] | None,
+    *,
+    alternative_kind: str,
+    roll_number: int,
+    best_value: float,
+    visible_reason: str,
+) -> str:
+    """Explain a correct choice by showing what it beat and why."""
+    optimal = canonical(optimal_hold)
+    if alternative is None:
+        return f"You found the exact best hold. {visible_reason}"
+
+    other = canonical(alternative["hold"])
+    gap = max(0.0, best_value - float(alternative["strategy_value"]))
+    horizon = "final roll" if roll_number == 2 else "next roll"
+    winner_text = _keeping_text(optimal)
+    other_text = _keeping_text(other)
+
+    if alternative_kind == "two_pair_full_house":
+        counts = Counter(canonical(dice))
+        pair_faces = sorted(face for face, count in counts.items() if count == 2)
+        pair_label = _join_paths([f"{face}s" for face in pair_faces[:2]])
+        full_house_index = _STRUCTURE_RATE_INDEX["full_house"]
+        other_rate = _one_reroll_structure_rates(other)[full_house_index]
+        winner_rate = _one_reroll_structure_rates(optimal)[full_house_index]
+        paths = [path for path in _live_paths_for_hold(optimal, scorecard, limit=4) if path != "Full House"]
+        path_text = _join_paths(paths[:3]) if paths else "the other open boxes"
+        return (
+            f"Keeping both pairs ({pair_label}) gives a {other_rate:.1%} chance to complete a Full House on the {horizon}, "
+            f"but it leaves only {5 - len(other)} fresh die. {winner_text.capitalize()} leaves {5 - len(optimal)} fresh dice; "
+            f"it still has a {winner_rate:.1%} Full House chance on the {horizon} while supporting {path_text}. "
+            f"Full-game lookahead puts {winner_text} {gap:.2f} expected points ahead of keeping both pairs."
+        )
+
+    if alternative_kind == "made_full_house":
+        if len(optimal) == 5:
+            return (
+                f"Keeping all five banks the guaranteed 25-point Full House. {other_text.capitalize()} reopens {5 - len(other)} dice, "
+                f"but the remaining scorecard does not repay that risk. Full-game lookahead puts {winner_text} {gap:.2f} expected points ahead."
+            )
+        paths = _live_paths_for_hold(optimal, scorecard, limit=3)
+        path_text = _join_paths(paths) if paths else "the remaining open boxes"
+        return (
+            f"Keeping all five would bank a guaranteed 25-point Full House. Here, {winner_text} reopens {5 - len(optimal)} dice "
+            f"for {path_text}, and that upside is worth the risk. Full-game lookahead puts {winner_text} {gap:.2f} expected points ahead."
+        )
+
+    other_candidates, winner_candidates = _rate_evidence_candidates(
+        scorecard,
+        other,
+        optimal,
+        roll_number=roll_number,
+    )
+    pieces = [f"The closest alternative is {other_text}."]
+    if other_candidates:
+        pieces.append(_alternative_evidence_text(other_candidates[0][1], optimal))
+    if winner_candidates:
+        pieces.append(_alternative_evidence_text(winner_candidates[0][1], optimal))
+    else:
+        pieces.append(visible_reason)
+    pieces.append(
+        f"After all future rolls and scorecard choices, {winner_text} finishes {gap:.2f} expected points higher."
+    )
+    return " ".join(pieces)
+
+
+def _endgame_straight_flexibility_explanation(
+    scorecard: Mapping[str, int | None],
+    user_hold: Sequence[int],
+    optimal_hold: Sequence[int],
+    *,
+    roll_number: int,
+    points_lost: float,
+) -> str | None:
+    """Explain why a seemingly helpful endpoint can weaken a Roll 1 straight core."""
+    if roll_number != 1 or not _is_open(scorecard, "large_straight"):
+        return None
+    open_keys = _open_category_keys(scorecard)
+    if len(open_keys) != 2:
+        return None
+    upper_keys = [key for key in open_keys if key in set(UPPER_BY_FACE.values())]
+    if len(upper_keys) != 1:
+        return None
+
+    user = canonical(user_hold)
+    optimal = canonical(optimal_hold)
+    if len(user) <= len(optimal) or not all(value in user for value in optimal):
+        return None
+
+    user_faces = set(user)
+    optimal_faces = set(optimal)
+    user_windows = [target for target in LARGE_STRAIGHTS if user_faces.issubset(target)]
+    optimal_windows = [target for target in LARGE_STRAIGHTS if optimal_faces.issubset(target)]
+    if len(user_windows) != 1 or len(optimal_windows) != 2:
+        return None
+
+    user_two_roll = _two_reroll_large_straight_rate(user)
+    optimal_two_roll = _two_reroll_large_straight_rate(optimal)
+    if optimal_two_roll - user_two_roll < 0.005:
+        return None
+
+    one_index = _STRUCTURE_RATE_INDEX["large_straight"]
+    user_one_roll = _one_reroll_structure_rates(user)[one_index]
+    optimal_one_roll = _one_reroll_structure_rates(optimal)[one_index]
+    released = list(user)
+    for value in optimal:
+        released.remove(value)
+    released_text = _format_faces(released)
+    upper_key = upper_keys[0]
+    upper_face = next(face for face, key in UPPER_BY_FACE.items() if key == upper_key)
+    upper_label = CATEGORY_LABELS[upper_key]
+    upper_help = (
+        f"The extra fresh die can also roll the {upper_face} required by either straight and score {upper_label}. "
+        if upper_face in set.intersection(*LARGE_STRAIGHTS) and upper_face not in released
+        else f"The extra fresh die can also improve {upper_label} if the straight misses. "
+    )
+    immediate_note = (
+        f"Both holds are {optimal_one_roll:.1%} to finish on the next roll, so keeping the {released_text} was reasonable. "
+        if abs(optimal_one_roll - user_one_roll) < 0.0005
+        else ""
+    )
+    return (
+        f"Keeping {_format_faces(optimal)} leaves both Large Straight routes open: 1–2–3–4–5 or 2–3–4–5–6. "
+        f"Adding the {released_text} locks you into the second route and rerolls one fewer die. "
+        f"{immediate_note}Across both rerolls, the straight chance is {optimal_two_roll:.1%} with {_format_faces(optimal)} "
+        f"versus {user_two_roll:.1%} with {_format_faces(user)}. {upper_help}"
+        f"Full-game lookahead gives {_format_faces(optimal)} a {points_lost:.2f}-point edge."
+    )
+
+
 def _comparative_simple_why(
     scorecard: Mapping[str, int | None],
     user_hold: Sequence[int],
@@ -1427,6 +1665,16 @@ def _comparative_simple_why(
     """Turn the exact answer into a two-sided comparison without inventing causality."""
     if is_optimal:
         return base_family, base_explanation
+
+    endgame_straight = _endgame_straight_flexibility_explanation(
+        scorecard,
+        user_hold,
+        optimal_hold,
+        roll_number=roll_number,
+        points_lost=points_lost,
+    )
+    if endgame_straight:
+        return "true_endgame_straight_flexibility", endgame_straight
 
     user_candidates, best_candidates = _rate_evidence_candidates(
         scorecard,
@@ -1489,6 +1737,7 @@ def _clear_takeaway_for_family(family: str, fallback: str) -> str:
         "protect_made_hand": "A made hand gives guaranteed value. Protect it unless the remaining scorecard gives a clear reason to gamble for more.",
         "break_made_hand": "Made does not always mean keep. With rerolls left, compare guaranteed points with the upside in the boxes that are still open.",
         "true_endgame": "Near the end, forget generic opening rules and optimize the boxes that are actually left.",
+        "true_endgame_straight_flexibility": "With two rerolls left, protect the numbers shared by both Large Straights before locking an endpoint. Keeping both straight windows open can matter more than holding one extra useful-looking die.",
         "bonus_dead_high_die": "When the upper bonus is dead, stop paying for 63—but an upper die can still be right if it also helps the remaining boxes. Read the open boxes, not just the dice.",
         "bonus_dead_pair": "When the upper bonus is dead, a pair must earn its value from the boxes that remain; the lost 35-point bonus should not influence the hold.",
         "bonus_dead_singleton": "When the upper bonus is dead, do not keep an upper die for 63. Keep it only if that die still helps the remaining boxes. Read the open boxes, not just the dice.",
@@ -1597,16 +1846,42 @@ def build_exact_report(
         visible_reason=visible_reason,
         points_lost=points_lost,
     )
-    coaching_family, simple_why = _comparative_simple_why(
-        scorecard,
-        user_hold,
-        display_optimal,
-        roll_number=roll_number,
-        is_optimal=is_optimal,
-        points_lost=points_lost,
-        base_family=coaching_family,
-        base_explanation=simple_why,
-    )
+    instructive_alternative = None
+    instructive_gap = None
+    instructive_kind = ""
+    if is_optimal:
+        instructive_alternative, instructive_kind = _instructive_optimal_alternative(
+            dice,
+            scorecard,
+            display_optimal,
+            results,
+        )
+        if instructive_alternative is not None:
+            instructive_gap = max(
+                0.0,
+                best_value - float(instructive_alternative["strategy_value"]),
+            )
+        simple_why = _optimal_choice_explanation(
+            dice,
+            scorecard,
+            display_optimal,
+            instructive_alternative,
+            alternative_kind=instructive_kind,
+            roll_number=roll_number,
+            best_value=best_value,
+            visible_reason=visible_reason,
+        )
+    else:
+        coaching_family, simple_why = _comparative_simple_why(
+            scorecard,
+            user_hold,
+            display_optimal,
+            roll_number=roll_number,
+            is_optimal=is_optimal,
+            points_lost=points_lost,
+            base_family=coaching_family,
+            base_explanation=simple_why,
+        )
     if not is_optimal:
         best_idea = simple_why
     takeaway = _clear_takeaway_for_family(coaching_family, takeaway)
@@ -1715,6 +1990,9 @@ def build_exact_report(
         "adjustment": adjustment,
         "simple_why": simple_why,
         "coaching_family": coaching_family,
+        "instructive_alternative": hold_text(instructive_alternative["hold"]) if instructive_alternative else "",
+        "instructive_alternative_gap": float(instructive_gap) if instructive_gap is not None else None,
+        "instructive_alternative_kind": instructive_kind,
         "lookup_ms": (perf_counter() - started) * 1000.0,
     }
     return "\n".join(report), metadata
