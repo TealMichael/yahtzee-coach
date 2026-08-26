@@ -53,11 +53,12 @@ def test_close_generic_takeaway_is_scorecard_specific():
 
 def test_daily_review_surfaces_near_tie_without_opening_details():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
-    marker = "**🤏 Very close:** Your hold was only {loss:.2f} Points Lost from the exact best hold."
+    marker = "**⚖️ Essentially tied:** Only {loss:.2f} Points Lost separates these holds."
     assert marker in app
-    assert "if 0.0 < loss <= 0.25:" in app
-    assert "This was a fine distinction, not a bad strategy choice." in app
-    print("PASS Daily review: <=0.25 Points Lost is visibly labeled as a near-tie")
+    assert "practical_tie = 0.0 < loss <= 0.10" in app
+    assert "There is no practical strategy error to correct." in app
+    assert "elif 0.0 < loss <= 0.25:" in app
+    print("PASS Daily review: microscopic edges are practical ties and wider close calls stay proportional")
 
 
 def test_exact_policy_artifact_unchanged():

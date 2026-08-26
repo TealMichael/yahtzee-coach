@@ -43,10 +43,10 @@ def run():
         ("pair trap explanation names Chance as filled", "Chance" in simple),
         ("pair trap explanation names remaining matching upside", "Four of a Kind" in simple and "Yahtzee" in simple),
         ("pair trap explanation names both straight boxes", "Small Straight" in simple and "Large Straight" in simple),
-        ("pair trap explanation names exact keep", "Keeping 3, 5" in simple),
+        ("pair trap explanation names exact keep", "keeping 3, 5" in simple.lower()),
         ("pair trap explanation stays concise", len(simple) < 430),
         ("Practice coach uses simple why for why-it-matters", 'simple_why_items[0] if simple_why_items' in app),
-        ("Daily review shows Why this wins", "💡 Why this wins" in app),
+        ("Daily review uses comparative why labels", "Why the model barely edges it" in app and 'why_label = "The tradeoff"' in app),
         ("Daily review uses Remember instead of abstract Key lesson label", "🧠 Remember" in app),
         ("Daily review uses Try this instead label", "Try this instead" in app),
     ]

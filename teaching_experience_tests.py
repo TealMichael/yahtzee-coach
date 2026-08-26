@@ -28,10 +28,10 @@ def test_near_tie_two_pairs():
     assert 0.15 < meta["points_lost"] < 0.17
     assert_contains(
         report,
-        "Near tie:",
+        "Slight mathematical edge:",
         "Keep both pairs alive:",
         "Full House",
-        "focus on the small structural advantage",
+        "focus only on the tradeoff",
     )
     print("PASS near-tie teaching: close alternatives are not over-punished")
 

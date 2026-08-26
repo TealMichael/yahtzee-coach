@@ -33,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.13.1"
+APP_RELEASE = "v43B Phase 2K.13.2"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -1878,11 +1878,11 @@ def result_distance_text(lost_text, grade):
         return "Your strategy comparison is below."
     if lost_value <= 1e-5:
         return "Best hold — you gave up 0.00 points."
-    if lost_value <= 0.25:
-        return f"Only {lost_value:.2f} points lost — almost tied with the best hold."
-    if lost_value <= 0.75:
-        return f"{lost_value:.2f} points lost — a small difference worth noticing."
-    if lost_value <= 2.50:
+    if lost_value <= 0.10:
+        return f"Essentially tied — only {lost_value:.2f} points separate the holds."
+    if lost_value <= 0.50:
+        return f"{lost_value:.2f} points lost — a slight mathematical edge."
+    if lost_value <= 1.50:
         return f"{lost_value:.2f} points lost — your idea had merit, but there was a better path."
     return f"{lost_value:.2f} points lost — this change can matter a lot over time."
 
@@ -1986,6 +1986,8 @@ def render_result(report):
     decision_metric_label = "Hold rank" if hold_rank else "Efficiency"
     decision_metric_value = hold_rank or efficiency or "—"
     lost = extract_line(report, "Expected game points lost:") or extract_line(report, "Strategy value lost:")
+    lost_value = parse_float_text(lost)
+    practical_tie = lost_value is not None and 0.0 < lost_value <= 0.10
     recommendation = clean_coach_sentence(extract_recommendation(report))
     good_items = extract_section(report, "What was good about your move?")
     why_items = extract_section(report, "Why was the optimal move better?")
@@ -2027,6 +2029,10 @@ def render_result(report):
     what_went_well = good_items[0] if good_items else (user_idea or "Your hold had a clear strategic target.")
     what_changes = adjustment or (why_items[0] if why_items else "Compare your hold with the exact best hold above.")
     why_it_matters = simple_why_items[0] if simple_why_items else (why_items[0] if why_items else (best_idea or recommendation or "The exact solver compares every legal hold through the rest of the game."))
+    if practical_tie:
+        what_went_well = user_idea or what_went_well
+        what_changes = "No practical correction—the holds are essentially tied."
+        why_it_matters = simple_why_items[0] if simple_why_items else why_it_matters
     if what_changes == why_it_matters and len(why_items) > 1:
         why_it_matters = why_items[1]
 
@@ -2039,7 +2045,7 @@ def render_result(report):
         unsafe_allow_html=True,
     )
 
-    if takeaway_items:
+    if takeaway_items and not practical_tie:
         takeaway = takeaway_items[0]
         if ": " in takeaway:
             lesson_title, lesson_text = takeaway.split(": ", 1)
@@ -4022,17 +4028,29 @@ def _render_daily_review_body(answer, *, subject_name="You"):
     )
     simple_why_items = extract_section(report, "Simple why:")
     simple_why = simple_why_items[0] if simple_why_items else record.get("simple_why", "")
-    if 0.0 < loss <= 0.25:
+    practical_tie = 0.0 < loss <= 0.10
+    if practical_tie:
+        st.markdown(
+            f"**⚖️ Essentially tied:** Only {loss:.2f} Points Lost separates these holds. "
+            "There is no practical strategy error to correct."
+        )
+    elif 0.0 < loss <= 0.25:
         st.markdown(
             f"**🤏 Very close:** Your hold was only {loss:.2f} Points Lost from the exact best hold. "
             "This was a fine distinction, not a bad strategy choice."
         )
     if simple_why:
-        st.markdown(f"**💡 Why this wins:** {simple_why}")
-    if lesson:
+        if loss <= 1e-5:
+            why_label = "Why this works"
+        elif practical_tie:
+            why_label = "Why the model barely edges it"
+        else:
+            why_label = "The tradeoff"
+        st.markdown(f"**💡 {why_label}:** {simple_why}")
+    if lesson and not practical_tie:
         st.markdown(f"**🧠 Remember:** {lesson}")
     idea = record.get("adjustment", "")
-    if idea:
+    if idea and not practical_tie:
         st.markdown(f"**Try this instead:** {idea}")
     top_holds = extract_section(report, "Top exact holds:")
     if top_holds:

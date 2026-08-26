@@ -1,3 +1,3 @@
-Current release: v43B Phase 2K.13.1 — Auto-Login Fast Path.
-Known-good base: v43B Phase 2K.13 Pure Performance Pass.
-Scope: remembered-login startup only; no gameplay/UI/puzzle/persistence schema changes.
+Current release: v43B Phase 2K.13.2 — General Comparative Coaching.
+Known-good base: v43B Phase 2K.13.1 Auto-Login Fast Path.
+Scope: coaching-language and lesson proportionality only; no exact strategy, Points Lost, UI, puzzle, persistence, auto-login, or Supabase changes.

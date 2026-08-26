@@ -34,8 +34,8 @@ def test_near_tie_preserves_player_logic():
     assert "Your idea:" in block
     assert "pair of 5s" in block
     assert "Best idea:" in block
-    assert "keep 2, 2, 5, 5" in block
-    assert "Tiny refinement:" in block
+    assert "keeping 2, 2, 5, 5" in block
+    assert "Slight refinement:" in block
     assert "also protect 2, 2" in block
     assert 0.15 < meta["points_lost"] < 0.17
     print("PASS personalized near tie: validates the player's plan before refining it")
@@ -51,7 +51,7 @@ def test_major_error_gets_specific_correction():
     )
     block = section(report, "Your idea vs. best idea:")
     assert "open Fives box" in block
-    assert "keep 5, 5, 5, 5" in block
+    assert "keeping 5, 5, 5, 5" in block
     assert "Major correction:" in block
     assert "also protect 5, 5, 5" in block
     assert meta["points_lost"] > 20
@@ -84,8 +84,8 @@ def test_straight_chase_can_be_overruled_by_scorecard():
     )
     block = section(report, "Your idea vs. best idea:")
     assert "Large Straight chase" in block
-    assert "exact plan is keep 5" in block
-    assert "Fives is still open" in block
+    assert "model's hold preserves a direct route to the open Fives box" in block
+    assert "open Fives box" in block
     assert "protect 5 and release 1, 2, 3" in block
     assert meta["points_lost"] > 1
     print("PASS personalized contrast: recognizes a sensible visible pattern when the scorecard prefers another plan")

@@ -1,12 +1,12 @@
-YAHTZEE COACH v43B PHASE 2K.13.1 — DEPLOYMENT
+YAHTZEE COACH v43B PHASE 2K.13.2 — DEPLOYMENT
 
 1. In GitHub Desktop, open the Yahtzee Coach repository.
 2. Replace/update the repo from the contents of this UPLOAD_TO_GITHUB folder.
-3. Review the changes. Runtime change should be app.py only; test/release-note files also change/add.
+3. Review the changes. Runtime changes should be limited to app.py and exact_mode.py; test/release-note files also change/add.
 4. Commit to main with:
-   v43B Phase 2K.13.1 - speed up remembered auto-login
+   v43B Phase 2K.13.2 - add general comparative coaching evidence
 5. Push origin.
 6. No Supabase migration is required.
 
-TESTING NOTE
-The first fresh launch after deployment may still use localStorage once to heal the cookie. Let it complete, fully close the tab/app, then reopen for the meaningful fast-path test.
+SAFETY NOTE
+The exact policy, best holds, Points Lost, grades, Daily/Practice puzzles, UI, persistence, and remembered-login behavior are unchanged.

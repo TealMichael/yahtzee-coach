@@ -1,19 +1,19 @@
-# Yahtzee Coach v43B Phase 2K.13.1 — Auto-Login Fast Path
+# Yahtzee Coach v43B Phase 2K.13.2 — General Comparative Coaching
 
-This is a narrow performance patch on top of Phase 2K.13. It changes only the remembered-login startup path. Gameplay, UI, puzzles, scoring, exact strategy, persistence behavior, avatars, medals, and Supabase schema are unchanged.
+This release improves coaching throughout Daily and Practice without changing the model or the experience around it.
 
-## What changed
-- The Components-v2 localStorage bridge now mirrors a valid remembered-device token into the existing secure SameSite first-party cookie.
-- On future fresh browser/Streamlit connections where that cookie is present, the app authenticates the cookie before mounting the localStorage bridge.
-- A successful cookie restore skips the localStorage component entirely, avoiding its browser-to-Python state update and extra script rerun.
-- A stale/invalid cookie does not block localStorage recovery; the app falls back to the durable localStorage token exactly as before.
-- Sign-out still revokes the server-side device session and clears both browser credentials.
+## Coaching behavior
+- Compares the player's plan with the exact model's plan instead of merely declaring the winner.
+- Uses exact, relevant one-reroll probabilities when they make the tradeoff understandable.
+- Connects the choice to the actual open scorecard and upper-bonus state.
+- Preserves stronger situation-specific coaching for made hands, Joker rules, dead bonuses, endgames, and other established families.
+- Honestly identifies microscopic full-game distinctions when no simple visible statistic explains the edge.
+- Treats 0.10 Points Lost or less as a practical tie while still reporting the exact answer.
 
-## First-launch behavior after deployment
-Existing remembered users may still take the old localStorage path once after this patch if their browser does not already have the cookie. That successful localStorage read now heals the cookie. The next fresh launch is the meaningful speed test.
+## Unchanged
+Exact strategy, best holds, Points Lost, grading, puzzle selection, Daily/Practice flow, controls, visual layout, auto-login, Supabase behavior, avatars, medals, and protected data artifacts.
 
-## Safety
-No Supabase migration. All gameplay/data engines and protected NPZ files are byte-for-byte unchanged from Phase 2K.13.
+## Verification
+59/59 automated suites pass. The coaching audit covers 840 varied positions across 19 families, and the exhaustive exact-policy audit still covers all 3,669,120 legal hold values.
 
-## Tests
-58/58 automated suites pass, including the exhaustive 3,669,120 legal-hold exact-policy audit.
+No Supabase migration is required.

@@ -8,8 +8,11 @@ and Practice coaching require the exact policy; the legacy fallback helpers at
 the bottom of this module remain only for historical compatibility/tests.
 """
 
+from collections import Counter
 from dataclasses import dataclass
+from functools import lru_cache
 import hashlib
+from itertools import product
 from pathlib import Path
 from time import perf_counter
 from typing import Mapping, Sequence
@@ -594,6 +597,14 @@ def _pattern_lines(
                 lines.append(f"You protected a pair of {face}s while {CATEGORY_LABELS[upper]} is open{bonus_note}.")
             else:
                 lines.append(f"You protected a pair of {face}s, giving the hand a clear matching-number target.")
+    elif len(hold) == 1:
+        face = hold[0]
+        upper = UPPER_BY_FACE[face]
+        if _is_open(scorecard, upper):
+            bonus_note = " and the live upper-bonus chase" if bonus["alive"] else ""
+            lines.append(
+                f"You kept the {face} for the open {CATEGORY_LABELS[upper]} box{bonus_note}; that is a clear, scorecard-aware plan."
+            )
 
     straight_name, core = _straight_core(hold, scorecard)
     if straight_name and core >= 3 and len(set(hold)) >= 3:
@@ -695,10 +706,12 @@ def _personalized_adjustment(
             add.remove(value)
             release.remove(value)
 
-    if points_lost <= 0.25:
-        lead = "Tiny refinement"
-    elif points_lost <= 0.75:
-        lead = "Small refinement"
+    if points_lost <= 0.10:
+        return f"No practical correction: your hold ({hold_text(user)}) is essentially tied with {hold_text(optimal)}."
+    if points_lost <= 0.50:
+        lead = "Slight refinement"
+    elif points_lost <= 1.50:
+        lead = "Meaningful adjustment"
     elif points_lost <= 2.50:
         lead = "Upgrade the plan"
     elif points_lost <= 6.00:
@@ -1171,6 +1184,304 @@ def _simple_why(
     )
     return explanation
 
+
+_STRUCTURE_RATE_INDEX = {
+    "small_straight": 0,
+    "large_straight": 1,
+    "three_of_a_kind": 2,
+    "four_of_a_kind": 3,
+    "full_house": 4,
+    "yahtzee": 5,
+}
+
+_STRUCTURE_RATE_WEIGHTS = {
+    "small_straight": 30.0,
+    "large_straight": 40.0,
+    "three_of_a_kind": 16.0,
+    "four_of_a_kind": 24.0,
+    "full_house": 25.0,
+    "yahtzee": 50.0,
+}
+
+_STRUCTURE_RATE_LABELS = {
+    "small_straight": "at least a Small Straight",
+    "large_straight": "a Large Straight",
+    "three_of_a_kind": "at least Three of a Kind",
+    "four_of_a_kind": "at least Four of a Kind",
+    "full_house": "a Full House",
+    "yahtzee": "Yahtzee",
+}
+
+
+@lru_cache(maxsize=512)
+def _one_reroll_structure_rates(hold: tuple[int, ...]) -> tuple[float, ...]:
+    """Exact visible-hand rates after rerolling every die outside ``hold`` once.
+
+    These rates explain a hold; they do not replace or modify the full-game
+    exact-policy values. On Roll 1 they describe the immediate next roll. On
+    Roll 2 they describe the final roll.
+    """
+    held = canonical(hold)
+    fresh = 5 - len(held)
+    total = 6 ** fresh
+    hits = Counter()
+
+    for reroll in product(range(1, 7), repeat=fresh):
+        final_dice = held + tuple(reroll)
+        counts = Counter(final_dice)
+        count_shape = sorted(counts.values(), reverse=True)
+        faces = set(final_dice)
+
+        if any(target.issubset(faces) for target in SMALL_STRAIGHTS):
+            hits["small_straight"] += 1
+        if any(target.issubset(faces) for target in LARGE_STRAIGHTS):
+            hits["large_straight"] += 1
+        if count_shape[0] >= 3:
+            hits["three_of_a_kind"] += 1
+        if count_shape[0] >= 4:
+            hits["four_of_a_kind"] += 1
+        if count_shape == [3, 2]:
+            hits["full_house"] += 1
+        if count_shape == [5]:
+            hits["yahtzee"] += 1
+
+    return tuple(hits[key] / total for key in _STRUCTURE_RATE_INDEX)
+
+
+def _keeping_text(hold: Sequence[int]) -> str:
+    held = canonical(hold)
+    return "rerolling everything" if not held else "keeping " + _format_faces(held)
+
+
+def _model_intent_sentence(hold: Sequence[int], scorecard: Mapping[str, int | None]) -> str:
+    intent = _hold_intent(hold, scorecard)
+    if intent.startswith("Your hold"):
+        return "The model's hold" + intent[len("Your hold"):]
+    return f"The model prefers {_keeping_text(hold)}. {intent}"
+
+
+def _single_face_upper_signal(
+    hold: Sequence[int], scorecard: Mapping[str, int | None]
+) -> tuple[int, str, float] | None:
+    held = canonical(hold)
+    if not held or len(set(held)) != 1:
+        return None
+    face = held[0]
+    category = UPPER_BY_FACE[face]
+    if not _is_open(scorecard, category):
+        return None
+    expected_box_score_after_one_reroll = face * (len(held) + (5 - len(held)) / 6.0)
+    return face, CATEGORY_LABELS[category], expected_box_score_after_one_reroll
+
+
+def _rate_evidence_candidates(
+    scorecard: Mapping[str, int | None],
+    user_hold: Sequence[int],
+    optimal_hold: Sequence[int],
+    *,
+    roll_number: int,
+) -> tuple[list[tuple[float, str]], list[tuple[float, str]]]:
+    """Return ranked (user advantages, model advantages) with exact evidence."""
+    user = canonical(user_hold)
+    optimal = canonical(optimal_hold)
+    user_rates = _one_reroll_structure_rates(user)
+    best_rates = _one_reroll_structure_rates(optimal)
+    horizon = "final roll" if roll_number == 2 else "next roll"
+    user_candidates: list[tuple[float, str]] = []
+    best_candidates: list[tuple[float, str]] = []
+
+    def add_rate_group(categories: Sequence[str]) -> None:
+        user_parts: list[str] = []
+        best_parts: list[str] = []
+        user_strength = 0.0
+        best_strength = 0.0
+        for category in categories:
+            if not _is_open(scorecard, category):
+                continue
+            index = _STRUCTURE_RATE_INDEX[category]
+            user_rate = user_rates[index]
+            best_rate = best_rates[index]
+            difference = best_rate - user_rate
+            if abs(difference) < 0.005:
+                continue
+            label = _STRUCTURE_RATE_LABELS[category]
+            if difference > 0:
+                best_parts.append(f"{label} {best_rate:.1%} versus {user_rate:.1%}")
+                best_strength += difference * _STRUCTURE_RATE_WEIGHTS[category]
+            else:
+                user_parts.append(f"{label} {user_rate:.1%} versus {best_rate:.1%}")
+                user_strength += (-difference) * _STRUCTURE_RATE_WEIGHTS[category]
+
+        if user_parts:
+            user_candidates.append((
+                user_strength,
+                f"On the {horizon}, your hold has the stronger route to " + " and ".join(user_parts) + ".",
+            ))
+        if best_parts:
+            best_candidates.append((
+                best_strength,
+                f"On the {horizon}, {_keeping_text(optimal)} has the stronger route to " + " and ".join(best_parts) + ".",
+            ))
+
+    add_rate_group(("small_straight", "large_straight"))
+    add_rate_group(("three_of_a_kind", "four_of_a_kind", "full_house", "yahtzee"))
+
+    user_upper = _single_face_upper_signal(user, scorecard)
+    best_upper = _single_face_upper_signal(optimal, scorecard)
+    bonus_multiplier = 1.75 if _upper_bonus_context(scorecard)["alive"] else 1.0
+    if user_upper and best_upper:
+        difference = best_upper[2] - user_upper[2]
+        if abs(difference) >= 0.50:
+            same_upper_box = user_upper[1] == best_upper[1]
+            upper_strength = abs(difference) * bonus_multiplier * (0.75 if same_upper_box else 1.0)
+            if difference > 0:
+                best_candidates.append((
+                    upper_strength,
+                    (
+                        f"{_keeping_text(optimal).capitalize()} starts the open {best_upper[1]} box with more held dice than your hold."
+                        if same_upper_box
+                        else f"The model's hold has the stronger immediate upper-section route through {best_upper[1]}; your hold targets {user_upper[1]} instead."
+                    ),
+                ))
+            else:
+                user_candidates.append((
+                    upper_strength,
+                    (
+                        f"Your hold starts the open {user_upper[1]} box with more held dice than {_keeping_text(optimal)}."
+                        if same_upper_box
+                        else f"Your hold has the stronger immediate upper-section route through {user_upper[1]}; the model's hold targets {best_upper[1]} instead."
+                    ),
+                ))
+    elif user_upper:
+        bonus_note = " while the upper bonus is still live" if _upper_bonus_context(scorecard)["alive"] else ""
+        user_candidates.append((
+            user_upper[2] * 0.35 * bonus_multiplier,
+            f"Your hold preserves a direct route to the open {user_upper[1]} box{bonus_note}.",
+        ))
+    elif best_upper:
+        bonus_note = " while the upper bonus is still live" if _upper_bonus_context(scorecard)["alive"] else ""
+        best_candidates.append((
+            best_upper[2] * 0.35 * bonus_multiplier,
+            f"The model's hold preserves a direct route to the open {best_upper[1]} box{bonus_note}.",
+        ))
+
+    if _is_open(scorecard, "chance") and len(_open_category_keys(scorecard)) <= 4:
+        user_total = sum(user) + (5 - len(user)) * 3.5
+        best_total = sum(optimal) + (5 - len(optimal)) * 3.5
+        difference = best_total - user_total
+        if abs(difference) >= 1.0:
+            if difference > 0:
+                best_candidates.append((
+                    abs(difference) * 0.7,
+                    f"The model's hold also has the stronger Chance base: an average {best_total:.1f} dice total after the {horizon}, versus {user_total:.1f} from your hold.",
+                ))
+            else:
+                user_candidates.append((
+                    abs(difference) * 0.7,
+                    f"Your hold has the stronger Chance base: an average {user_total:.1f} dice total after the {horizon}, versus {best_total:.1f} from the model's hold.",
+                ))
+
+    fresh_difference = (5 - len(optimal)) - (5 - len(user))
+    if abs(fresh_difference) >= 2:
+        if fresh_difference > 0:
+            best_candidates.append((
+                abs(fresh_difference) * 0.35,
+                f"The model also keeps {5 - len(optimal)} dice fresh instead of {5 - len(user)}, leaving more ways to use the open scorecard.",
+            ))
+        else:
+            user_candidates.append((
+                abs(fresh_difference) * 0.35,
+                f"Your hold keeps {5 - len(user)} dice fresh instead of {5 - len(optimal)}, so it preserves more reroll flexibility.",
+            ))
+
+    user_candidates.sort(key=lambda item: item[0], reverse=True)
+    best_candidates.sort(key=lambda item: item[0], reverse=True)
+    return user_candidates, best_candidates
+
+
+def _margin_verdict(points_lost: float, optimal_hold: Sequence[int]) -> str:
+    optimal_text = _keeping_text(optimal_hold)
+    if points_lost <= 0.10:
+        return (
+            f"Those advantages nearly cancel. Full-game lookahead gives {optimal_text} only a {points_lost:.2f}-point edge, "
+            "so this was not a meaningful strategy mistake."
+        )
+    if points_lost <= 0.50:
+        return f"After full-game lookahead, {optimal_text} has only a slight {points_lost:.2f}-point edge."
+    if points_lost <= 1.50:
+        return f"After all future rolls and scorecard choices, {optimal_text} finishes {points_lost:.2f} expected points higher."
+    return f"Across the rest of the game, the exact model values {optimal_text} {points_lost:.2f} expected points higher."
+
+
+def _comparative_simple_why(
+    scorecard: Mapping[str, int | None],
+    user_hold: Sequence[int],
+    optimal_hold: Sequence[int],
+    *,
+    roll_number: int,
+    is_optimal: bool,
+    points_lost: float,
+    base_family: str,
+    base_explanation: str,
+) -> tuple[str, str]:
+    """Turn the exact answer into a two-sided comparison without inventing causality."""
+    if is_optimal:
+        return base_family, base_explanation
+
+    user_candidates, best_candidates = _rate_evidence_candidates(
+        scorecard,
+        user_hold,
+        optimal_hold,
+        roll_number=roll_number,
+    )
+    user_evidence = user_candidates[0][1] if user_candidates else ""
+    best_evidence = best_candidates[0][1] if best_candidates else ""
+    if (
+        points_lost > 6.0
+        and user_candidates
+        and best_candidates
+        and user_candidates[0][0] < best_candidates[0][0] * 0.60
+    ):
+        user_evidence = ""
+    user_intent = _hold_intent(user_hold, scorecard)
+    model_intent = _model_intent_sentence(optimal_hold, scorecard)
+
+    already_comparative = {
+        "pair_vs_straight",
+        "two_pair_full_house_tradeoff",
+        "two_pair_no_reroll",
+    }
+
+    if base_family == "extra_yahtzee_joker":
+        comparison = f"{user_intent} {base_explanation}"
+    elif base_family in {"bonus_dead_high_die", "protect_made_hand", "break_made_hand"}:
+        # These families already give the complete scorecard comparison: dead
+        # bonus versus a lower pair, or guaranteed made-hand value versus the
+        # exact reason to bank/break it. Replacing that causal explanation with
+        # a single-roll probability would make the coaching less faithful.
+        comparison = base_explanation
+    elif base_family in already_comparative and best_evidence:
+        combined = f"{base_explanation} {best_evidence}"
+        if len(combined) <= 360:
+            comparison = combined
+        else:
+            concise_player_context = base_explanation.split(". ", 1)[0].rstrip(".") + "."
+            comparison = f"{concise_player_context} {best_evidence}"
+    elif user_evidence and best_evidence:
+        comparison = f"{user_evidence} {best_evidence}"
+    elif best_evidence:
+        comparison = f"{user_intent} {best_evidence}"
+    elif user_evidence:
+        comparison = f"{user_evidence} {base_explanation}"
+    elif "Your hold" in base_explanation or "Your pair" in base_explanation:
+        comparison = base_explanation
+    elif points_lost <= 0.10:
+        comparison = f"{user_intent} {model_intent} No single visible one-roll statistic separates the plans by much."
+    else:
+        comparison = f"{user_intent} {base_explanation}"
+
+    return base_family, f"{comparison} {_margin_verdict(points_lost, optimal_hold)}"
+
 def _clear_takeaway_for_family(family: str, fallback: str) -> str:
     """Keep the reusable 'Remember' line short, concrete, and consistent."""
     lessons = {
@@ -1204,11 +1515,11 @@ def _clear_takeaway_for_family(family: str, fallback: str) -> str:
 def _closeness_line(points_lost: float, is_optimal: bool) -> str:
     if is_optimal:
         return "Exact best play: no legal hold has a higher full-game expected score."
-    if points_lost <= 0.25:
-        return f"Near tie: your hold is only {points_lost:.2f} expected game points behind. This is a fine distinction, not a bad strategy choice."
-    if points_lost <= 0.75:
-        return f"Small edge: the exact play is {points_lost:.2f} expected game points better. Your idea is still very strong."
-    if points_lost <= 2.50:
+    if points_lost <= 0.10:
+        return f"Essentially tied: your hold is only {points_lost:.2f} expected game points behind. There is no practical strategy error to correct."
+    if points_lost <= 0.50:
+        return f"Slight mathematical edge: the exact play is {points_lost:.2f} expected game points better. Your idea is still very strong."
+    if points_lost <= 1.50:
         return f"Meaningful edge: the exact play gains about {points_lost:.2f} expected game points over your hold."
     if points_lost <= 6.00:
         return f"Clear edge: the exact play gains about {points_lost:.2f} expected game points, enough to make the structural difference worth learning."
@@ -1286,15 +1597,32 @@ def build_exact_report(
         visible_reason=visible_reason,
         points_lost=points_lost,
     )
+    coaching_family, simple_why = _comparative_simple_why(
+        scorecard,
+        user_hold,
+        display_optimal,
+        roll_number=roll_number,
+        is_optimal=is_optimal,
+        points_lost=points_lost,
+        base_family=coaching_family,
+        base_explanation=simple_why,
+    )
+    if not is_optimal:
+        best_idea = simple_why
     takeaway = _clear_takeaway_for_family(coaching_family, takeaway)
 
     if is_optimal:
         recommendation = f"Yes — {hold_text(display_optimal)}. {visible_reason}"
-    elif points_lost <= 0.25:
+    elif points_lost <= 0.10:
         recommendation = (
-            f"Exact edge: {hold_text(display_optimal)}. Your idea was almost tied, so focus on the small structural advantage rather than treating this as a major mistake."
+            f"Essentially tied: {hold_text(user_hold)} is only {points_lost:.2f} points behind {hold_text(display_optimal)}. "
+            "This is not a practical mistake."
         )
-    elif points_lost <= 0.75:
+    elif points_lost <= 0.50:
+        recommendation = (
+            f"Slight mathematical edge: {hold_text(display_optimal)}. Keep the good idea and focus only on the tradeoff that separates the holds."
+        )
+    elif points_lost <= 1.50:
         recommendation = f"Best play: {hold_text(display_optimal)}. {visible_reason}"
     else:
         recommendation = f"Best play: {hold_text(display_optimal)}. {visible_reason}"
@@ -1334,6 +1662,8 @@ def build_exact_report(
         report.append(f"- {line}")
     if is_optimal:
         report.append("- Most importantly, your hold is tied for the highest exact full-game expected value in this position.")
+    elif points_lost <= 0.10:
+        report.append("- The exact cost is microscopic, so there is no practical correction to make.")
     elif points_lost <= 0.75:
         report.append("- The exact cost is small, so keep the good idea and refine only the part that separates it from the best hold.")
 
@@ -1347,7 +1677,7 @@ def build_exact_report(
     else:
         if difference:
             report.append(f"- {difference}")
-        report.append(f"- {visible_reason}")
+        report.append(f"- {simple_why}")
         report.append(
             f"- That exact choice finishes about {points_lost:.2f} expected game point(s) higher from this scorecard state."
         )

@@ -1,9 +1,9 @@
-Yahtzee Coach v43B Phase 2K.13.1 test summary
+Yahtzee Coach v43B Phase 2K.13.2 test summary
 
-PASS — 58/58 current automated suites.
-PASS — remembered-login cookie fast-path regression.
-PASS — localStorage still recovers from stale/missing cookies.
-PASS — sign-out still revokes and clears remembered credentials.
-PASS — all protected gameplay/data files unchanged from Phase 2K.13.
+PASS — 59/59 current automated suites.
+PASS — comparative coaching audit across 840 varied positions and 19 coaching families.
+PASS — close calls, made hands, Joker rules, dead bonuses, straight routes, matching routes, and honest solver-only fallbacks.
+PASS — Daily and Practice practical-tie language at 0.10 Points Lost or less.
+PASS — 14 protected gameplay/data/dependency files unchanged from Phase 2K.13.1.
 PASS — exhaustive exact-policy audit: 3,669,120 legal hold values.
 PASS — exact policy SHA-256 remains cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b.
