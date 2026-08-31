@@ -33,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.13.4"
+APP_RELEASE = "v43B Phase 2K.14"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -2183,6 +2183,8 @@ def _reset_daily_local_attempt(date_key: str | None = None):
     for key in list(st.session_state.keys()):
         if str(key).startswith(("daily_held_", "daily_dice_")):
             del st.session_state[key]
+        elif str(key).startswith("daily_spotlight_"):
+            del st.session_state[key]
 
 
 def initialize_daily_state():
@@ -4161,6 +4163,110 @@ def _render_friend_pick_peek(active_group, board):
             st.markdown(f"**Q{q}** · {html.escape(str(selected))} · {result}")
 
 
+@st.fragment
+def render_daily_spotlight():
+    """Optional learning only after completion; fragment avoids social/DB reruns."""
+    if not st.session_state.get("daily_completed") or not st.session_state.get("active_player_id"):
+        return
+    try:
+        _render_daily_spotlight_content()
+    except Exception:
+        # This optional feature must never block standings or the original ten reviews.
+        import logging
+        logging.getLogger(__name__).exception("Optional Daily spotlight unavailable")
+        st.caption("The optional spotlight isn't available right now. Your ten reviews and Daily result are unchanged.")
+
+
+def _toggle_daily_spotlight_open(state_key):
+    st.session_state[state_key] = not st.session_state.get(state_key, False)
+
+
+def _mark_daily_spotlight_variation(state_key):
+    st.session_state[state_key] = True
+
+
+def _reveal_daily_spotlight_answer(feedback_key, variant, held_key):
+    from daily_spotlight import evaluate_what_if
+    held_indices = _normalize_die_indices(st.session_state.get(held_key, []), len(variant["dice"]))
+    hold = [variant["dice"][index] for index in held_indices]
+    st.session_state[feedback_key] = evaluate_what_if(load_exact_policy(), variant, hold)
+
+
+def _render_daily_spotlight_content():
+    from hashlib import sha256
+    from daily_spotlight import select_spotlight, evaluate_what_if
+
+    answers = st.session_state.daily_answers
+    scope = sha256(
+        f"{APP_RELEASE}|{st.session_state.active_player_id}|{st.session_state.daily_set_id}|{st.session_state.get('daily_attempt_id')}".encode()
+    ).hexdigest()[:16]
+    base = f"daily_spotlight_{scope}"
+    prepared_key = f"{base}_prepared"
+    if prepared_key not in st.session_state:
+        st.session_state[prepared_key] = select_spotlight(
+            answers, completed=st.session_state.get("daily_completed", False),
+            policy=load_exact_policy(), seed=st.session_state.daily_date_key,
+        )
+    spotlight = st.session_state[prepared_key]
+    if spotlight is None:
+        return
+    answer = answers[spotlight["index"]]
+    st.markdown(f"**✨ Your Daily Spotlight · Q{spotlight['number']}**")
+    st.markdown(spotlight["title"])
+    st.caption(spotlight["status"])
+    open_key = f"{base}_open"
+    opened = st.session_state.get(open_key, False)
+    st.button(
+        "Close spotlight" if opened else "Explore this decision", key=f"{base}_toggle",
+        on_click=_toggle_daily_spotlight_open, args=(open_key,),
+    )
+    if not opened:
+        return
+
+    _render_daily_review_body(answer)
+    variant = spotlight.get("variant")
+    if variant is None:
+        return
+    st.caption("Optional What if? Same dice and roll, one scorecard box changed. No effect on your Daily score, standings, or streaks.")
+    variant_key = f"{base}_variant"
+    st.button(
+        "Change one thing", key=f"{base}_change", disabled=variant_key in st.session_state,
+        on_click=_mark_daily_spotlight_variation, args=(variant_key,),
+    )
+    if variant_key not in st.session_state:
+        return
+
+    st.markdown("**What if? · Unscored**")
+    st.markdown(f"**{variant['change']}**")
+    st.caption(f"Same dice · Roll {variant['roll_number']} · Everything else on the scorecard is unchanged. Would you keep the same dice?")
+    st.markdown("<div class='score-section-title'>Upper</div>", unsafe_allow_html=True)
+    st.markdown(score_grid_html(variant["scorecard"], UPPER_CATEGORIES), unsafe_allow_html=True)
+    st.markdown("<div class='score-section-title'>Lower</div>", unsafe_allow_html=True)
+    st.markdown(score_grid_html(variant["scorecard"], LOWER_CATEGORIES, lower=True), unsafe_allow_html=True)
+    feedback_key = f"{base}_feedback"
+    st.caption("Tap the dice to keep. Leave all unselected to reroll everything.")
+    held_key = f"{base}_held"
+    _render_independent_dice_picker(
+        variant["dice"], held_key, f"{base}_dice", disabled=feedback_key in st.session_state,
+    )
+    st.button(
+        "See what changes", key=f"{base}_reveal", disabled=feedback_key in st.session_state,
+        on_click=_reveal_daily_spotlight_answer, args=(feedback_key, variant, held_key),
+    )
+    feedback = st.session_state.get(feedback_key)
+    if feedback:
+        st.markdown(f"**{feedback['choice_feedback']}**")
+        st.markdown(f"**{feedback['heading']}** {feedback['context']}")
+        st.markdown(feedback["lesson"])
+        with st.expander("Why this hold on the changed card?", expanded=False):
+            st.markdown(feedback["why"])
+        with st.expander("Compare the exact margins", expanded=False):
+            st.caption(feedback["comparison_label"])
+            st.table(feedback["comparison_rows"])
+            st.caption(feedback["note"])
+        st.caption("That's today's optional follow-up. Your official ten are unchanged.")
+
+
 def render_daily_results():
     answers = st.session_state.daily_answers
     records = [answer["solver_record"] for answer in answers]
@@ -4277,6 +4383,7 @@ def render_daily_results():
         st.caption("Create or join a friend group to compare Daily results on a shared leaderboard.")
 
     st.markdown("### 📝 Your 10 Grades")
+    render_daily_spotlight()
     st.caption("Tap any question to open its full coaching.")
     for answer in answers:
         _daily_review_item(answer)

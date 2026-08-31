@@ -14,7 +14,7 @@ def require(condition, message):
     print(f"PASS: {message}")
 
 
-require('APP_RELEASE = "v43B Phase 2K.13.4"' in APP, "release label is Phase 2K.13.1")
+require('APP_RELEASE = "v43B Phase 2K.14"' in APP, "release label is Phase 2K.13.1")
 
 # The durable localStorage token must heal the first-party cookie so later fresh
 # Streamlit connections can restore identity from the initial request.
