@@ -237,7 +237,9 @@ def evaluate_what_if(policy, variant, user_hold):
         "choice_feedback": "You found a best hold." if meta["points_lost"] <= TIE_TOLERANCE
             else "Your choice is essentially tied." if meta["points_lost"] <= .10
             else f"The model prefers {meta['optimal_hold']} on this scorecard.",
-        "why": meta["simple_why"], "context": context, "lesson": lesson,
+        "why": meta["simple_why"], "rank_context": meta.get("rank_context", ""),
+        "comparison_card": meta.get("comparison_card"),
+        "context": context, "lesson": lesson,
         "comparison_rows": comparison_rows,
         "comparison_label": f"{hold_text(ref)} versus {hold_text(alt)}",
         "note": "Edges compare these two holds within each scorecard. They are expected remaining-game points, not hand-completion probabilities or guaranteed gains.",

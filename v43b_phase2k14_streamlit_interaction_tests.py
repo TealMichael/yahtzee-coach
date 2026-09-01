@@ -22,9 +22,10 @@ def main():
     button(at, "Change one thing").click().run()
     assert not at.exception
     dice = at.get("button_group")[0]
-    assert len(dice.options) == 5 and len(set(dice.options)) == 5
+    option_values = [getattr(option, "content", option) for option in dice.options]
+    assert len(option_values) == 5 and len(set(option_values)) == 5
     # The sample has duplicate 3s. Select both physical dice independently.
-    dice.set_value([dice.options[1], dice.options[2]]).run()
+    dice.set_value([option_values[1], option_values[2]]).run()
     selected = at.get("button_group")[0]
     assert len(selected.value) == 2
     held_key = next(key for key in at.session_state.filtered_state if key.endswith("_held"))
@@ -36,8 +37,9 @@ def main():
     assert button(at, "Change one thing").disabled
     assert button(at, "See what changes").disabled
     assert len(at.table) == 1
-    assert any(item.label == "Why this hold on the changed card?" for item in at.expander)
     visible = "\n".join(item.value for item in at.markdown)
+    assert "<section class='evidence-card'>" in visible
+    assert "Keep 2, 3, 4, 5 wins" in visible
     assert "The original best hold still works." in visible
     assert "Originally, keep 2, 3, 4, 5 led keep 3, 3 by 3.58 expected points." in visible
     assert "On the changed card, keep 2, 3, 4, 5 leads keep 3, 3 by 6.60." in visible

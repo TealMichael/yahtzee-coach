@@ -23,7 +23,7 @@ names = {
     "load_exact_policy", "_normalize_die_indices", "unique_dice_label",
     "_dice_pill_options", "_indices_from_dice_pill_selection",
     "_render_independent_dice_picker", "extract_line", "extract_section",
-    "score_box_html", "score_grid_html", "_render_daily_review_body",
+    "score_box_html", "score_grid_html", "render_comparison_card", "_render_daily_review_body",
     "_daily_review_item", "render_daily_spotlight", "_toggle_daily_spotlight_open",
     "_mark_daily_spotlight_variation", "_reveal_daily_spotlight_answer",
     "_render_daily_spotlight_content",

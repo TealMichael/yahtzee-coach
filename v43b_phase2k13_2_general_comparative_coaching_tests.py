@@ -140,7 +140,7 @@ def test_review_surfaces_use_margin_aware_copy():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
     assert "practical_tie = 0.0 < loss <= 0.10" in app
     assert "Why the model barely edges it" in app
-    assert 'why_label = "The tradeoff"' in app
+    assert 'why_label = "Why the best hold wins"' in app
     assert "if lesson and not practical_tie" in app
     assert "if idea and not practical_tie" in app
     assert "Why this wins" not in app

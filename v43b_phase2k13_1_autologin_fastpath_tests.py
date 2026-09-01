@@ -14,7 +14,7 @@ def require(condition, message):
     print(f"PASS: {message}")
 
 
-require('APP_RELEASE = "v43B Phase 2K.14"' in APP, "release label is Phase 2K.13.1")
+require('APP_RELEASE = "v43B Phase 2K.14.2"' in APP, "release label is Phase 2K.13.1")
 
 # The durable localStorage token must heal the first-party cookie so later fresh
 # Streamlit connections can restore identity from the initial request.
@@ -53,7 +53,7 @@ require('_queue_remember_cookie_delete()' in APP and 'revoke_device_session(toke
 EXPECTED_HASHES = {
     "yahtzee_engine.py": "9b175f3f3f59f9937943856c01e1e7aeced7662742756766a54a6061ccaba6b1",
     "exact_runtime.py": "322e50715ca49e53d78e9cc6eda85a7af0712b881273fb57ea4c4f4b67da171a",
-    "exact_mode.py": "38b9339bf444630e66f7c301930aa0a7e99ae26914f9862b065014916784d040",
+    "exact_mode.py": "319bf065e90160851f57b89f249d3546ae9f05f23ab0f507612b630e1c2498f0",
     "puzzle_bank.py": "888f4a1da2d4dfb99ea471c77d78122c5055672396f1e95b1fd0570c7c27781a",
     "daily_challenge.py": "913935d6167c80a3601cb93bbc9bc03380711eb52c6eef7712ca2c63b7e3c255",
     "daily_store.py": "8eb46257a3ee02d14efd821f642637dde5d68cef13fa424a40f7d21f8912bbd0",

@@ -878,8 +878,8 @@ def _simple_why_with_family(
         bank_text = "Banking the guaranteed 25" if user_made == "Full House" else f"Keeping the made {user_made}"
         return (
             "break_made_hand",
-            f"{bank_text} is a reasonable safety play, but made does not automatically mean keep. "
-            f"With {rerolls} reroll{'s' if rerolls != 1 else ''} left, the exact hold reopens {_fresh_dice_text(fresh)} because {path_text} offer more full-game value from this scorecard.",
+            f"With {rerolls} reroll{'s' if rerolls != 1 else ''} left, the exact hold reopens {_fresh_dice_text(fresh)} because {path_text} offer more full-game value from this scorecard. "
+            f"{bank_text} is a reasonable safety play, but made does not automatically mean keep.",
         )
 
     # True endgame: name the only destinations left before discussing generic
@@ -924,15 +924,15 @@ def _simple_why_with_family(
         if len(user) == 4:
             return (
                 "two_pair_full_house_tradeoff",
-                f"Keeping both pairs ({pair_text}) is a natural Full House chase: one fresh die can finish it. "
-                f"But it locks four dice. The exact hold, {hold_text(optimal)}, leaves {_fresh_dice_text(fresh)} and keeps {best_text} available. "
-                "On this scorecard, those extra fresh dice are worth more.",
+                f"The exact hold, {hold_text(optimal)}, wins by leaving {_fresh_dice_text(fresh)} and keeping {best_text} available. "
+                f"Keeping both pairs ({pair_text}) is a natural Full House chase because one fresh die can finish it, but it locks four dice. "
+                "On this scorecard, the extra fresh dice are worth more.",
             )
         if len(user) == 5:
             return (
                 "two_pair_no_reroll",
-                f"Your hold contains two pairs, but keeping all five dice leaves no fresh die to complete the Full House. "
-                f"The exact hold, {hold_text(optimal)}, reopens {_fresh_dice_text(fresh)} so the remaining scorecard can still improve.",
+                f"The exact hold, {hold_text(optimal)}, wins by reopening {_fresh_dice_text(fresh)} so the remaining scorecard can still improve. "
+                "Your hold contains two pairs, but keeping all five dice leaves no fresh die to complete the Full House.",
             )
 
     # Common human trap: keep a closed-number pair even though the remaining
@@ -973,18 +973,16 @@ def _simple_why_with_family(
             )
             if straight_core >= 3:
                 exact_reason = (
-                    f"Keeping {_format_faces(optimal_distinct)} instead preserves a {straight_core}-number straight core for {straight_text} "
+                    f"Keeping {_format_faces(optimal_distinct)} preserves a {straight_core}-number core for {straight_text} "
                     f"with {_fresh_dice_text(fresh)}."
                 )
             else:
                 exact_reason = (
-                    f"Keeping {_format_faces(optimal_distinct)} instead gives you useful anchors for {straight_text} "
-                    f"with {_fresh_dice_text(fresh)}."
+                    f"Keeping {_format_faces(optimal_distinct)} preserves anchors for {straight_text} with {_fresh_dice_text(fresh)}."
                 )
             return (
                 "pair_vs_straight",
-                f"Your pair of {face}s looks strong, but {closed_text} are already filled, so that pair mostly chases {matching_text}. "
-                f"{exact_reason}",
+                f"{exact_reason} Your pair of {face}s looks strong, but {closed_text} are already filled, so that pair mostly chases {matching_text}.",
             )
 
     # If the exact answer is a visible straight core, say exactly what the
@@ -1212,6 +1210,8 @@ _STRUCTURE_RATE_LABELS = {
     "yahtzee": "Yahtzee",
 }
 
+_ONE_REROLL_SCORE_INDEX = {category: index for index, category in enumerate(CATEGORIES)}
+
 
 @lru_cache(maxsize=512)
 def _one_reroll_structure_rates(hold: tuple[int, ...]) -> tuple[float, ...]:
@@ -1246,6 +1246,207 @@ def _one_reroll_structure_rates(hold: tuple[int, ...]) -> tuple[float, ...]:
             hits["yahtzee"] += 1
 
     return tuple(hits[key] / total for key in _STRUCTURE_RATE_INDEX)
+
+
+@lru_cache(maxsize=512)
+def _one_reroll_scoring_stats(hold: tuple[int, ...]) -> tuple[tuple[float, float], ...]:
+    """Return (hit rate, expected score) for each category after one reroll.
+
+    This is explanatory math only. It lets the coach distinguish *making a
+    shape often* from *getting much value from that shape*. The exact policy
+    table remains the sole source of every recommendation and Points Lost
+    value. Joker states keep their specialized explanation and do not use this
+    ordinary-hand snapshot.
+    """
+    held = canonical(hold)
+    fresh = 5 - len(held)
+    total = 6 ** fresh
+    hits = Counter()
+    points = Counter()
+
+    for reroll in product(range(1, 7), repeat=fresh):
+        final_dice = held + tuple(reroll)
+        counts = Counter(final_dice)
+        count_shape = sorted(counts.values(), reverse=True)
+        faces = set(final_dice)
+        dice_total = sum(final_dice)
+
+        for face, category in UPPER_BY_FACE.items():
+            score = face * counts.get(face, 0)
+            if score:
+                hits[category] += 1
+                points[category] += score
+
+        if count_shape[0] >= 3:
+            hits["three_of_a_kind"] += 1
+            points["three_of_a_kind"] += dice_total
+        if count_shape[0] >= 4:
+            hits["four_of_a_kind"] += 1
+            points["four_of_a_kind"] += dice_total
+        if count_shape == [3, 2]:
+            hits["full_house"] += 1
+            points["full_house"] += 25
+        if any(target.issubset(faces) for target in SMALL_STRAIGHTS):
+            hits["small_straight"] += 1
+            points["small_straight"] += 30
+        if any(target.issubset(faces) for target in LARGE_STRAIGHTS):
+            hits["large_straight"] += 1
+            points["large_straight"] += 40
+        if count_shape == [5]:
+            hits["yahtzee"] += 1
+            points["yahtzee"] += 50
+        hits["chance"] += 1
+        points["chance"] += dice_total
+
+    return tuple(
+        (hits[category] / total, points[category] / total)
+        for category in CATEGORIES
+    )
+
+
+def _one_reroll_scoring_stat(
+    hold: Sequence[int], category: str
+) -> tuple[float, float]:
+    return _one_reroll_scoring_stats(canonical(hold))[_ONE_REROLL_SCORE_INDEX[category]]
+
+
+def _evidence_category_result(
+    dice: Sequence[int], category: str
+) -> tuple[float, float, float]:
+    """Return (hit, score, benchmark-hit) for one explanatory target.
+
+    ``best_straight`` is a teaching-only target: 40 for a Large Straight,
+    otherwise 30 for a Small Straight, otherwise zero.  Its benchmark flag is
+    the Large-Straight hit.  For upper boxes, benchmark means at least three
+    matching dice—the familiar 63-point pace line.
+    """
+    rolled = canonical(dice)
+    counts = Counter(rolled)
+    count_shape = sorted(counts.values(), reverse=True)
+    faces = set(rolled)
+    dice_total = sum(rolled)
+
+    if category == "best_straight":
+        large = float(any(target.issubset(faces) for target in LARGE_STRAIGHTS))
+        small = float(any(target.issubset(faces) for target in SMALL_STRAIGHTS))
+        return small, (40.0 if large else 30.0 if small else 0.0), large
+
+    if category in set(UPPER_BY_FACE.values()):
+        face = next(face for face, key in UPPER_BY_FACE.items() if key == category)
+        matching = counts.get(face, 0)
+        score = float(face * matching)
+        return float(matching > 0), score, float(matching >= 3)
+
+    if category == "three_of_a_kind":
+        hit = float(count_shape[0] >= 3)
+        return hit, float(dice_total) * hit, hit
+    if category == "four_of_a_kind":
+        hit = float(count_shape[0] >= 4)
+        return hit, float(dice_total) * hit, hit
+    if category == "full_house":
+        hit = float(count_shape == [3, 2])
+        return hit, 25.0 * hit, hit
+    if category == "small_straight":
+        hit = float(any(target.issubset(faces) for target in SMALL_STRAIGHTS))
+        return hit, 30.0 * hit, hit
+    if category == "large_straight":
+        hit = float(any(target.issubset(faces) for target in LARGE_STRAIGHTS))
+        return hit, 40.0 * hit, hit
+    if category == "yahtzee":
+        hit = float(count_shape == [5])
+        return hit, 50.0 * hit, hit
+    if category == "chance":
+        return 1.0, float(dice_total), 1.0
+    raise ValueError(f"Unsupported evidence target: {category}")
+
+
+@lru_cache(maxsize=1024)
+def _evidence_legal_holds(dice: tuple[int, ...]) -> tuple[tuple[int, ...], ...]:
+    counts = Counter(canonical(dice))
+    count_ranges = [range(counts.get(face, 0) + 1) for face in range(1, 7)]
+    return tuple(
+        tuple(
+            face
+            for face, count in enumerate(kept_counts, start=1)
+            for _ in range(count)
+        )
+        for kept_counts in product(*count_ranges)
+    )
+
+
+@lru_cache(maxsize=1024)
+def _evidence_reroll_outcomes(
+    hold: tuple[int, ...],
+) -> tuple[tuple[tuple[int, ...], int], ...]:
+    """Canonical next-roll outcomes with ordered-roll multiplicities."""
+    held = canonical(hold)
+    fresh = 5 - len(held)
+    outcomes = Counter(
+        canonical(held + reroll)
+        for reroll in product(range(1, 7), repeat=fresh)
+    )
+    return tuple(sorted(outcomes.items()))
+
+
+@lru_cache(maxsize=4096)
+def _one_reroll_plan_stats(
+    hold: tuple[int, ...], category: str
+) -> tuple[float, float, float]:
+    """Category-specific hit rate, expected score, and benchmark rate."""
+    held = canonical(hold)
+    total = float(6 ** (5 - len(held)))
+    hit_total = 0.0
+    score_total = 0.0
+    benchmark_total = 0.0
+    for final_dice, multiplicity in _evidence_reroll_outcomes(held):
+        hit, score, benchmark = _evidence_category_result(final_dice, category)
+        hit_total += hit * multiplicity
+        score_total += score * multiplicity
+        benchmark_total += benchmark * multiplicity
+    return hit_total / total, score_total / total, benchmark_total / total
+
+
+@lru_cache(maxsize=8192)
+def _best_final_plan_stats(
+    dice: tuple[int, ...], category: str
+) -> tuple[float, float, float]:
+    """Best category-specific final-reroll plan after seeing Roll 2."""
+    candidates = [
+        _one_reroll_plan_stats(hold, category)
+        for hold in _evidence_legal_holds(canonical(dice))
+    ]
+    # Expected score is the actual objective.  Hit rate and benchmark rate are
+    # deterministic teaching tie-breakers, not changes to the exact policy.
+    return max(candidates, key=lambda item: (item[1], item[0], item[2]))
+
+
+@lru_cache(maxsize=4096)
+def _turn_plan_stats(
+    hold: tuple[int, ...], category: str, roll_number: int
+) -> tuple[float, float, float]:
+    """Explain a plan through the end of the current turn.
+
+    Roll 2 needs one exact reroll.  Roll 1 fixes the displayed first hold,
+    observes Roll 2, then chooses the best category-specific continuation for
+    the final reroll.  This prevents Roll 1 coaching from presenting a
+    next-roll snapshot as though it were the whole turn.
+    """
+    held = canonical(hold)
+    if int(roll_number) == 2:
+        return _one_reroll_plan_stats(held, category)
+    if int(roll_number) != 1:
+        raise ValueError("Turn-aware evidence supports Roll 1 and Roll 2 only")
+
+    total = float(6 ** (5 - len(held)))
+    hit_total = 0.0
+    score_total = 0.0
+    benchmark_total = 0.0
+    for next_dice, multiplicity in _evidence_reroll_outcomes(held):
+        hit, score, benchmark = _best_final_plan_stats(next_dice, category)
+        hit_total += hit * multiplicity
+        score_total += score * multiplicity
+        benchmark_total += benchmark * multiplicity
+    return hit_total / total, score_total / total, benchmark_total / total
 
 
 @lru_cache(maxsize=252)
@@ -1376,18 +1577,22 @@ def _rate_evidence_candidates(
                 best_candidates.append((
                     upper_strength,
                     (
-                        f"{_keeping_text(optimal).capitalize()} starts the open {best_upper[1]} box with more held dice than your hold."
+                        f"{_keeping_text(optimal).capitalize()} starts the open {best_upper[1]} box more strongly: "
+                        f"it averages {best_upper[2]:.1f} there after the {horizon}, versus {user_upper[2]:.1f} from your hold."
                         if same_upper_box
-                        else f"The model's hold has the stronger immediate upper-section route through {best_upper[1]}; your hold targets {user_upper[1]} instead."
+                        else f"The model's hold has the stronger immediate upper-section route through {best_upper[1]}: "
+                        f"it averages {best_upper[2]:.1f} there after the {horizon}, versus {user_upper[2]:.1f} in {user_upper[1]} from your hold."
                     ),
                 ))
             else:
                 user_candidates.append((
                     upper_strength,
                     (
-                        f"Your hold starts the open {user_upper[1]} box with more held dice than {_keeping_text(optimal)}."
+                        f"Your hold starts the open {user_upper[1]} box more strongly: it averages {user_upper[2]:.1f} there "
+                        f"after the {horizon}, versus {best_upper[2]:.1f} from {_keeping_text(optimal)}."
                         if same_upper_box
-                        else f"Your hold has the stronger immediate upper-section route through {user_upper[1]}; the model's hold targets {best_upper[1]} instead."
+                        else f"Your hold has the stronger immediate upper-section route through {user_upper[1]}: it averages {user_upper[2]:.1f} there "
+                        f"after the {horizon}, versus {best_upper[2]:.1f} in {best_upper[1]} from the model's hold."
                     ),
                 ))
     elif user_upper:
@@ -1441,7 +1646,7 @@ def _margin_verdict(points_lost: float, optimal_hold: Sequence[int]) -> str:
     optimal_text = _keeping_text(optimal_hold)
     if points_lost <= 0.10:
         return (
-            f"Those advantages nearly cancel. Full-game lookahead gives {optimal_text} only a {points_lost:.2f}-point edge, "
+            f"Those advantages nearly cancel: {optimal_text} leads by only {points_lost:.2f} points, "
             "so this was not a meaningful strategy mistake."
         )
     if points_lost <= 0.50:
@@ -1449,6 +1654,111 @@ def _margin_verdict(points_lost: float, optimal_hold: Sequence[int]) -> str:
     if points_lost <= 1.50:
         return f"After all future rolls and scorecard choices, {optimal_text} finishes {points_lost:.2f} expected points higher."
     return f"Across the rest of the game, the exact model values {optimal_text} {points_lost:.2f} expected points higher."
+
+
+def _low_pair_open_board_value_explanation(
+    scorecard: Mapping[str, int | None],
+    user_hold: Sequence[int],
+    optimal_hold: Sequence[int],
+    *,
+    roll_number: int,
+) -> str | None:
+    """Explain when a low pair wins raw hit rates but loses scoring value.
+
+    This is the common source of misleading comparative prose: a pair can make
+    Three/Four of a Kind more often while still being worse than a high
+    singleton on an open scorecard. Probability without payoff overstates the
+    losing hold. Keep this family general, but conservative.
+    """
+    user = canonical(user_hold)
+    optimal = canonical(optimal_hold)
+    open_keys = _open_category_keys(scorecard)
+    if (
+        scorecard.get("yahtzee") == 50
+        or len(open_keys) < 8
+        or len(user) != 2
+        or len(set(user)) != 1
+        or len(optimal) != 1
+        or user[0] > 2
+        or optimal[0] <= user[0]
+        or not _upper_bonus_context(scorecard)["alive"]
+        or not _is_open(scorecard, UPPER_BY_FACE[user[0]])
+        or not _is_open(scorecard, UPPER_BY_FACE[optimal[0]])
+        or not _is_open(scorecard, "three_of_a_kind")
+    ):
+        return None
+
+    user_upper = UPPER_BY_FACE[user[0]]
+    best_upper = UPPER_BY_FACE[optimal[0]]
+    _, user_upper_value = _one_reroll_scoring_stat(user, user_upper)
+    _, best_upper_value = _one_reroll_scoring_stat(optimal, best_upper)
+    user_three_rate, user_three_value = _one_reroll_scoring_stat(user, "three_of_a_kind")
+    best_three_rate, best_three_value = _one_reroll_scoring_stat(optimal, "three_of_a_kind")
+    if user_three_rate - best_three_rate < 0.08:
+        return None
+
+    straight_parts: list[str] = []
+    for category in ("small_straight", "large_straight"):
+        if not _is_open(scorecard, category):
+            continue
+        user_rate, _ = _one_reroll_scoring_stat(user, category)
+        best_rate, _ = _one_reroll_scoring_stat(optimal, category)
+        if best_rate - user_rate >= 0.005:
+            straight_parts.append(
+                f"{CATEGORY_LABELS[category]} {best_rate:.1%} versus {user_rate:.1%}"
+            )
+
+    horizon = "the final roll" if roll_number == 2 else "the next roll"
+    winner = _keeping_text(optimal)
+    straight_sentence = (
+        f" It also leads on straight chances after {horizon}: " + "; ".join(straight_parts) + "."
+        if straight_parts else ""
+    )
+    return (
+        f"{winner.capitalize()} wins with {5 - len(optimal)} fresh dice and a stronger upper start: "
+        f"{best_upper_value:.1f} expected {CATEGORY_LABELS[best_upper]} after {horizon}, versus {user_upper_value:.1f} "
+        f"{CATEGORY_LABELS[user_upper]} from your pair.{straight_sentence} "
+        f"Your pair raises the raw Three-of-a-Kind chance to {user_three_rate:.1%} versus {best_three_rate:.1%}, "
+        f"but the low {user[0]}s leave its immediate expected score nearly even: "
+        f"{user_three_value:.2f} versus {best_three_value:.2f}."
+    )
+
+
+_SMALL_NUMBER_WORDS = {
+    0: "zero", 1: "one", 2: "two", 3: "three", 4: "four", 5: "five",
+    6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten",
+}
+
+
+def _rank_context_line(
+    *,
+    rank: int,
+    legal_hold_count: int,
+    points_lost: float,
+    is_optimal: bool,
+) -> str:
+    """Explain ordinal rank beside the cardinal expected-point distance."""
+    if is_optimal:
+        return f"Exact rank #1 of {legal_hold_count}: no legal hold has a higher full-game expected score."
+
+    better = max(0, rank - 1)
+    better_text = _SMALL_NUMBER_WORDS.get(better, str(better))
+    noun = "hold" if better == 1 else "holds"
+    verb = "ranks" if better == 1 else "rank"
+    if rank >= 4 and points_lost <= 1.50:
+        return (
+            f"Crowded field: #{rank} means {better_text} legal {noun} {verb} ahead, but your hold is only "
+            f"{points_lost:.2f} expected points from first. Rank is order; Points Lost is distance."
+        )
+    if points_lost <= 0.10:
+        return (
+            f"Exact rank #{rank} means {better_text} legal {noun} {verb} ahead, but the {points_lost:.2f}-point gap is a practical tie. "
+            "Rank is order; Points Lost is distance."
+        )
+    return (
+        f"Exact rank #{rank} means {better_text} legal {noun} {verb} ahead. Points Lost gives the meaningful distance from first: "
+        f"{points_lost:.2f} expected points."
+    )
 
 
 def _strict_runner_up(
@@ -1698,6 +2008,446 @@ def _endgame_straight_math_detail(
     )
 
 
+def _comparison_row(
+    label: str,
+    left_value: str,
+    left_note: str,
+    right_value: str,
+    right_note: str,
+    advantage: str,
+) -> dict:
+    return {
+        "label": str(label),
+        "left_value": str(left_value),
+        "left_note": str(left_note),
+        "right_value": str(right_value),
+        "right_note": str(right_note),
+        "advantage": advantage if advantage in {"left", "right", "split", "neutral"} else "neutral",
+    }
+
+
+def _numeric_advantage(left: float, right: float, *, tolerance: float = 1e-9) -> str:
+    if right - left > tolerance:
+        return "right"
+    if left - right > tolerance:
+        return "left"
+    return "neutral"
+
+
+def _direct_open_upper_face(
+    hold: Sequence[int], scorecard: Mapping[str, int | None]
+) -> int | None:
+    held = canonical(hold)
+    if not held:
+        return None
+    counts = Counter(held)
+    candidates = [
+        face for face in counts
+        if _is_open(scorecard, UPPER_BY_FACE[face])
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda face: (counts[face], face * counts[face], face))
+
+
+def _comparison_topic(label: str) -> str:
+    return {
+        "Expected upper box": "raw upper value",
+        "Bonus benchmark": "upper-bonus pace",
+        "Straight chances": "straight access",
+        "Straight payoff": "straight payoff",
+        "Fresh dice": "reroll flexibility",
+        "Live scoring routes": "scorecard flexibility",
+        "Chance total": "Chance value",
+    }.get(label, label.lower())
+
+
+def _comparison_topics(rows: Sequence[Mapping[str, str]], side: str) -> list[str]:
+    topics: list[str] = []
+    for row in rows:
+        if row.get("advantage") != side:
+            continue
+        topic = _comparison_topic(str(row.get("label", "")))
+        if topic and topic not in topics:
+            topics.append(topic)
+    return topics
+
+
+def _generic_comparison_rows(
+    scorecard: Mapping[str, int | None],
+    left_hold: Sequence[int],
+    right_hold: Sequence[int],
+    *,
+    roll_number: int,
+) -> list[dict]:
+    """Select no more than five end-of-turn facts that distinguish two holds."""
+    left = canonical(left_hold)
+    right = canonical(right_hold)
+    candidates: list[tuple[float, int, dict]] = []
+    order = 0
+
+    def add(priority: float, row: dict) -> None:
+        nonlocal order
+        candidates.append((priority, order, row))
+        order += 1
+
+    left_upper_face = _direct_open_upper_face(left, scorecard)
+    right_upper_face = _direct_open_upper_face(right, scorecard)
+    if left_upper_face is not None and right_upper_face is not None:
+        left_category = UPPER_BY_FACE[left_upper_face]
+        right_category = UPPER_BY_FACE[right_upper_face]
+        left_stats = _turn_plan_stats(left, left_category, roll_number)
+        right_stats = _turn_plan_stats(right, right_category, roll_number)
+        if left_category == right_category:
+            advantage = _numeric_advantage(left_stats[1], right_stats[1], tolerance=0.05)
+        else:
+            # Different upper boxes have different 3-of-a-number benchmarks;
+            # raw scores alone cannot declare the bonus-lane winner.
+            advantage = "split"
+        add(5.0, _comparison_row(
+            "Expected upper box",
+            f"{left_stats[1]:.2f}", f"{CATEGORY_LABELS[left_category]} · target {left_upper_face * 3}",
+            f"{right_stats[1]:.2f}", f"{CATEGORY_LABELS[right_category]} · target {right_upper_face * 3}",
+            advantage,
+        ))
+        if _upper_bonus_context(scorecard)["alive"]:
+            add(5.5, _comparison_row(
+                "Bonus benchmark",
+                f"{left_stats[2]:.1%}", f"finish with 3+ {CATEGORY_LABELS[left_category]}",
+                f"{right_stats[2]:.1%}", f"finish with 3+ {CATEGORY_LABELS[right_category]}",
+                _numeric_advantage(left_stats[2], right_stats[2], tolerance=0.005),
+            ))
+    elif left_upper_face is not None or right_upper_face is not None:
+        target_face = left_upper_face if left_upper_face is not None else right_upper_face
+        target_category = UPPER_BY_FACE[int(target_face)]
+        left_stats = _turn_plan_stats(left, target_category, roll_number)
+        right_stats = _turn_plan_stats(right, target_category, roll_number)
+        add(4.5, _comparison_row(
+            CATEGORY_LABELS[target_category],
+            f"{left_stats[1]:.2f} pts", f"{left_stats[2]:.1%} reach 3+",
+            f"{right_stats[1]:.2f} pts", f"{right_stats[2]:.1%} reach 3+",
+            _numeric_advantage(left_stats[1], right_stats[1], tolerance=0.05),
+        ))
+
+    small_open = _is_open(scorecard, "small_straight")
+    large_open = _is_open(scorecard, "large_straight")
+    if small_open and large_open:
+        left_small = _turn_plan_stats(left, "small_straight", roll_number)
+        right_small = _turn_plan_stats(right, "small_straight", roll_number)
+        left_large = _turn_plan_stats(left, "large_straight", roll_number)
+        right_large = _turn_plan_stats(right, "large_straight", roll_number)
+        left_straight = _turn_plan_stats(left, "best_straight", roll_number)
+        right_straight = _turn_plan_stats(right, "best_straight", roll_number)
+        if max(abs(left_small[0] - right_small[0]), abs(left_large[0] - right_large[0])) >= 0.005:
+            advantage = _numeric_advantage(left_straight[1], right_straight[1], tolerance=0.05)
+            add(6.0, _comparison_row(
+                "Straight chances",
+                f"SS {left_small[0]:.1%} · LS {left_large[0]:.1%}", "best path for each box",
+                f"SS {right_small[0]:.1%} · LS {right_large[0]:.1%}", "best path for each box",
+                advantage,
+            ))
+            if abs(left_straight[1] - right_straight[1]) >= 0.25:
+                add(5.8, _comparison_row(
+                    "Straight payoff",
+                    f"{left_straight[1]:.2f} pts", "best open straight box",
+                    f"{right_straight[1]:.2f} pts", "best open straight box",
+                    advantage,
+                ))
+    elif small_open or large_open:
+        category = "small_straight" if small_open else "large_straight"
+        left_stats = _turn_plan_stats(left, category, roll_number)
+        right_stats = _turn_plan_stats(right, category, roll_number)
+        if abs(left_stats[0] - right_stats[0]) >= 0.005:
+            add(5.5, _comparison_row(
+                CATEGORY_LABELS[category],
+                f"{left_stats[0]:.1%}", f"{left_stats[1]:.2f} expected pts",
+                f"{right_stats[0]:.1%}", f"{right_stats[1]:.2f} expected pts",
+                _numeric_advantage(left_stats[1], right_stats[1], tolerance=0.05),
+            ))
+
+    if scorecard.get("yahtzee") == 50:
+        left_extra = _turn_plan_stats(left, "yahtzee", roll_number)
+        right_extra = _turn_plan_stats(right, "yahtzee", roll_number)
+        if abs(left_extra[0] - right_extra[0]) >= 0.0005:
+            add(7.0, _comparison_row(
+                "Extra Yahtzee",
+                f"{left_extra[0]:.1%}", "chance at the 100-point bonus",
+                f"{right_extra[0]:.1%}", "chance at the 100-point bonus",
+                _numeric_advantage(left_extra[0], right_extra[0], tolerance=0.0005),
+            ))
+
+    matching_candidates: list[tuple[float, dict]] = []
+    for category in ("three_of_a_kind", "four_of_a_kind", "full_house", "yahtzee"):
+        if not _is_open(scorecard, category):
+            continue
+        left_stats = _turn_plan_stats(left, category, roll_number)
+        right_stats = _turn_plan_stats(right, category, roll_number)
+        rate_gap = abs(left_stats[0] - right_stats[0])
+        value_gap = abs(left_stats[1] - right_stats[1])
+        if rate_gap < 0.005 and value_gap < 0.15:
+            continue
+        matching_candidates.append((
+            value_gap + rate_gap * _STRUCTURE_RATE_WEIGHTS[category],
+            _comparison_row(
+                CATEGORY_LABELS[category],
+                f"{left_stats[1]:.2f} pts", f"{left_stats[0]:.1%} chance",
+                f"{right_stats[1]:.2f} pts", f"{right_stats[0]:.1%} chance",
+                _numeric_advantage(left_stats[1], right_stats[1], tolerance=0.05),
+            ),
+        ))
+    if matching_candidates:
+        _, row = max(matching_candidates, key=lambda item: item[0])
+        add(4.8, row)
+
+    if _is_open(scorecard, "chance") and len(_open_category_keys(scorecard)) <= 4:
+        left_chance = _turn_plan_stats(left, "chance", roll_number)
+        right_chance = _turn_plan_stats(right, "chance", roll_number)
+        if abs(left_chance[1] - right_chance[1]) >= 0.25:
+            add(4.0, _comparison_row(
+                "Chance total",
+                f"{left_chance[1]:.2f}", "expected dice total",
+                f"{right_chance[1]:.2f}", "expected dice total",
+                _numeric_advantage(left_chance[1], right_chance[1], tolerance=0.05),
+            ))
+
+    left_fresh = 5 - len(left)
+    right_fresh = 5 - len(right)
+    if left_fresh != right_fresh:
+        add(3.5, _comparison_row(
+            "Fresh dice",
+            str(left_fresh), "available on the next roll",
+            str(right_fresh), "available on the next roll",
+            _numeric_advantage(float(left_fresh), float(right_fresh)),
+        ))
+
+    left_paths = _live_paths_for_hold(left, scorecard, limit=4)
+    right_paths = _live_paths_for_hold(right, scorecard, limit=4)
+    if left_paths or right_paths:
+        add(2.0, _comparison_row(
+            "Live scoring routes",
+            str(len(left_paths)), _join_paths(left_paths[:3]) if left_paths else "no direct held route",
+            str(len(right_paths)), _join_paths(right_paths[:3]) if right_paths else "no direct held route",
+            _numeric_advantage(float(len(left_paths)), float(len(right_paths))),
+        ))
+
+    if not candidates:
+        add(1.0, _comparison_row(
+            "Dice protected",
+            str(len(left)), hold_text(left),
+            str(len(right)), hold_text(right),
+            _numeric_advantage(float(len(left)), float(len(right))),
+        ))
+
+    selected = sorted(candidates, key=lambda item: (-item[0], item[1]))[:5]
+    return [item[2] for item in sorted(selected, key=lambda item: item[1])]
+
+
+def _low_pair_open_board_card(
+    scorecard: Mapping[str, int | None],
+    user_hold: Sequence[int],
+    optimal_hold: Sequence[int],
+    *,
+    roll_number: int,
+    points_lost: float,
+) -> tuple[list[dict], str, str, str]:
+    """The bonus-versus-straight explanation requested by the reported case."""
+    user = canonical(user_hold)
+    optimal = canonical(optimal_hold)
+    user_face = user[0]
+    optimal_face = optimal[0]
+    user_category = UPPER_BY_FACE[user_face]
+    optimal_category = UPPER_BY_FACE[optimal_face]
+    user_upper = _turn_plan_stats(user, user_category, roll_number)
+    optimal_upper = _turn_plan_stats(optimal, optimal_category, roll_number)
+    user_small = _turn_plan_stats(user, "small_straight", roll_number)
+    optimal_small = _turn_plan_stats(optimal, "small_straight", roll_number)
+    user_large = _turn_plan_stats(user, "large_straight", roll_number)
+    optimal_large = _turn_plan_stats(optimal, "large_straight", roll_number)
+    user_straight = _turn_plan_stats(user, "best_straight", roll_number)
+    optimal_straight = _turn_plan_stats(optimal, "best_straight", roll_number)
+    straight_gain = optimal_straight[1] - user_straight[1]
+
+    rows = [
+        _comparison_row(
+            "Expected upper box",
+            f"{user_upper[1]:.2f}", f"{CATEGORY_LABELS[user_category]} · target {user_face * 3}",
+            f"{optimal_upper[1]:.2f}", f"{CATEGORY_LABELS[optimal_category]} · target {optimal_face * 3}",
+            "split",
+        ),
+        _comparison_row(
+            "Bonus benchmark",
+            f"{user_upper[2]:.1%}", f"finish with 3+ {CATEGORY_LABELS[user_category]}",
+            f"{optimal_upper[2]:.1%}", f"finish with 3+ {CATEGORY_LABELS[optimal_category]}",
+            _numeric_advantage(user_upper[2], optimal_upper[2], tolerance=0.005),
+        ),
+        _comparison_row(
+            "Straight chances",
+            f"SS {user_small[0]:.1%} · LS {user_large[0]:.1%}", "best path for each box",
+            f"SS {optimal_small[0]:.1%} · LS {optimal_large[0]:.1%}", "best path for each box",
+            _numeric_advantage(user_straight[1], optimal_straight[1], tolerance=0.05),
+        ),
+        _comparison_row(
+            "Straight payoff",
+            f"{user_straight[1]:.2f} pts", "best open straight box",
+            f"{optimal_straight[1]:.2f} pts", "best open straight box",
+            _numeric_advantage(user_straight[1], optimal_straight[1], tolerance=0.05),
+        ),
+        _comparison_row(
+            "Fresh dice",
+            str(5 - len(user)), "available on the next roll",
+            str(5 - len(optimal)), "available on the next roll",
+            _numeric_advantage(float(5 - len(user)), float(5 - len(optimal))),
+        ),
+    ]
+    summary = (
+        f"Your pair better protects the three-{CATEGORY_LABELS[user_category]} benchmark. "
+        f"{_keeping_text(optimal).capitalize()} gives up some bonus safety for about {straight_gain:.2f} more expected straight points "
+        f"and {5 - len(optimal) - (5 - len(user))} extra fresh die. Across the full game, that trade is worth a modest "
+        f"{points_lost:.2f}-point edge."
+    )
+    takeaway = (
+        "Three of every number is a benchmark, not a requirement. A recoverable upper shortfall can be worth accepting "
+        "when it opens a stronger lower-section opportunity."
+    )
+    if roll_number == 1:
+        face_probability = "11/36"
+        horizon = "two rerolls"
+    else:
+        face_probability = "1/6"
+        horizon = "the final reroll"
+    math_detail = (
+        f"Through {horizon}, the category-specific upper plans use a {face_probability} chance per fresh die to finish on the chosen face. "
+        f"That produces {user_upper[1]:.2f} expected {CATEGORY_LABELS[user_category]} with a {user_upper[2]:.1%} chance to reach three or more, "
+        f"versus {optimal_upper[1]:.2f} expected {CATEGORY_LABELS[optimal_category]} with a {optimal_upper[2]:.1%} benchmark chance. "
+        f"The best category-specific straight paths are Small {user_small[0]:.1%} / Large {user_large[0]:.1%} for your hold and "
+        f"Small {optimal_small[0]:.1%} / Large {optimal_large[0]:.1%} for {_keeping_text(optimal)}. "
+        f"Scoring 40 for a Large, 30 for Small-only, and 0 otherwise gives {user_straight[1]:.2f} versus {optimal_straight[1]:.2f} expected straight points. "
+        "Those teaching statistics explain the visible plans; the locked exact policy still supplies the final full-game recommendation."
+    )
+    return rows, summary, takeaway, math_detail
+
+
+def _build_comparison_card(
+    scorecard: Mapping[str, int | None],
+    user_hold: Sequence[int],
+    comparison_hold: Sequence[int],
+    *,
+    roll_number: int,
+    points_lost: float,
+    hold_rank: int,
+    legal_hold_count: int,
+    is_optimal: bool,
+    comparison_gap: float | None,
+    coaching_family: str,
+    takeaway: str,
+    existing_math_detail: str,
+) -> dict:
+    """Build the shared, responsive evidence card used by every review surface."""
+    left = canonical(user_hold)
+    right = canonical(comparison_hold)
+    edge = max(0.0, float(comparison_gap if is_optimal and comparison_gap is not None else points_lost))
+    winner_side = "left" if is_optimal else "right"
+    practical_tie = bool(not is_optimal and 0.0 < points_lost <= 0.10)
+
+    if coaching_family == "low_pair_open_board_value" and not is_optimal:
+        rows, summary, card_takeaway, card_math = _low_pair_open_board_card(
+            scorecard,
+            left,
+            right,
+            roll_number=roll_number,
+            points_lost=points_lost,
+        )
+    else:
+        rows = _generic_comparison_rows(
+            scorecard,
+            left,
+            right,
+            roll_number=roll_number,
+        )
+        left_topics = _comparison_topics(rows, "left")
+        right_topics = _comparison_topics(rows, "right")
+        left_text = _join_paths(left_topics[:2]) if left_topics else "a legitimate scoring route"
+        right_text = _join_paths(right_topics[:2]) if right_topics else "deeper scorecard sequencing"
+        if is_optimal:
+            summary = (
+                f"Your hold wins through {left_text}. {_keeping_text(right).capitalize()} offers {right_text}, "
+                f"but full-game lookahead leaves your hold {edge:.2f} expected points ahead."
+            )
+        elif practical_tie:
+            summary = (
+                f"Your hold is stronger for {left_text}; {_keeping_text(right)} is stronger for {right_text}. "
+                f"The exact {points_lost:.2f}-point edge is a practical tie."
+            )
+        else:
+            player_clause = f" Your hold is stronger for {left_text}." if left_topics else ""
+            summary = (
+                f"{_keeping_text(right).capitalize()} wins through {right_text}.{player_clause} "
+                f"Full-game lookahead puts it {points_lost:.2f} expected points ahead."
+            )
+        card_takeaway = "" if practical_tie else takeaway
+        horizon = "through Roll 3" if roll_number == 1 else "on the final roll"
+        card_math = (
+            f"Displayed plan statistics are exact category-specific calculations {horizon}. "
+            "They show what each visible plan can accomplish; the locked full-game policy still determines the hold ranking and Points Lost."
+        )
+
+    if existing_math_detail:
+        card_math = f"{card_math} {existing_math_detail}"
+
+    if is_optimal:
+        eyebrow = "Why your hold works"
+        title = f"{hold_text(left).capitalize()} wins"
+        left_role = "You · Best"
+        right_role = "Compare"
+        edge_label = "over comparison"
+        status = "Exact best"
+    elif practical_tie:
+        eyebrow = "Essentially tied"
+        title = f"{hold_text(right).capitalize()} barely leads"
+        left_role = "You"
+        right_role = "Model edge"
+        edge_label = "expected points"
+        status = "Practical tie"
+    else:
+        eyebrow = "Best plan"
+        title = f"{hold_text(right).capitalize()} wins"
+        left_role = "You"
+        right_role = "Best"
+        edge_label = "expected points"
+        status = "Crowded decision" if hold_rank >= 4 and points_lost <= 1.50 else "Very close" if points_lost <= 0.50 else "Exact comparison"
+
+    return {
+        "eyebrow": eyebrow,
+        "title": title,
+        "summary_label": (
+            "Why your hold wins"
+            if is_optimal
+            else "Why the model barely leads"
+            if practical_tie
+            else f"Why the {right[0]} wins"
+            if len(right) == 1
+            else "Why rerolling everything wins"
+            if not right
+            else "Why the best hold wins"
+        ),
+        "edge": f"{edge:.2f}",
+        "edge_label": edge_label,
+        "left_role": left_role,
+        "left_hold": hold_text(left),
+        "right_role": right_role,
+        "right_hold": hold_text(right),
+        "winner_side": winner_side,
+        "rank_text": f"Your hold: #{hold_rank} of {legal_hold_count}",
+        "status": status,
+        "rows": rows[:5],
+        "summary": summary,
+        "takeaway": card_takeaway,
+        "math_detail": card_math,
+        "roll_number": int(roll_number),
+        "practical_tie": practical_tie,
+    }
+
+
 def _comparative_simple_why(
     scorecard: Mapping[str, int | None],
     user_hold: Sequence[int],
@@ -1723,6 +2473,18 @@ def _comparative_simple_why(
     if endgame_straight:
         return "true_endgame_straight_flexibility", endgame_straight
 
+    low_pair_value = _low_pair_open_board_value_explanation(
+        scorecard,
+        user_hold,
+        optimal_hold,
+        roll_number=roll_number,
+    )
+    if low_pair_value:
+        return (
+            "low_pair_open_board_value",
+            f"{low_pair_value} Full-game lookahead puts {_keeping_text(optimal_hold)} {points_lost:.2f} expected points ahead.",
+        )
+
     user_candidates, best_candidates = _rate_evidence_candidates(
         scorecard,
         user_hold,
@@ -1740,6 +2502,13 @@ def _comparative_simple_why(
         user_evidence = ""
     user_intent = _hold_intent(user_hold, scorecard)
     model_intent = _model_intent_sentence(optimal_hold, scorecard)
+    winner = _keeping_text(optimal_hold)
+    if points_lost <= 0.10:
+        winner_lead = f"The model gives {winner} only a microscopic edge."
+    elif points_lost <= 0.50:
+        winner_lead = f"The model gives {winner} a slight edge."
+    else:
+        winner_lead = f"{winner.capitalize()} wins this comparison."
 
     already_comparative = {
         "pair_vs_straight",
@@ -1748,7 +2517,7 @@ def _comparative_simple_why(
     }
 
     if base_family == "extra_yahtzee_joker":
-        comparison = f"{user_intent} {base_explanation}"
+        comparison = f"{base_explanation} {user_intent}"
     elif base_family in {"bonus_dead_high_die", "protect_made_hand", "break_made_hand"}:
         # These families already give the complete scorecard comparison: dead
         # bonus versus a lower pair, or guaranteed made-hand value versus the
@@ -1757,23 +2526,23 @@ def _comparative_simple_why(
         comparison = base_explanation
     elif base_family in already_comparative and best_evidence:
         combined = f"{base_explanation} {best_evidence}"
-        if len(combined) <= 360:
+        if len(combined) <= 400:
             comparison = combined
         else:
             concise_player_context = base_explanation.split(". ", 1)[0].rstrip(".") + "."
             comparison = f"{concise_player_context} {best_evidence}"
     elif user_evidence and best_evidence:
-        comparison = f"{user_evidence} {best_evidence}"
+        comparison = f"{winner_lead} {best_evidence} {user_evidence}"
     elif best_evidence:
-        comparison = f"{user_intent} {best_evidence}"
+        comparison = f"{winner_lead} {best_evidence} {user_intent}"
     elif user_evidence:
-        comparison = f"{user_evidence} {base_explanation}"
+        comparison = f"{winner_lead} {base_explanation} {user_evidence}"
     elif "Your hold" in base_explanation or "Your pair" in base_explanation:
-        comparison = base_explanation
+        comparison = f"{winner_lead} {base_explanation}"
     elif points_lost <= 0.10:
-        comparison = f"{user_intent} {model_intent} No single visible one-roll statistic separates the plans by much."
+        comparison = f"{winner_lead} {model_intent} {user_intent} No single visible one-roll statistic separates the plans by much."
     else:
-        comparison = f"{user_intent} {base_explanation}"
+        comparison = f"{winner_lead} {base_explanation} {user_intent}"
 
     return base_family, f"{comparison} {_margin_verdict(points_lost, optimal_hold)}"
 
@@ -1792,6 +2561,7 @@ def _clear_takeaway_for_family(family: str, fallback: str) -> str:
         "bonus_alive_singleton": "When the upper bonus is still in play, one useful upper die can matter—but only if keeping it still leaves enough reroll flexibility. Read the open boxes, not just the dice.",
         "bonus_secured_pair": "Once the upper bonus is secured, judge an upper pair only by the boxes that remain; there is no extra need to protect 63.",
         "bonus_secured_singleton": "Once the upper bonus is secured, an upper die has to earn its place through the boxes that remain. Read the open boxes, not just the dice.",
+        "low_pair_open_board_value": "Raw hit rate is not the same as scoring value. A low pair can make matching hands more often while a higher singleton and an extra fresh die produce more expected points across an open board.",
         "pair_vs_straight": "Straights need distinct connected numbers. A pair is only worth protecting when the remaining matching boxes reward it more.",
         "straight_over_matching": "When a straight box is live, distinct connected numbers can be worth more than a pair or triple that looks stronger at first glance.",
         "straight_structure": "A connected straight core is a premium structure. Protect it and reroll the dice that do not help complete it.",
@@ -1870,6 +2640,12 @@ def build_exact_report(
 
     rank = _hold_rank(results, user_value)
     grade, rating = exact_grade(points_lost, is_optimal)
+    rank_context = _rank_context_line(
+        rank=rank,
+        legal_hold_count=len(results),
+        points_lost=points_lost,
+        is_optimal=is_optimal,
+    )
     lesson_title, visible_reason, takeaway = _visible_strategy_reason(
         scorecard, display_optimal, roll_number
     )
@@ -1940,6 +2716,25 @@ def build_exact_report(
             display_optimal,
             points_lost=points_lost,
         )
+    comparison_hold = (
+        canonical(instructive_alternative["hold"])
+        if is_optimal and instructive_alternative is not None
+        else display_optimal
+    )
+    comparison_card = _build_comparison_card(
+        scorecard,
+        user_hold,
+        comparison_hold,
+        roll_number=roll_number,
+        points_lost=points_lost,
+        hold_rank=rank,
+        legal_hold_count=len(results),
+        is_optimal=is_optimal,
+        comparison_gap=instructive_gap,
+        coaching_family=coaching_family,
+        takeaway=takeaway,
+        existing_math_detail=math_detail,
+    )
 
     if is_optimal:
         recommendation = f"Yes — {hold_text(display_optimal)}. {visible_reason}"
@@ -1980,6 +2775,12 @@ def build_exact_report(
         "",
         "Simple why:",
         f"- {simple_why}",
+        "",
+        "Comparison summary:",
+        f"- {comparison_card['summary']}",
+        "",
+        "Rank context:",
+        f"- {rank_context}",
     ]
     if math_detail:
         report.extend(["", "Math detail:", f"- {math_detail}"])
@@ -2041,6 +2842,8 @@ def build_exact_report(
         "hold_rank": int(rank),
         "legal_hold_count": len(results),
         "points_lost": float(points_lost),
+        "grade": grade,
+        "rank_context": rank_context,
         "lesson_title": lesson_title,
         "teaching_takeaway": takeaway,
         "context_notes": " | ".join(context_notes),
@@ -2050,6 +2853,7 @@ def build_exact_report(
         "simple_why": simple_why,
         "coaching_family": coaching_family,
         "math_detail": math_detail,
+        "comparison_card": comparison_card,
         "instructive_alternative": hold_text(instructive_alternative["hold"]) if instructive_alternative else "",
         "instructive_alternative_gap": float(instructive_gap) if instructive_gap is not None else None,
         "instructive_alternative_kind": instructive_kind,

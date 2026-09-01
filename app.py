@@ -33,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.14"
+APP_RELEASE = "v43B Phase 2K.14.2"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -1221,6 +1221,80 @@ st.markdown(
     .top-hold-line { padding:0.38rem 0; border-bottom:1px solid rgba(127,127,127,0.14); line-height:1.34; }
     .top-hold-line:last-child { border-bottom:none; }
 
+    /* Phase 2K.14.2 — one responsive evidence card across every coach surface. */
+    .evidence-card {
+        border:1px solid #d9dee7;
+        border-radius:20px;
+        padding:0.86rem 0.9rem;
+        background:#ffffff;
+        box-shadow:0 3px 14px rgba(0,0,0,0.055);
+        margin:0.52rem 0 0.66rem 0;
+        color:#252936 !important;
+        overflow:hidden;
+    }
+    .evidence-card * { color:inherit; box-sizing:border-box; }
+    .evidence-top {
+        display:flex; align-items:flex-start; justify-content:space-between;
+        gap:0.75rem; padding-bottom:0.68rem; border-bottom:1px solid #dfe2e7;
+    }
+    .evidence-eyebrow {
+        margin:0 0 0.12rem 0; color:#147d3f !important; font-size:0.70rem;
+        font-weight:950; letter-spacing:0.06em; text-transform:uppercase;
+    }
+    .evidence-title { margin:0; font-size:1.20rem; line-height:1.22; font-weight:950; letter-spacing:-0.015em; }
+    .evidence-edge { flex:0 0 auto; text-align:right; }
+    .evidence-edge strong { display:block; color:#147d3f !important; font-size:1.16rem; line-height:1.12; font-weight:950; font-variant-numeric:tabular-nums; }
+    .evidence-edge span { display:block; color:#6e7481 !important; font-size:0.66rem; margin-top:0.08rem; }
+    .evidence-rankline {
+        display:flex; align-items:center; justify-content:space-between; gap:0.5rem;
+        margin:0.62rem 0 0.72rem 0; color:#6e7481 !important; font-size:0.73rem;
+    }
+    .evidence-rankline b { color:#252936 !important; }
+    .evidence-badges { display:flex; align-items:center; justify-content:flex-end; gap:0.28rem; flex-wrap:wrap; }
+    .evidence-grade, .evidence-status {
+        display:inline-flex; align-items:center; padding:0.19rem 0.43rem; border-radius:999px;
+        white-space:nowrap; font-size:0.66rem; line-height:1.2; font-weight:950;
+    }
+    .evidence-grade { color:#365f9f !important; background:#edf3fc; }
+    .evidence-status { color:#8b5d00 !important; background:#fff5db; }
+    .evidence-holds, .evidence-grid {
+        display:grid; grid-template-columns:minmax(5.9rem,0.88fr) minmax(0,1fr) minmax(0,1fr);
+        gap:0;
+    }
+    .evidence-holds { align-items:stretch; gap:0.38rem; margin-bottom:0.38rem; }
+    .evidence-column-label { display:flex; align-items:flex-end; padding:0 0 0.28rem 0; color:#6e7481 !important; font-size:0.67rem; }
+    .evidence-hold {
+        min-width:0; padding:0.48rem 0.38rem; border-radius:10px; text-align:center;
+        background:#f7f8fa;
+    }
+    .evidence-hold.winner { color:#147d3f !important; background:#e9f7ee; }
+    .evidence-hold span { display:block; color:#6e7481 !important; font-size:0.58rem; font-weight:950; letter-spacing:0.04em; text-transform:uppercase; }
+    .evidence-hold.winner span { color:#147d3f !important; }
+    .evidence-hold strong { display:block; margin-top:0.08rem; font-size:0.88rem; line-height:1.24; font-weight:950; overflow-wrap:anywhere; }
+    .evidence-grid { border-top:1px solid #dfe2e7; }
+    .evidence-cell { min-width:0; padding:0.52rem 0.34rem; border-bottom:1px solid #dfe2e7; font-size:0.73rem; line-height:1.25; }
+    .evidence-metric { padding-left:0; color:#6e7481 !important; display:flex; align-items:center; }
+    .evidence-value { text-align:center; font-variant-numeric:tabular-nums; }
+    .evidence-value strong { display:block; font-size:0.79rem; line-height:1.22; font-weight:950; }
+    .evidence-value small { display:block; margin-top:0.08rem; color:#6e7481 !important; font-size:0.61rem; line-height:1.22; }
+    .evidence-value.advantage-best { color:#147d3f !important; background:#e9f7ee; }
+    .evidence-value.advantage-player { color:#365f9f !important; background:#edf3fc; }
+    .evidence-value.advantage-split { background:#f7f8fa; }
+    .evidence-summary {
+        margin:0.70rem 0 0.42rem 0; padding:0.60rem 0.66rem;
+        border-left:4px solid #147d3f; background:#e9f7ee; border-radius:0 10px 10px 0;
+        font-size:0.78rem; line-height:1.40;
+    }
+    .evidence-summary b { font-weight:950; }
+    .evidence-takeaway { display:flex; gap:0.38rem; align-items:flex-start; margin:0.48rem 0; font-size:0.74rem; line-height:1.38; }
+    .evidence-takeaway b { font-weight:950; }
+    .evidence-card details { border-top:1px solid #dfe2e7; margin-top:0.55rem; padding-top:0.52rem; }
+    .evidence-card summary { cursor:pointer; color:#365f9f !important; font-size:0.72rem; font-weight:950; }
+    .evidence-detail { margin:0.48rem 0 0 0; color:#6e7481 !important; font-size:0.68rem; line-height:1.42; }
+    .evidence-hold-spread { margin-top:0.4rem; border-top:1px solid #dfe2e7; }
+    .evidence-hold-spread div { padding:0.30rem 0; border-bottom:1px solid #edf0f4; color:#59606d !important; font-size:0.67rem; line-height:1.30; }
+    .evidence-hold-spread div:last-child { border-bottom:none; }
+
     /* v42 — lightweight session momentum, achievements, and mastery. */
     .unlock-card {
         border:1px solid #f6c453;
@@ -1295,6 +1369,18 @@ st.markdown(
         .result-verdict { font-size:1rem; }
         .hold-card-value { font-size:0.98rem; }
         .detail-grid { grid-template-columns:1fr; }
+        .evidence-card { padding:0.72rem 0.66rem; border-radius:15px; }
+        .evidence-title { font-size:1.04rem; }
+        .evidence-edge strong { font-size:1.02rem; }
+        .evidence-rankline { align-items:flex-start; }
+        .evidence-holds, .evidence-grid { grid-template-columns:5.15rem minmax(0,1fr) minmax(0,1fr); }
+        .evidence-holds { gap:0.24rem; }
+        .evidence-cell { padding:0.46rem 0.19rem; }
+        .evidence-metric { padding-left:0; font-size:0.67rem; }
+        .evidence-value strong { font-size:0.71rem; }
+        .evidence-value small { font-size:0.56rem; }
+        .evidence-hold { padding:0.43rem 0.22rem; }
+        .evidence-hold strong { font-size:0.79rem; }
     }
     </style>
     """,
@@ -1964,7 +2050,100 @@ def render_practice_momentum(records):
     )
 
 
-def render_result(report):
+def render_comparison_card(card, *, grade="", top_holds=None, subject_name="You"):
+    """Render the shared mobile-first coaching evidence card."""
+    if not isinstance(card, dict) or not card.get("rows"):
+        return False
+
+    def esc(value):
+        return html.escape(str(value or ""))
+
+    winner_side = card.get("winner_side") if card.get("winner_side") in {"left", "right"} else "right"
+    left_role = str(card.get("left_role") or "You")
+    rank_text = str(card.get("rank_text") or "")
+    if subject_name and subject_name != "You":
+        left_role = left_role.replace("You", str(subject_name))
+        rank_text = rank_text.replace("Your hold:", f"{subject_name}'s hold:")
+
+    row_html = []
+    for row in list(card.get("rows") or [])[:5]:
+        advantage = str(row.get("advantage") or "neutral")
+        left_class = ""
+        right_class = ""
+        if advantage == "left":
+            left_class = "advantage-best" if winner_side == "left" else "advantage-player"
+        elif advantage == "right":
+            right_class = "advantage-best" if winner_side == "right" else "advantage-player"
+        elif advantage == "split":
+            left_class = right_class = "advantage-split"
+        row_html.append(
+            f"<div class='evidence-cell evidence-metric'>{esc(row.get('label'))}</div>"
+            f"<div class='evidence-cell evidence-value {left_class}'><strong>{esc(row.get('left_value'))}</strong><small>{esc(row.get('left_note'))}</small></div>"
+            f"<div class='evidence-cell evidence-value {right_class}'><strong>{esc(row.get('right_value'))}</strong><small>{esc(row.get('right_note'))}</small></div>"
+        )
+
+    badges = []
+    if grade:
+        badges.append(f"<span class='evidence-grade'>Grade {esc(grade)}</span>")
+    if card.get("status"):
+        badges.append(f"<span class='evidence-status'>{esc(card.get('status'))}</span>")
+
+    takeaway_html = ""
+    if card.get("takeaway"):
+        takeaway_html = (
+            "<div class='evidence-takeaway'><span aria-hidden='true'>🧠</span>"
+            f"<span><b>Takeaway:</b> {esc(card.get('takeaway'))}</span></div>"
+        )
+
+    detail_parts = []
+    if card.get("math_detail"):
+        detail_parts.append(f"<p class='evidence-detail'>{esc(card.get('math_detail'))}</p>")
+    hold_lines = list(top_holds or [])[:4]
+    if hold_lines:
+        detail_parts.append(
+            "<div class='evidence-hold-spread'>"
+            + "".join(f"<div>{esc(line)}</div>" for line in hold_lines)
+            + "</div>"
+        )
+    details_html = ""
+    if detail_parts:
+        details_html = (
+            "<details><summary>📐 See the exact math and hold rankings</summary>"
+            + "".join(detail_parts)
+            + "</details>"
+        )
+
+    left_winner = " winner" if winner_side == "left" else ""
+    right_winner = " winner" if winner_side == "right" else ""
+    st.markdown(
+        "<section class='evidence-card'>"
+        "<div class='evidence-top'><div>"
+        f"<div class='evidence-eyebrow'>{esc(card.get('eyebrow'))}</div>"
+        f"<div class='evidence-title'>{esc(card.get('title'))}</div>"
+        "</div><div class='evidence-edge'>"
+        f"<strong>+{esc(card.get('edge'))}</strong><span>{esc(card.get('edge_label'))}</span>"
+        "</div></div>"
+        "<div class='evidence-rankline'>"
+        f"<span>{esc(rank_text)}</span><span class='evidence-badges'>{''.join(badges)}</span>"
+        "</div>"
+        "<div class='evidence-holds'>"
+        "<div class='evidence-column-label'>Evidence</div>"
+        f"<div class='evidence-hold{left_winner}'><span>{esc(left_role)}</span><strong>{esc(card.get('left_hold'))}</strong></div>"
+        f"<div class='evidence-hold{right_winner}'><span>{esc(card.get('right_role'))}</span><strong>{esc(card.get('right_hold'))}</strong></div>"
+        "</div>"
+        f"<div class='evidence-grid'>{''.join(row_html)}</div>"
+        "<div class='evidence-summary'>"
+        f"<b>{esc(card.get('summary_label') or 'Why this hold wins')}:</b> {esc(card.get('summary'))}"
+        "</div>"
+        + takeaway_html
+        + details_html
+        + "</section>",
+        unsafe_allow_html=True,
+    )
+    return True
+
+
+def render_result(report, solver_record=None):
     st.markdown("<div id='coach-result-anchor'></div>", unsafe_allow_html=True)
     if st.session_state.get("scroll_to_result", False):
         components.html("""
@@ -1992,6 +2171,7 @@ def render_result(report):
     good_items = extract_section(report, "What was good about your move?")
     why_items = extract_section(report, "Why was the optimal move better?")
     closeness_items = extract_section(report, "How close was it?")
+    rank_context_items = extract_section(report, "Rank context:")
     idea_items = extract_section(report, "Your idea vs. best idea:")
     takeaway_items = extract_section(report, "Teaching takeaway:")
     simple_why_items = extract_section(report, "Simple why:")
@@ -1999,6 +2179,34 @@ def render_result(report):
     note_items = extract_section(report, "Narrow upper-box note:")
     top_holds = extract_section(report, "Top exact holds:")
     grade_class = GRADE_BADGE_CLASS.get(grade, "grade-b")
+
+    comparison_card = (
+        solver_record.get("comparison_card")
+        if isinstance(solver_record, dict)
+        else None
+    )
+    if comparison_card:
+        st.markdown("<div class='section-label'>Coach result</div>", unsafe_allow_html=True)
+        render_comparison_card(
+            comparison_card,
+            grade=grade,
+            top_holds=top_holds,
+        )
+        with st.expander("Strategy details", expanded=False):
+            st.caption(
+                "The comparison card shows the decisive evidence. This section keeps the complete exact-solver report available when you want every detail."
+            )
+            if closeness_items:
+                st.markdown(f"**How close was it?** {closeness_items[0]}")
+            if note_items:
+                st.markdown("**Scorecard note**")
+                st.markdown(
+                    "<ul class='tight-list'>" + "".join(f"<li>{line}</li>" for line in note_items[:2]) + "</ul>",
+                    unsafe_allow_html=True,
+                )
+            st.markdown("**Full text report**")
+            st.code(report, language="text")
+        return
 
     user_idea = next((item[len("Your idea: "):] for item in idea_items if item.startswith("Your idea: ")), "")
     best_idea = next((item[len("Best idea: "):] for item in idea_items if item.startswith("Best idea: ")), "")
@@ -2027,6 +2235,9 @@ def render_result(report):
         unsafe_allow_html=True,
     )
 
+    if rank_context_items:
+        st.markdown(f"**📊 Rank context:** {rank_context_items[0]}")
+
     what_went_well = good_items[0] if good_items else (user_idea or "Your hold had a clear strategic target.")
     what_changes = adjustment or (why_items[0] if why_items else "Compare your hold with the exact best hold above.")
     why_it_matters = simple_why_items[0] if simple_why_items else (why_items[0] if why_items else (best_idea or recommendation or "The exact solver compares every legal hold through the rest of the game."))
@@ -2037,11 +2248,24 @@ def render_result(report):
     if what_changes == why_it_matters and len(why_items) > 1:
         why_it_matters = why_items[1]
 
+    if lost_value is not None and lost_value <= 1e-5:
+        lead_title = "Why this works"
+        player_title = "What you recognized"
+        adjustment_title = "Keep doing this"
+    elif practical_tie:
+        lead_title = "Why the model barely edges it"
+        player_title = "What your hold saw"
+        adjustment_title = "Practical adjustment"
+    else:
+        lead_title = "Why the best hold wins"
+        player_title = "What your hold saw"
+        adjustment_title = "The adjustment"
+
     st.markdown(
         "<div class='coach-three'>"
-        f"<div class='coach-step'><div class='coach-step-title'>✓ What you did well</div><div>{what_went_well}</div></div>"
-        f"<div class='coach-step change'><div class='coach-step-title'>→ What changes</div><div>{what_changes}</div></div>"
-        f"<div class='coach-step why'><div class='coach-step-title'>Why it matters</div><div>{why_it_matters}</div></div>"
+        f"<div class='coach-step why'><div class='coach-step-title'>{lead_title}</div><div>{why_it_matters}</div></div>"
+        f"<div class='coach-step'><div class='coach-step-title'>✓ {player_title}</div><div>{what_went_well}</div></div>"
+        f"<div class='coach-step change'><div class='coach-step-title'>→ {adjustment_title}</div><div>{what_changes}</div></div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -2076,7 +2300,7 @@ def render_result(report):
             st.markdown("<ul class='tight-list'>" + "".join(f"<li>{line}</li>" for line in note_items[:2]) + "</ul>", unsafe_allow_html=True)
         if top_holds:
             st.markdown("**Top exact holds**")
-            st.markdown("".join(f"<div class='top-hold-line'>{line}</div>" for line in top_holds[:3]), unsafe_allow_html=True)
+            st.markdown("".join(f"<div class='top-hold-line'>{line}</div>" for line in top_holds[:4]), unsafe_allow_html=True)
         st.markdown("**Full text report**")
         st.code(report, language="text")
 
@@ -4022,11 +4246,20 @@ def _render_daily_review_body(answer, *, subject_name="You"):
     st.markdown(score_grid_html(challenge["scorecard"], UPPER_CATEGORIES), unsafe_allow_html=True)
     st.markdown("<div class='score-section-title'>Lower</div>", unsafe_allow_html=True)
     st.markdown(score_grid_html(challenge["scorecard"], LOWER_CATEGORIES, lower=True), unsafe_allow_html=True)
+    comparison_card = record.get("comparison_card") if isinstance(record, dict) else None
+    if comparison_card:
+        render_comparison_card(
+            comparison_card,
+            grade=grade,
+            top_holds=extract_section(report, "Top exact holds:"),
+            subject_name=subject_name,
+        )
+        return
     st.markdown(
         "<div class='review-summary'>"
         f"<div class='review-box'><div class='review-label'>{html.escape(str(subject_name))} kept</div><div class='review-value'>{record.get('user_hold', '—')}</div></div>"
         f"<div class='review-box'><div class='review-label'>Best hold</div><div class='review-value'>{record.get('optimal_hold', '—')}</div></div>"
-        f"<div class='review-box'><div class='review-label'>Hold rank</div><div class='review-value'>#{record.get('hold_rank', '—')} of {record.get('legal_hold_count', '—')}</div></div>"
+        f"<div class='review-box'><div class='review-label'>Exact rank</div><div class='review-value'>#{record.get('hold_rank', '—')} of {record.get('legal_hold_count', '—')}</div></div>"
         f"<div class='review-box'><div class='review-label'>Points Lost</div><div class='review-value'>{loss:.2f}</div></div>"
         "</div>",
         unsafe_allow_html=True,
@@ -4035,7 +4268,11 @@ def _render_daily_review_body(answer, *, subject_name="You"):
     simple_why = simple_why_items[0] if simple_why_items else record.get("simple_why", "")
     math_detail_items = extract_section(report, "Math detail:")
     math_detail = math_detail_items[0] if math_detail_items else record.get("math_detail", "")
+    rank_context_items = extract_section(report, "Rank context:")
+    rank_context = rank_context_items[0] if rank_context_items else record.get("rank_context", "")
     practical_tie = 0.0 < loss <= 0.10
+    if rank_context:
+        st.markdown(f"**📊 Rank context:** {rank_context}")
     if practical_tie:
         st.markdown(
             f"**⚖️ Essentially tied:** Only {loss:.2f} Points Lost separates these holds. "
@@ -4052,7 +4289,7 @@ def _render_daily_review_body(answer, *, subject_name="You"):
         elif practical_tie:
             why_label = "Why the model barely edges it"
         else:
-            why_label = "The tradeoff"
+            why_label = "Why the best hold wins"
         st.markdown(f"**💡 {why_label}:** {simple_why}")
     if math_detail:
         with st.expander("📐 See the math", expanded=False):
@@ -4064,8 +4301,8 @@ def _render_daily_review_body(answer, *, subject_name="You"):
         st.markdown(f"**Try this instead:** {idea}")
     top_holds = extract_section(report, "Top exact holds:")
     if top_holds:
-        with st.expander("See the top 3 holds", expanded=False):
-            st.markdown("".join(f"<div class='top-hold-line'>{line}</div>" for line in top_holds[:3]), unsafe_allow_html=True)
+        with st.expander("See the exact hold spread", expanded=False):
+            st.markdown("".join(f"<div class='top-hold-line'>{line}</div>" for line in top_holds[:4]), unsafe_allow_html=True)
 
 
 def _daily_review_item(answer):
@@ -4258,8 +4495,13 @@ def _render_daily_spotlight_content():
         st.markdown(f"**{feedback['choice_feedback']}**")
         st.markdown(f"**{feedback['heading']}** {feedback['context']}")
         st.markdown(feedback["lesson"])
-        with st.expander("Why this hold on the changed card?", expanded=False):
-            st.markdown(feedback["why"])
+        if feedback.get("comparison_card"):
+            render_comparison_card(feedback["comparison_card"])
+        else:
+            with st.expander("Why this hold on the changed card?", expanded=False):
+                if feedback.get("rank_context"):
+                    st.markdown(f"**Rank context:** {feedback['rank_context']}")
+                st.markdown(feedback["why"])
         with st.expander("Compare the exact margins", expanded=False):
             st.caption(feedback["comparison_label"])
             st.table(feedback["comparison_rows"])
@@ -4644,7 +4886,8 @@ def render_practice_mode():
     _practice_choice_fragment()
 
     if st.session_state.report:
-        render_result(st.session_state.report)
+        latest_solver_record = st.session_state.solver_history[-1] if st.session_state.solver_history else None
+        render_result(st.session_state.report, latest_solver_record)
         if st.button("Next Practice Puzzle →", type="primary", use_container_width=True):
             new_round(scroll_to_top=True)
             st.rerun()

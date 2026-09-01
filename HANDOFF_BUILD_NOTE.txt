@@ -1,3 +1,3 @@
-Current release: v43B Phase 2K.14 — Daily Spotlight + What If.
-Known-good base: v43B Phase 2K.13.4 Podium Names + Detailed Math Hotfix.
-Scope: one personal post-completion Spotlight plus one optional exact scorecard variation when a meaningful supported comparison exists. The official ten, exact model, puzzle selector, Points Lost, persistence, login, social features, avatars, medals, and Supabase are unchanged.
+Current release: v43B Phase 2K.14.2 — Turn-Aware Comparison Cards.
+Known-good base: v43B Phase 2K.14.1 — Winner-First Coaching Clarity Hotfix.
+Scope: responsive side-by-side coaching cards, exact turn-aware category evidence, selected tradeoff rows, concise winner explanation, and optional detailed math across Practice, the Daily Ten, friend reviews, Spotlight, and What If. The exact policy, recommendations, Points Lost, grades, Daily puzzles, scoring, persistence, login, social features, avatars, medals, and Supabase are unchanged.

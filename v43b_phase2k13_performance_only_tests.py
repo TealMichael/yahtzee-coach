@@ -81,13 +81,13 @@ require(all(_dice_pattern(roll) == reference_pattern(list(roll)) for roll in pro
         "dice-pattern optimization preserves all 7,776 possible five-die rolls")
 
 app = (ROOT / "app.py").read_text(encoding="utf-8")
-require('APP_RELEASE = "v43B Phase 2K.14"' in app, "release label is Phase 2K.13")
+require('APP_RELEASE = "v43B Phase 2K.14.2"' in app, "release label is Phase 2K.13")
 
 # Hard guards: no strategy, persistence, social, avatar, or binary-data implementation changed.
 EXPECTED_HASHES = {
     "yahtzee_engine.py": "9b175f3f3f59f9937943856c01e1e7aeced7662742756766a54a6061ccaba6b1",
     "exact_runtime.py": "322e50715ca49e53d78e9cc6eda85a7af0712b881273fb57ea4c4f4b67da171a",
-    "exact_mode.py": "38b9339bf444630e66f7c301930aa0a7e99ae26914f9862b065014916784d040",
+    "exact_mode.py": "319bf065e90160851f57b89f249d3546ae9f05f23ab0f507612b630e1c2498f0",
     "daily_store.py": "8eb46257a3ee02d14efd821f642637dde5d68cef13fa424a40f7d21f8912bbd0",
     "supabase_daily_store.py": "826d0061d33609d99f203f88c63df25301b49050cb4d467828ba3f0224523e7c",
     "session_learning.py": "695ea20fcd82ffe8979b5900f34b929d15cedcc902dc8ef92c30a4baf999963a",

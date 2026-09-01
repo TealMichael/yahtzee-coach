@@ -1,14 +1,14 @@
-Yahtzee Coach v43B Phase 2K.14 test summary
+Yahtzee Coach v43B Phase 2K.14.2 test summary
 
-PASS — 63/63 current automated suites.
-PASS — real Streamlit open/change/select-duplicate/reveal/close interaction on Streamlit 1.52.2.
-PASS — optional follow-up never mutates the official ten answers.
-PASS — 42 Daily dates × optimal and mixed player patterns: 84/84 received a specific Spotlight.
-PASS — 44/84 audited Spotlights produced a worthwhile one-box variation; 12 changed the best hold and 32 changed the margin while preserving it.
-PASS — every offered variation maps to an existing exact-policy state and is recomputed at reveal.
-PASS — completion, exact-only, same-date, practical-tie, and generic-prose quality gates.
-PASS — existing Daily selection unchanged: 5–7 families/day and balanced BANK/BREAK appearances across 42 days.
-PASS — historical, current, and future Daily content fingerprints and challenge identity unchanged from Phase 2K.13.4.
-PASS — 14 protected runtime/data/dependency artifacts match Phase 2K.13.4 byte-for-byte.
+PASS — 66/66 current automated suites.
+PASS — reported 1,1,4,5,6 review reproduces keep 5, rank #8 of 24, and 0.77 Points Lost.
+PASS — reported card reproduces the exact 66.5%/35.8% bonus benchmarks, 26.9%/6.0% versus 39.4%/14.6% straight chances, and 8.60 versus 13.10 expected straight points.
+PASS — 840 varied nonoptimal decisions receive one to five selected evidence rows.
+PASS — 840 correct decisions compare against an instructive alternative.
+PASS — real Streamlit Daily review opens the complete card from the existing single question expander.
+PASS — real Spotlight open/change/select-duplicate/reveal/close interaction uses the shared card.
+PASS — Practice, friend review, Spotlight, and What If rendering paths use the same card component.
+PASS — historical/current/future Daily content and challenge identity remain unchanged.
+PASS — protected gameplay, puzzle, persistence, login, avatar, medal, dependency, and model artifacts remain unchanged.
 PASS — exhaustive exact-policy audit: 3,669,120 legal hold values.
 PASS — exact policy SHA-256 remains cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b.

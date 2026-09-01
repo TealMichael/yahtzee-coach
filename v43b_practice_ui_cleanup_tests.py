@@ -17,7 +17,7 @@ def run():
         ('Scorecard remains above dice decision', practice.find('render_scorecard(scorecard)') < practice.find('Which dice would you keep?')),
         ('Dice instructions are simplified', "Which dice would you keep? <span class='muted'>Tap to select.</span>" in practice),
         ('Primary answer action remains Submit hold', 'Submit hold' in practice),
-        ('Coach result remains immediate after submit', 'render_result(st.session_state.report)' in practice),
+        ('Coach result remains immediate after submit', 'render_result(st.session_state.report, latest_solver_record)' in practice),
         ('Next puzzle is the primary post-coaching action', 'Next Practice Puzzle →' in practice and practice.find('Next Practice Puzzle →') < practice.find('See my practice progress')),
         ('Practice progress is collapsed', 'with st.expander("📈 See my practice progress", expanded=False)' in practice),
         ('Badges and session coach moved into secondary progress', practice.find('render_new_badges()') > practice.find('See my practice progress') and practice.find('render_session_coach') > practice.find('See my practice progress')),
