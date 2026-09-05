@@ -19,11 +19,12 @@ from functools import lru_cache
 from typing import Mapping, Sequence
 from zoneinfo import ZoneInfo
 
-from puzzle_bank import generate_daily_challenge_set
+from puzzle_bank import generate_daily_challenge_set, DAILY_BALANCE_EFFECTIVE_DATE
 
 LEGACY_DAILY_CHALLENGE_VERSION = "43A-bank42.6"
 PHASE2K9_DAILY_CHALLENGE_VERSION = "43B-bank42.6-2K9"
 DAILY_CHALLENGE_VERSION = "43B-bank42.6-2K12"
+BALANCED_DAILY_CHALLENGE_VERSION = "43B-bank42.6-2K14-4"
 DAILY_2K9_EFFECTIVE_DATE = date(2026, 8, 19)
 DAILY_REALISM_EFFECTIVE_DATE = date(2026, 8, 22)
 DAILY_TIMEZONE = "America/New_York"
@@ -70,6 +71,8 @@ def current_daily_date_key(now: datetime | None = None, timezone_name: str = DAI
 
 def daily_challenge_version(date_key: str) -> str:
     day = date.fromisoformat(str(date_key))
+    if day >= DAILY_BALANCE_EFFECTIVE_DATE:
+        return BALANCED_DAILY_CHALLENGE_VERSION
     if day >= DAILY_REALISM_EFFECTIVE_DATE:
         return DAILY_CHALLENGE_VERSION
     if day >= DAILY_2K9_EFFECTIVE_DATE:

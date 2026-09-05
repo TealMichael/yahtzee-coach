@@ -1,12 +1,16 @@
-YAHTZEE COACH v43B PHASE 2K.14.2 — DEPLOYMENT
+YAHTZEE COACH v43B PHASE 2K.14.4 — DEPLOYMENT
+
+Install before September 7, 2026 (America/New_York). The new Daily mix begins
+on that date automatically. If installing after the switch date, request a
+new forward-only date instead of deploying a new Daily mix mid-day.
 
 1. In GitHub Desktop, open the Yahtzee Coach repository.
 2. Replace/update the repo from the contents of this UPLOAD_TO_GITHUB folder.
-3. Review the changes. Runtime changes should be limited to app.py, exact_mode.py, and daily_spotlight.py; test and release-note files also change/add.
+3. Runtime changes: puzzle_bank.py, daily_challenge.py, new daily_balance.py, app.py version label only, and exact_mode.py coaching presentation only. Tests, audit and release notes also change/add.
 4. Commit to main with:
-   v43B Phase 2K.14.2 - add turn-aware comparison cards
+   v43B Phase 2K.14.4 - balance Daily puzzles and clarify coaching evidence
 5. Push origin.
 6. No Supabase migration is required.
 
 SAFETY NOTE
-The exact policy, best holds, Points Lost, grades, official Daily Ten, puzzle selector, scoring, persistence, login, social results, avatars, medals, and Supabase behavior are unchanged.
+The exact policy, best holds for each position, Points Lost, grades, scoring, Practice selection, persistence, login, social results, avatars, medals, and Supabase behavior are unchanged. Shared coaching copy/evidence changes in both Daily and Practice; the existing layout stays intact. Daily puzzles before September 7 retain their exact content and IDs; Daily selection changes only from that date.

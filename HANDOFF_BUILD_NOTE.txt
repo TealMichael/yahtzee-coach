@@ -1,3 +1,4 @@
-Current release: v43B Phase 2K.14.2 — Turn-Aware Comparison Cards.
-Known-good base: v43B Phase 2K.14.1 — Winner-First Coaching Clarity Hotfix.
-Scope: responsive side-by-side coaching cards, exact turn-aware category evidence, selected tradeoff rows, concise winner explanation, and optional detailed math across Practice, the Daily Ten, friend reviews, Spotlight, and What If. The exact policy, recommendations, Points Lost, grades, Daily puzzles, scoring, persistence, login, social features, avatars, medals, and Supabase are unchanged.
+Current release: v43B Phase 2K.14.4 — Daily Decision Balance + Coaching Clarity (revised).
+This supersedes the original uninstalled 2K.14.4 ZIP. The immediate revision baseline is that exact packaged ZIP. See COACHING_REVISION.md for the added four-function coaching-only change. The following describes the retained balance patch, not the revision's full scope.
+Known-good base: packaged v43B Phase 2K.14.3.
+Scope: forward-only Daily selection from September 7, 2026 Eastern; fewer repeated straight plans and more upper-pair bonus candidates, favoring verified subtotal sensitivity. Runtime: puzzle_bank.py, daily_challenge.py, new daily_balance.py, and app.py version only. Strategy, coaching, UI, Practice, persistence, login and social/medal systems unchanged. See BALANCE_RELEASE_NOTES.md.

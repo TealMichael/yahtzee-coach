@@ -138,7 +138,7 @@ def test_broad_optimal_answer_audit():
 
 def test_release_and_policy_guards():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
-    assert 'APP_RELEASE = "v43B Phase 2K.14.2"' in app
+    assert 'APP_RELEASE = "v43B Phase 2K.14.4"' in app
     assert exact_policy_sha256(ROOT / "exact_policy.npz") == EXPECTED_EXACT_POLICY_SHA256
     print("PASS release label advances while the exact policy remains unchanged")
 

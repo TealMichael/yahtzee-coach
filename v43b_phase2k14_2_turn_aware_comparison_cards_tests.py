@@ -55,9 +55,9 @@ def test_reported_bonus_vs_straight_tradeoff_is_turn_aware():
     assert (upper["right_value"], upper["right_note"]) == ("11.11", "Fives · target 15")
     assert upper["advantage"] == "split"
 
-    bonus = row_by_label(card, "Bonus benchmark")
+    bonus = row_by_label(card, "Three-of-a-face chance")
     assert bonus["left_value"] == "66.5%" and bonus["right_value"] == "35.8%"
-    assert bonus["advantage"] == "left"
+    assert bonus["advantage"] == "split"  # Different faces are not overall bonus odds.
 
     straight = row_by_label(card, "Straight chances")
     assert straight["left_value"] == "SS 26.9% · LS 6.0%"
@@ -129,7 +129,7 @@ def test_existing_daily_click_opens_the_complete_card():
     assert "render_comparison_card(feedback[\"comparison_card\"])" in app
     assert "comparison_card = record.get(\"comparison_card\")" in app
     assert "evidence-grid" in app and "evidence-summary" in app
-    assert 'APP_RELEASE = "v43B Phase 2K.14.2"' in app
+    assert 'APP_RELEASE = "v43B Phase 2K.14.4"' in app
     print("PASS the existing one-click Daily review reveals the complete shared comparison card")
 
 

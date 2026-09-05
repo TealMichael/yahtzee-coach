@@ -151,7 +151,8 @@ def test_daily_baseline_fingerprints():
         "2026-08-18": "3379f27e9b19404e0124c7e74646b179c8b63ab342738a95be801e0d74b723a7",
         "2026-08-28": "c48bc2b0a59d6fba736d12e86a710f2811715d68823c332896f15c9e2663b719",
         "2026-09-01": "d40cc985e4eabd95be535c3f721fb24d55b3687feec25341320e62671f03c64e",
-        "2026-10-09": "340a7b288ddbae83669b2d005d353498abf008069835d902ed2721e1c0a9d899",
+        # Sep7 onward intentionally uses the new decision-balanced Daily.
+        "2026-09-06": "26db12691d54b4c9e48c19faeba2820cfbc037241dbb200f530987f8f3c26f4b",
     }
     for day, fingerprint in expected.items():
         challenges = daily_challenges(day)

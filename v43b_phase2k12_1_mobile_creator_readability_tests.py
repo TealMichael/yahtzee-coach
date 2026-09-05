@@ -13,7 +13,7 @@ def run():
     end = app.index("def render_player_identity_gate", start)
     creator = app[start:end]
 
-    require('APP_RELEASE = "v43B Phase 2K.14.2"' in app, "release label is Phase 2K.12.3")
+    require('APP_RELEASE = "v43B Phase 2K.14.4"' in app, "release label is Phase 2K.12.3")
     require('selected_category = st.selectbox(' in creator, "category names use a full-width readable select box")
     require('chosen_value = st.selectbox(' in creator, "avatar choices use a full-width readable select box")
     require('selected_category = st.pills(' not in creator, "creator no longer squeezes category labels into pills")

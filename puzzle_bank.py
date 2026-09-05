@@ -22,6 +22,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent
 BANK_PATH = ROOT / "puzzle_bank.npz"
 CATALOG_PATH = ROOT / "challenge_catalog.npz"
+DAILY_BALANCE_EFFECTIVE_DATE = date(2026, 9, 7)
 
 CATEGORIES = (
     "ones", "twos", "threes", "fours", "fives", "sixes",
@@ -668,7 +669,7 @@ def _generate_legacy_daily_challenge_set(date_key: str, count: int = 10) -> list
 
 
 
-def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> list[dict]:
+def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10, *, decision_balance: bool = False) -> list[dict]:
     if count != 10:
         raise ValueError("The Daily Challenge format is currently designed for exactly 10 situations.")
 
@@ -677,6 +678,28 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
     rng = random.Random(_daily_seed(str(date_key)))
     day = date.fromisoformat(str(date_key))
     realism_enabled = day >= DAILY_REALISM_EFFECTIVE_DATE
+    if decision_balance:
+        from daily_balance import decision_evidence
+        straight_flags, bonus_flags, sensitive_flags, hold_codes = decision_evidence()
+        balance_rng = _stable_daily_random("decision-balance-2k14-4", day)
+        straight_target = balance_rng.choice((0, 1, 1, 2, 2, 2, 2, 3))
+        bonus_target = balance_rng.choice((1, 2, 2, 2, 2, 3))
+        straight_count = bonus_count = 0
+        seen_holds = {}
+
+        def balance_score(idx):
+            value = 0.0
+            if straight_flags[idx]:
+                value += 0.5 if straight_count < straight_target else -9.0 * (straight_count - straight_target + 1)
+            if bonus_flags[idx]:
+                value += (4.5 + 1.5 * sensitive_flags[idx]) if bonus_count < bonus_target else -4.0 * (bonus_count - bonus_target + 1)
+            code = hold_codes[idx]
+            value -= 3.0 * seen_holds.get(code, 0)
+            # Date-specific preference rotates exact hold patterns without
+            # recursively generating yesterday or adding startup DB reads.
+            if straight_flags[idx] or bonus_flags[idx]:
+                value += ((code * 37 + day.toordinal() * 19) % 23) / 23.0
+            return value
 
     stage_plan = ["Opening", "Opening", "Midgame", "Midgame", "Midgame",
                   "Late Game", "Late Game", "Late Game", "True Endgame", "True Endgame"]
@@ -841,6 +864,8 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
                     score += 2.0
 
             score += rng.random() * 0.01
+            if decision_balance:
+                score += balance_score(idx)
             if score > best_score:
                 best_score = score
                 best_index = idx
@@ -879,6 +904,8 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
                 if 0.15 <= gap <= 4.0:
                     score += 3.0
                 score += rng.random() * 0.01
+                if decision_balance:
+                    score += balance_score(idx)
                 if score > best_score:
                     best_score = score
                     best_index = idx
@@ -887,6 +914,11 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
             raise RuntimeError("Daily challenge selector could not satisfy its Phase 2K.9 balance constraints.")
 
         row = rows[best_index]
+        if decision_balance:
+            straight_count += straight_flags[best_index]
+            bonus_count += bonus_flags[best_index]
+            code = hold_codes[best_index]
+            seen_holds[code] = seen_holds.get(code, 0) + 1
         used_rows.add(best_index)
         used_states.add(int(row["state_index"]))
         skill_code = int(row["skill_code"])
@@ -898,6 +930,8 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10) -> li
         challenge["daily_date"] = str(date_key)
         challenge["daily_number"] = len(chosen) + 1
         generation_tag = "42.6-2K12" if realism_enabled else "42.6-2K9"
+        if decision_balance:
+            generation_tag = "42.6-2K14-4"
         raw_id = f"{generation_tag}|{date_key}|{challenge['bank_state_key']}|{challenge['dice']}|{challenge['roll_number']}"
         challenge["challenge_id"] = sha256(raw_id.encode("utf-8")).hexdigest()[:16]
         chosen.append(challenge)
@@ -913,6 +947,8 @@ def generate_daily_challenge_set(date_key: str, count: int = 10) -> list[dict]:
     The conservative scorecard-realism filter begins forward-only on Aug 22, 2026.
     """
     day = date.fromisoformat(str(date_key))
+    if day >= DAILY_BALANCE_EFFECTIVE_DATE:
+        return _generate_phase2k9_daily_challenge_set(str(date_key), count=count, decision_balance=True)
     if day < DAILY_2K9_EFFECTIVE_DATE:
         return _generate_legacy_daily_challenge_set(str(date_key), count=count)
     return _generate_phase2k9_daily_challenge_set(str(date_key), count=count)

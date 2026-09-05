@@ -2053,7 +2053,7 @@ def _direct_open_upper_face(
 def _comparison_topic(label: str) -> str:
     return {
         "Expected upper box": "raw upper value",
-        "Bonus benchmark": "upper-bonus pace",
+        "Three-of-a-face chance": "reaching three of the target face",
         "Straight chances": "straight access",
         "Straight payoff": "straight payoff",
         "Fresh dice": "reroll flexibility",
@@ -2093,7 +2093,21 @@ def _generic_comparison_rows(
 
     left_upper_face = _direct_open_upper_face(left, scorecard)
     right_upper_face = _direct_open_upper_face(right, scorecard)
-    if left_upper_face is not None and right_upper_face is not None:
+    upper_faces = sorted({face for face in (*left, *right) if _is_open(scorecard, UPPER_BY_FACE[face])})
+    if len(upper_faces) > 1:
+        for face in upper_faces:
+            category = UPPER_BY_FACE[face]
+            left_stats = _turn_plan_stats(left, category, roll_number)
+            right_stats = _turn_plan_stats(right, category, roll_number)
+            if abs(left_stats[1] - right_stats[1]) < 0.05:
+                continue
+            add(5.0 + min(abs(left_stats[1] - right_stats[1]), 5.0) / 10, _comparison_row(
+                CATEGORY_LABELS[category],
+                f"{left_stats[1]:.2f} pts", f"{left_stats[2]:.1%} finish with 3+",
+                f"{right_stats[1]:.2f} pts", f"{right_stats[2]:.1%} finish with 3+",
+                _numeric_advantage(left_stats[1], right_stats[1], tolerance=0.05),
+            ))
+    elif left_upper_face is not None and right_upper_face is not None:
         left_category = UPPER_BY_FACE[left_upper_face]
         right_category = UPPER_BY_FACE[right_upper_face]
         left_stats = _turn_plan_stats(left, left_category, roll_number)
@@ -2112,7 +2126,7 @@ def _generic_comparison_rows(
         ))
         if _upper_bonus_context(scorecard)["alive"]:
             add(5.5, _comparison_row(
-                "Bonus benchmark",
+                "Three-of-a-face chance",
                 f"{left_stats[2]:.1%}", f"finish with 3+ {CATEGORY_LABELS[left_category]}",
                 f"{right_stats[2]:.1%}", f"finish with 3+ {CATEGORY_LABELS[right_category]}",
                 _numeric_advantage(left_stats[2], right_stats[2], tolerance=0.005),
@@ -2146,13 +2160,6 @@ def _generic_comparison_rows(
                 f"SS {right_small[0]:.1%} · LS {right_large[0]:.1%}", "best path for each box",
                 advantage,
             ))
-            if abs(left_straight[1] - right_straight[1]) >= 0.25:
-                add(5.8, _comparison_row(
-                    "Straight payoff",
-                    f"{left_straight[1]:.2f} pts", "best open straight box",
-                    f"{right_straight[1]:.2f} pts", "best open straight box",
-                    advantage,
-                ))
     elif small_open or large_open:
         category = "small_straight" if small_open else "large_straight"
         left_stats = _turn_plan_stats(left, category, roll_number)
@@ -2199,11 +2206,11 @@ def _generic_comparison_rows(
         _, row = max(matching_candidates, key=lambda item: item[0])
         add(4.8, row)
 
-    if _is_open(scorecard, "chance") and len(_open_category_keys(scorecard)) <= 4:
+    if _is_open(scorecard, "chance"):
         left_chance = _turn_plan_stats(left, "chance", roll_number)
         right_chance = _turn_plan_stats(right, "chance", roll_number)
         if abs(left_chance[1] - right_chance[1]) >= 0.25:
-            add(4.0, _comparison_row(
+            add(5.0, _comparison_row(
                 "Chance total",
                 f"{left_chance[1]:.2f}", "expected dice total",
                 f"{right_chance[1]:.2f}", "expected dice total",
@@ -2275,10 +2282,10 @@ def _low_pair_open_board_card(
             "split",
         ),
         _comparison_row(
-            "Bonus benchmark",
+            "Three-of-a-face chance",
             f"{user_upper[2]:.1%}", f"finish with 3+ {CATEGORY_LABELS[user_category]}",
             f"{optimal_upper[2]:.1%}", f"finish with 3+ {CATEGORY_LABELS[optimal_category]}",
-            _numeric_advantage(user_upper[2], optimal_upper[2], tolerance=0.005),
+            "split" if user_category != optimal_category else _numeric_advantage(user_upper[2], optimal_upper[2], tolerance=0.005),
         ),
         _comparison_row(
             "Straight chances",
@@ -2300,7 +2307,7 @@ def _low_pair_open_board_card(
         ),
     ]
     summary = (
-        f"Your pair better protects the three-{CATEGORY_LABELS[user_category]} benchmark. "
+        f"Your pair better protects the three-{CATEGORY_LABELS[user_category]} benchmark—not the overall bonus probability. "
         f"{_keeping_text(optimal).capitalize()} gives up some bonus safety for about {straight_gain:.2f} more expected straight points "
         f"and {5 - len(optimal) - (5 - len(user))} extra fresh die. Across the full game, that trade is worth a modest "
         f"{points_lost:.2f}-point edge."
@@ -2367,22 +2374,25 @@ def _build_comparison_card(
         left_topics = _comparison_topics(rows, "left")
         right_topics = _comparison_topics(rows, "right")
         left_text = _join_paths(left_topics[:2]) if left_topics else "a legitimate scoring route"
-        right_text = _join_paths(right_topics[:2]) if right_topics else "deeper scorecard sequencing"
+        right_text = _join_paths(right_topics[:2]) if right_topics else ""
         if is_optimal:
             summary = (
-                f"Your hold wins through {left_text}. {_keeping_text(right).capitalize()} offers {right_text}, "
-                f"but full-game lookahead leaves your hold {edge:.2f} expected points ahead."
+                (f"Your hold offers stronger {left_text}. " if left_topics else "These individual paths do not isolate why your hold leads. ")
+                + (f"{_keeping_text(right).capitalize()} offers stronger {right_text}. " if right_topics else "")
+                + f"Across the remaining scorecard, your hold leads by {edge:.2f} expected points."
             )
         elif practical_tie:
             summary = (
-                f"Your hold is stronger for {left_text}; {_keeping_text(right)} is stronger for {right_text}. "
-                f"The exact {points_lost:.2f}-point edge is a practical tie."
+                (f"Your hold offers stronger {left_text}. " if left_topics else "")
+                + (f"{_keeping_text(right).capitalize()} offers stronger {right_text}. " if right_topics else "These individual paths do not isolate the model's tiny edge. ")
+                + f"The exact {points_lost:.2f}-point edge is a practical tie."
             )
         else:
             player_clause = f" Your hold is stronger for {left_text}." if left_topics else ""
             summary = (
-                f"{_keeping_text(right).capitalize()} wins through {right_text}.{player_clause} "
-                f"Full-game lookahead puts it {points_lost:.2f} expected points ahead."
+                (f"{_keeping_text(right).capitalize()} offers stronger {right_text}." if right_topics else "These individual paths do not isolate why the best hold leads.")
+                + player_clause
+                + f" Across the remaining scorecard, {_keeping_text(right)} leads by {points_lost:.2f} expected points."
             )
         card_takeaway = "" if practical_tie else takeaway
         horizon = "through Roll 3" if roll_number == 1 else "on the final roll"

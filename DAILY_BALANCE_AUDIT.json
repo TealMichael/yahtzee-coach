@@ -1,0 +1,862 @@
+{
+  "evidence_cold_ms": 232.54,
+  "baseline": {
+    "totals": {
+      "straight": 148,
+      "bonus": 100,
+      "sensitive": 8,
+      "repeated_holds": 80,
+      "consecutive_patterns": 52
+    },
+    "straight_per_day": {
+      "0": 1,
+      "1": 7,
+      "2": 13,
+      "3": 26,
+      "4": 8,
+      "5": 1
+    },
+    "bonus_per_day": {
+      "0": 1,
+      "1": 24,
+      "2": 20,
+      "3": 8,
+      "4": 3
+    },
+    "families": {
+      "Joker / Extra Yahtzee": 14,
+      "Straight Structure": 101,
+      "Bonus Secured": 14,
+      "Upper Bonus": 86,
+      "Full House": 73,
+      "Chance Timing": 57,
+      "Matching Dice": 105,
+      "Bonus Is Gone": 64,
+      "Flexible Board": 46
+    },
+    "mean_generation_ms": 332.72,
+    "max_generation_ms": 463.69,
+    "days": [
+      {
+        "date": "2026-09-07",
+        "straight": 4,
+        "bonus": 1,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-09-08",
+        "straight": 4,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-09-09",
+        "straight": 3,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-09-10",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-09-11",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-09-12",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-09-13",
+        "straight": 4,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-09-14",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-09-15",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-09-16",
+        "straight": 4,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 5
+      },
+      {
+        "date": "2026-09-17",
+        "straight": 1,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-09-18",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-09-19",
+        "straight": 3,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-09-20",
+        "straight": 4,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-09-21",
+        "straight": 3,
+        "bonus": 3,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-09-22",
+        "straight": 2,
+        "bonus": 3,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-09-23",
+        "straight": 3,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-09-24",
+        "straight": 3,
+        "bonus": 4,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-09-25",
+        "straight": 2,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-09-26",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-09-27",
+        "straight": 3,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-09-28",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-09-29",
+        "straight": 4,
+        "bonus": 3,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-09-30",
+        "straight": 5,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 5
+      },
+      {
+        "date": "2026-10-01",
+        "straight": 3,
+        "bonus": 4,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-10-02",
+        "straight": 3,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-03",
+        "straight": 0,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 5
+      },
+      {
+        "date": "2026-10-04",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-05",
+        "straight": 2,
+        "bonus": 3,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-10-06",
+        "straight": 4,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 5
+      },
+      {
+        "date": "2026-10-07",
+        "straight": 3,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-10-08",
+        "straight": 2,
+        "bonus": 4,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-09",
+        "straight": 1,
+        "bonus": 3,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-10-10",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-11",
+        "straight": 3,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-10-12",
+        "straight": 1,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-10-13",
+        "straight": 4,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-14",
+        "straight": 3,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-15",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-10-16",
+        "straight": 1,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-10-17",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-18",
+        "straight": 3,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-19",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-10-20",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-10-21",
+        "straight": 3,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-22",
+        "straight": 2,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-10-23",
+        "straight": 3,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-24",
+        "straight": 2,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-25",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-26",
+        "straight": 3,
+        "bonus": 0,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-27",
+        "straight": 1,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-28",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-29",
+        "straight": 3,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-30",
+        "straight": 2,
+        "bonus": 3,
+        "sensitive": 2,
+        "families": 7
+      },
+      {
+        "date": "2026-10-31",
+        "straight": 1,
+        "bonus": 3,
+        "sensitive": 0,
+        "families": 5
+      },
+      {
+        "date": "2026-11-01",
+        "straight": 1,
+        "bonus": 3,
+        "sensitive": 0,
+        "families": 6
+      }
+    ]
+  },
+  "patched": {
+    "totals": {
+      "straight": 88,
+      "bonus": 125,
+      "sensitive": 51,
+      "repeated_holds": 2,
+      "consecutive_patterns": 43
+    },
+    "straight_per_day": {
+      "0": 6,
+      "1": 20,
+      "2": 22,
+      "3": 8
+    },
+    "bonus_per_day": {
+      "1": 5,
+      "2": 34,
+      "3": 16,
+      "4": 1
+    },
+    "families": {
+      "Straight Structure": 59,
+      "Full House": 88,
+      "Joker / Extra Yahtzee": 14,
+      "Matching Dice": 134,
+      "Chance Timing": 51,
+      "Upper Bonus": 91,
+      "Flexible Board": 36,
+      "Bonus Secured": 26,
+      "Bonus Is Gone": 61
+    },
+    "mean_generation_ms": 351.68,
+    "max_generation_ms": 469.04,
+    "days": [
+      {
+        "date": "2026-09-07",
+        "straight": 1,
+        "bonus": 2,
+        "sensitive": 2,
+        "families": 7
+      },
+      {
+        "date": "2026-09-08",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-09-09",
+        "straight": 0,
+        "bonus": 3,
+        "sensitive": 2,
+        "families": 6
+      },
+      {
+        "date": "2026-09-10",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-09-11",
+        "straight": 1,
+        "bonus": 3,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-09-12",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-09-13",
+        "straight": 1,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-09-14",
+        "straight": 2,
+        "bonus": 3,
+        "sensitive": 3,
+        "families": 7
+      },
+      {
+        "date": "2026-09-15",
+        "straight": 2,
+        "bonus": 3,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-09-16",
+        "straight": 0,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-09-17",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-09-18",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-09-19",
+        "straight": 1,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-09-20",
+        "straight": 3,
+        "bonus": 3,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-09-21",
+        "straight": 0,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 5
+      },
+      {
+        "date": "2026-09-22",
+        "straight": 0,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 5
+      },
+      {
+        "date": "2026-09-23",
+        "straight": 2,
+        "bonus": 1,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-09-24",
+        "straight": 1,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-09-25",
+        "straight": 1,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-09-26",
+        "straight": 2,
+        "bonus": 3,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-09-27",
+        "straight": 3,
+        "bonus": 3,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-09-28",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-09-29",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-09-30",
+        "straight": 0,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-10-01",
+        "straight": 1,
+        "bonus": 3,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-10-02",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 2,
+        "families": 5
+      },
+      {
+        "date": "2026-10-03",
+        "straight": 1,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-10-04",
+        "straight": 2,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-05",
+        "straight": 3,
+        "bonus": 3,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-10-06",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-07",
+        "straight": 2,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-10-08",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-09",
+        "straight": 1,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-10-10",
+        "straight": 1,
+        "bonus": 4,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-11",
+        "straight": 2,
+        "bonus": 3,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-10-12",
+        "straight": 1,
+        "bonus": 3,
+        "sensitive": 2,
+        "families": 7
+      },
+      {
+        "date": "2026-10-13",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 2,
+        "families": 6
+      },
+      {
+        "date": "2026-10-14",
+        "straight": 1,
+        "bonus": 3,
+        "sensitive": 2,
+        "families": 6
+      },
+      {
+        "date": "2026-10-15",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-10-16",
+        "straight": 1,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-10-17",
+        "straight": 1,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-10-18",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-19",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 2,
+        "families": 6
+      },
+      {
+        "date": "2026-10-20",
+        "straight": 0,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-21",
+        "straight": 1,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-10-22",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 2,
+        "families": 7
+      },
+      {
+        "date": "2026-10-23",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-10-24",
+        "straight": 1,
+        "bonus": 3,
+        "sensitive": 2,
+        "families": 7
+      },
+      {
+        "date": "2026-10-25",
+        "straight": 1,
+        "bonus": 3,
+        "sensitive": 2,
+        "families": 7
+      },
+      {
+        "date": "2026-10-26",
+        "straight": 1,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-10-27",
+        "straight": 1,
+        "bonus": 3,
+        "sensitive": 0,
+        "families": 7
+      },
+      {
+        "date": "2026-10-28",
+        "straight": 2,
+        "bonus": 2,
+        "sensitive": 0,
+        "families": 6
+      },
+      {
+        "date": "2026-10-29",
+        "straight": 3,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 6
+      },
+      {
+        "date": "2026-10-30",
+        "straight": 3,
+        "bonus": 3,
+        "sensitive": 1,
+        "families": 7
+      },
+      {
+        "date": "2026-10-31",
+        "straight": 1,
+        "bonus": 2,
+        "sensitive": 1,
+        "families": 5
+      },
+      {
+        "date": "2026-11-01",
+        "straight": 2,
+        "bonus": 1,
+        "sensitive": 0,
+        "families": 7
+      }
+    ]
+  }
+}

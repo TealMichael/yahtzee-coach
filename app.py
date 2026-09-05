@@ -33,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.14.2"
+APP_RELEASE = "v43B Phase 2K.14.4"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -1290,9 +1290,10 @@ st.markdown(
     .evidence-takeaway b { font-weight:950; }
     .evidence-card details { border-top:1px solid #dfe2e7; margin-top:0.55rem; padding-top:0.52rem; }
     .evidence-card summary { cursor:pointer; color:#365f9f !important; font-size:0.72rem; font-weight:950; }
-    .evidence-detail { margin:0.48rem 0 0 0; color:#6e7481 !important; font-size:0.68rem; line-height:1.42; }
+    .evidence-detail { margin:0.48rem 0 0 0; color:#6e7481 !important; font-size:0.66rem; line-height:1.42; }
+    .evidence-about-math { margin:0.44rem 0 0 0; color:#7a808b !important; font-size:0.63rem; line-height:1.40; }
     .evidence-hold-spread { margin-top:0.4rem; border-top:1px solid #dfe2e7; }
-    .evidence-hold-spread div { padding:0.30rem 0; border-bottom:1px solid #edf0f4; color:#59606d !important; font-size:0.67rem; line-height:1.30; }
+    .evidence-hold-spread div { padding:0.34rem 0; border-bottom:1px solid #edf0f4; color:#454c59 !important; font-size:0.72rem; line-height:1.30; }
     .evidence-hold-spread div:last-child { border-bottom:none; }
 
     /* v42 — lightweight session momentum, achievements, and mastery. */
@@ -2058,6 +2059,27 @@ def render_comparison_card(card, *, grade="", top_holds=None, subject_name="You"
     def esc(value):
         return html.escape(str(value or ""))
 
+    def player_rank_line(value):
+        line = str(value or "").strip()
+        line = re.sub(r" \(best\)$", " — Best", line)
+        line = re.sub(r" \(-([0-9]+(?:\.[0-9]+)?) expected pts\)$", r" — −\1 expected points", line)
+        line = re.sub(r" \(([0-9]+(?:\.[0-9]+)?) expected pts behind\)$", r" — −\1 expected points", line)
+        return line
+
+    def player_math_detail(value):
+        detail = str(value or "").strip()
+        detail = re.sub(
+            r"^Displayed plan statistics are exact category-specific calculations (?:through Roll 3|on the final roll)\. "
+            r"They show what each visible plan can accomplish; the locked full-game policy still determines the hold ranking and Points Lost\.\s*",
+            "",
+            detail,
+        )
+        detail = detail.replace(
+            "Those teaching statistics explain the visible plans; the locked exact policy still supplies the final full-game recommendation.",
+            "",
+        )
+        return detail.strip()
+
     winner_side = card.get("winner_side") if card.get("winner_side") in {"left", "right"} else "right"
     left_role = str(card.get("left_role") or "You")
     rank_text = str(card.get("rank_text") or "")
@@ -2095,20 +2117,35 @@ def render_comparison_card(card, *, grade="", top_holds=None, subject_name="You"
             f"<span><b>Takeaway:</b> {esc(card.get('takeaway'))}</span></div>"
         )
 
-    detail_parts = []
-    if card.get("math_detail"):
-        detail_parts.append(f"<p class='evidence-detail'>{esc(card.get('math_detail'))}</p>")
     hold_lines = list(top_holds or [])[:4]
+    detail_parts = []
+    detail_summary = "📐 See the math"
     if hold_lines:
         detail_parts.append(
             "<div class='evidence-hold-spread'>"
-            + "".join(f"<div>{esc(line)}</div>" for line in hold_lines)
+            + "".join(f"<div>{esc(player_rank_line(line))}</div>" for line in hold_lines)
             + "</div>"
+        )
+        useful_math = player_math_detail(card.get("math_detail"))
+        if useful_math:
+            detail_parts.append(f"<p class='evidence-detail'><b>Detailed calculation:</b> {esc(useful_math)}</p>")
+        detail_parts.append(
+            "<p class='evidence-about-math'><b>About the math:</b> The comparison above shows exact odds and expected values "
+            "for individual scoring paths. The final hold ranking also considers the entire remaining scorecard.</p>"
+        )
+        detail_summary = "📐 See full hold rankings"
+    elif card.get("math_detail"):
+        useful_math = player_math_detail(card.get("math_detail"))
+        if useful_math:
+            detail_parts.append(f"<p class='evidence-detail'>{esc(useful_math)}</p>")
+        detail_parts.append(
+            "<p class='evidence-about-math'><b>About the math:</b> The comparison above shows exact odds and expected values "
+            "for individual scoring paths. The final hold ranking also considers the entire remaining scorecard.</p>"
         )
     details_html = ""
     if detail_parts:
         details_html = (
-            "<details><summary>📐 See the exact math and hold rankings</summary>"
+            f"<details><summary>{detail_summary}</summary>"
             + "".join(detail_parts)
             + "</details>"
         )

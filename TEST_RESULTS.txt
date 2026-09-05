@@ -1,13 +1,28 @@
-Yahtzee Coach v43B Phase 2K.14.2 test summary
+HISTORICAL: Original Yahtzee Coach v43B Phase 2K.14.4 test summary
+For the revised package's actual results and changed scope, see COACHING_REVISION.md.
+The records below refer to earlier builds, not new claims of testing this revision.
 
-PASS — 66/66 current automated suites.
-PASS — reported 1,1,4,5,6 review reproduces keep 5, rank #8 of 24, and 0.77 Points Lost.
-PASS — reported card reproduces the exact 66.5%/35.8% bonus benchmarks, 26.9%/6.0% versus 39.4%/14.6% straight chances, and 8.60 versus 13.10 expected straight points.
-PASS — 840 varied nonoptimal decisions receive one to five selected evidence rows.
-PASS — 840 correct decisions compare against an instructive alternative.
-PASS — real Streamlit Daily review opens the complete card from the existing single question expander.
-PASS — real Spotlight open/change/select-duplicate/reveal/close interaction uses the shared card.
-PASS — Practice, friend review, Spotlight, and What If rendering paths use the same card component.
+PASS — 68/68 suites, including the new 56-day paired selector audit.
+PASS — 30 dates through September 6 match baseline puzzle dictionaries.
+PASS — 560 future puzzles/build: straight decisions 148 -> 88; four-plus days 9 -> 0.
+PASS — upper-pair bonus candidates 100 -> 125; subtotal-sensitive candidates 8 -> 51.
+PASS — within-day repeated hold occurrences 80 -> 2; neighboring-day patterns 52 -> 43.
+PASS — fixed rolls/stages/difficulty/origin/uniqueness, 5–7 families, bank/break schedule.
+PASS — Practice functions unchanged; app.py differs only by release label.
+PASS — exact policy, solver, coaching, source bank/catalog, DB/auth/avatar/medal modules unchanged.
+
+Previous release verification (retained functionality):
+
+PASS — 67/67 current automated suites.
+PASS — disclosure reads “📐 See full hold rankings” and remains a native expandable details element.
+PASS — dynamic top holds render ranking-first with “Best” and expected-point margins.
+PASS — the player's hold remains visible when it ranks outside the top three.
+PASS — the player-facing About the math note follows the rankings.
+PASS — developer-facing policy language is absent from the rendered Daily card.
+PASS — useful situation-specific calculations remain available without changing their values.
+PASS — Practice and Daily reuse the same unchanged comparison component.
+PASS — real Spotlight open/change/select-duplicate/reveal/close interaction remains green.
+PASS — exact_mode.py and daily_spotlight.py match Phase 2K.14.2 byte-for-byte.
 PASS — historical/current/future Daily content and challenge identity remain unchanged.
 PASS — protected gameplay, puzzle, persistence, login, avatar, medal, dependency, and model artifacts remain unchanged.
 PASS — exhaustive exact-policy audit: 3,669,120 legal hold values.
