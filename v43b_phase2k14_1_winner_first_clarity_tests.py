@@ -106,7 +106,7 @@ def test_broad_nonoptimal_coaching_never_leads_with_the_loser_advantage():
 def test_every_review_surface_uses_the_shared_order_and_context():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
     spotlight = (ROOT / "daily_spotlight.py").read_text(encoding="utf-8")
-    assert 'APP_RELEASE = "v43B Phase 2K.14.4"' in app
+    assert 'APP_RELEASE = "v43B Phase 2K.14.5"' in app
     assert 'why_label = "Why the best hold wins"' in app
     assert 'rank_context_items = extract_section(report, "Rank context:")' in app
     assert "📊 Rank context" in app

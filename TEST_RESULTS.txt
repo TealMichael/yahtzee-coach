@@ -1,3 +1,6 @@
+CURRENT RELEASE: v43B Phase 2K.14.5. Use REALISM_RELEASE_NOTES.md for current scope and deployment.
+The following is retained historical documentation for 2K.14.4 and earlier.
+
 HISTORICAL: Original Yahtzee Coach v43B Phase 2K.14.4 test summary
 For the revised package's actual results and changed scope, see COACHING_REVISION.md.
 The records below refer to earlier builds, not new claims of testing this revision.

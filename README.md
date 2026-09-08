@@ -1,3 +1,6 @@
+CURRENT RELEASE: v43B Phase 2K.14.5. Use REALISM_RELEASE_NOTES.md for current scope and deployment.
+The following is retained historical documentation for 2K.14.4 and earlier.
+
 # Yahtzee Coach v43B Phase 2K.14.4 — Daily Decision Balance
 
 Daily selection now balances actual straight-related and upper-pair decisions

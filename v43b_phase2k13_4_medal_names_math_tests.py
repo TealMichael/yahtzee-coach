@@ -80,7 +80,7 @@ def test_reported_endgame_has_optional_detailed_math():
 
 def test_ui_and_release_guards():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
-    assert 'APP_RELEASE = "v43B Phase 2K.14.4"' in app
+    assert 'APP_RELEASE = "v43B Phase 2K.14.5"' in app
     assert 'components.html(ceremony, height=560, scrolling=False)' in app
     assert 'with st.expander("📐 See the math", expanded=False):' in app
     assert '**Detailed calculation:**' in app

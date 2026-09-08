@@ -37,6 +37,6 @@ for token in [
 ]:
     require(token in SOURCE, f"pre-fix dice visual token is present: {token}")
 
-require('APP_RELEASE = "v43B Phase 2K.14.4"' in SOURCE, "release label is Phase 2K.12.5")
+require('APP_RELEASE = "v43B Phase 2K.14.5"' in SOURCE, "release label is Phase 2K.12.5")
 
 print("\nPhase 2K.12.5 restored dice visual regressions: PASS")

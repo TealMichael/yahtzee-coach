@@ -50,7 +50,7 @@ def test_shared_practice_and_daily_renderer_remain_intact():
     assert "render_comparison_card(" in daily
     assert 'top_holds=extract_section(report, "Top exact holds:")' in daily
     assert ".evidence-about-math" in app
-    assert 'APP_RELEASE = "v43B Phase 2K.14.4"' in app
+    assert 'APP_RELEASE = "v43B Phase 2K.14.5"' in app
     print("PASS Practice and Daily reuse the unchanged shared comparison component")
 
 

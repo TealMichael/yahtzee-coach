@@ -65,7 +65,18 @@ def test_realism_and_blind_spots():
     for status in ("Open", "Zeroed", "Live 50"):
         assert audit["yahtzee_status_counts"][status] > 0
     messy = audit["human_messiness_examples"]
-    assert messy["upper_zero_while_chance_open_contexts"] > 0
+    # The raw catalog retains messy histories for old Dailies and exact-policy
+    # coverage. New generated practice filters high-upper zeros with live bonus.
+    from puzzle_bank import _realistic_state_mask, _implausible_upper_zero
+    eligible_states = _realistic_state_mask()
+    assert not any(
+        eligible_states[i] and _implausible_upper_zero(row, str(BANK["origin"][i]))
+        for i, row in enumerate(BANK["scorecards"])
+    )
+    assert any(
+        eligible_states[i] and int(row[12]) < 0 and any(int(v) == 0 for v in row[:6])
+        for i, row in enumerate(BANK["scorecards"])
+    )  # Permitted imperfect histories still exist.
     assert messy["chance_already_used_with_7plus_boxes_open_contexts"] > 0
     print("PASS realism audit: broad strategic coverage remains, with believable imperfect human histories")
 

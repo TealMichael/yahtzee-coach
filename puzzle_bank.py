@@ -163,7 +163,7 @@ def challenge_signature(challenge: dict) -> tuple:
 @lru_cache(maxsize=None)
 def _eligible_indices(*, roll_number: int | None = None, stage: str | None = None,
                       skill_code: int | None = None, origin: str | None = None, daily: bool = False,
-                      realistic: bool = False) -> np.ndarray:
+                      realistic: bool | str = False) -> np.ndarray:
     data = _data()
     rows = data["rows"]
     mask = rows["daily_eligible"].astype(bool) if daily else rows["practice_eligible"].astype(bool)
@@ -178,7 +178,7 @@ def _eligible_indices(*, roll_number: int | None = None, stage: str | None = Non
         state_origins = data["origin"][rows["state_index"]]
         mask &= state_origins == origin
     if realistic:
-        mask &= _realistic_state_mask()[rows["state_index"]]
+        mask &= _realistic_state_mask(upper_zero=realistic != "legacy")[rows["state_index"]]
     return np.flatnonzero(mask)
 
 
@@ -283,6 +283,7 @@ def generate_practice_challenge(
 
 DAILY_2K9_EFFECTIVE_DATE = date(2026, 8, 19)
 DAILY_REALISM_EFFECTIVE_DATE = date(2026, 8, 22)
+DAILY_UPPER_ZERO_EFFECTIVE_DATE = date(2026, 9, 9)
 BANK_BREAK_THEME = "Bank It or Break It?"
 
 # These historical category scores mathematically prove that all five dice on
@@ -331,11 +332,22 @@ def _scorecard_proves_passed_up_open_yahtzee(state_index: int) -> bool:
     return False
 
 
-@lru_cache(maxsize=1)
-def _realistic_state_mask() -> np.ndarray:
+def _implausible_upper_zero(row, origin: str) -> bool:
+    """Teaching-history filter only; does not judge actual scoring decisions."""
+    if origin != "Simulated Game" or int(row[12]) >= 0:
+        return False
+    upper = [int(value) for value in row[:6]]
+    subtotal = sum(max(0, value) for value in upper)
+    maximum = subtotal + sum(5 * (i + 1) for i, value in enumerate(upper) if value < 0)
+    return subtotal < 63 <= maximum and any(value == 0 for value in upper[2:])
+
+
+@lru_cache(maxsize=2)
+def _realistic_state_mask(upper_zero: bool = True) -> np.ndarray:
     data = _data()
     return np.array([
         not _scorecard_proves_passed_up_open_yahtzee(index)
+        and not (upper_zero and _implausible_upper_zero(data["scorecards"][index], str(data["origin"][index])))
         for index in range(len(data["state_keys"]))
     ], dtype=bool)
 
@@ -677,7 +689,8 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10, *, de
     rows = data["rows"]
     rng = random.Random(_daily_seed(str(date_key)))
     day = date.fromisoformat(str(date_key))
-    realism_enabled = day >= DAILY_REALISM_EFFECTIVE_DATE
+    # Preserve every historical Daily, including its candidate ordering and IDs.
+    realism_enabled = (True if day >= DAILY_UPPER_ZERO_EFFECTIVE_DATE else "legacy") if day >= DAILY_REALISM_EFFECTIVE_DATE else False
     if decision_balance:
         from daily_balance import decision_evidence
         straight_flags, bonus_flags, sensitive_flags, hold_codes = decision_evidence()
@@ -932,6 +945,8 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10, *, de
         generation_tag = "42.6-2K12" if realism_enabled else "42.6-2K9"
         if decision_balance:
             generation_tag = "42.6-2K14-4"
+        if day >= DAILY_UPPER_ZERO_EFFECTIVE_DATE:
+            generation_tag = "42.6-2K14-5"
         raw_id = f"{generation_tag}|{date_key}|{challenge['bank_state_key']}|{challenge['dice']}|{challenge['roll_number']}"
         challenge["challenge_id"] = sha256(raw_id.encode("utf-8")).hexdigest()[:16]
         chosen.append(challenge)

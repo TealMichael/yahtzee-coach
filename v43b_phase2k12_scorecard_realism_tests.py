@@ -11,6 +11,7 @@ from daily_challenge import (
 )
 from puzzle_bank import (
     _data,
+    _implausible_upper_zero,
     _eligible_indices,
     _scorecard_proves_passed_up_open_yahtzee,
     generate_daily_challenge_set,
@@ -65,8 +66,8 @@ def test_audit_rule_is_narrow_and_preserves_curated_edges():
     total_daily = len(_eligible_indices(daily=True))
     realistic_daily = len(_eligible_indices(daily=True, realistic=True))
     assert total_daily == 200140
-    assert realistic_daily == 193551
-    assert realistic_daily / total_daily > 0.96
+    assert realistic_daily == 191699
+    assert realistic_daily / total_daily > 0.95
     print(f"PASS narrow realism rule: 14/420 contexts flagged; {realistic_daily}/{total_daily} Daily situations retained")
 
 
@@ -133,7 +134,9 @@ def test_practice_never_draws_flagged_simulated_history():
         challenge = generate_practice_challenge()
         if challenge["scorecard_origin"] == "Curated Edge Case":
             seen_curated += 1
-        assert not _scorecard_proves_passed_up_open_yahtzee(challenge["bank_state_index"])
+        index = challenge["bank_state_index"]
+        assert not _scorecard_proves_passed_up_open_yahtzee(index)
+        assert not _implausible_upper_zero(_data()["scorecards"][index], str(_data()["origin"][index]))
     assert seen_curated > 0
     print(f"PASS Practice realism sampling: 400 draws, 0 flagged histories, curated edges still surface ({seen_curated})")
 

@@ -1,3 +1,6 @@
+CURRENT RELEASE: v43B Phase 2K.14.5. Use REALISM_RELEASE_NOTES.md for current scope and deployment.
+The following is retained historical documentation for 2K.14.4 and earlier.
+
 Current release: v43B Phase 2K.14.4 — Daily Decision Balance + Coaching Clarity (revised).
 This supersedes the original uninstalled 2K.14.4 ZIP. The immediate revision baseline is that exact packaged ZIP. See COACHING_REVISION.md for the added four-function coaching-only change. The following describes the retained balance patch, not the revision's full scope.
 Known-good base: packaged v43B Phase 2K.14.3.
