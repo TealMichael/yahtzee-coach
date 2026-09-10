@@ -2004,7 +2004,8 @@ def _endgame_straight_math_detail(
         f"({optimal_immediate:.1%}); {_keeping_text(user)} succeeds on {user_hits} of {user_total} ({user_immediate:.1%}). "
         f"After every Roll 2 result and the best final hold, the two-reroll chances are {optimal_two_roll:.1%} versus {user_two_roll:.1%}. "
         f"That {straight_gain:.1%} probability gain is worth about {straight_points:.2f} expected Large Straight points, "
-        f"accounting for most of the model's {points_lost:.2f}-point full-game edge.{bonus_detail}"
+        f"for that isolated straight target. The model's {points_lost:.2f}-point full-game edge also values other scoring choices; "
+        f"the two figures are not a breakdown of the same total.{bonus_detail}"
     )
 
 
@@ -2308,8 +2309,8 @@ def _low_pair_open_board_card(
     ]
     summary = (
         f"Your pair better protects the three-{CATEGORY_LABELS[user_category]} benchmark—not the overall bonus probability. "
-        f"{_keeping_text(optimal).capitalize()} gives up some bonus safety for about {straight_gain:.2f} more expected straight points "
-        f"and {5 - len(optimal) - (5 - len(user))} extra fresh die. Across the full game, that trade is worth a modest "
+        f"{_keeping_text(optimal).capitalize()} offers about {straight_gain:.2f} more expected straight points "
+        f"and {5 - len(optimal) - (5 - len(user))} extra fresh die. Separately, the full-game model gives it a "
         f"{points_lost:.2f}-point edge."
     )
     takeaway = (
@@ -2403,6 +2404,15 @@ def _build_comparison_card(
 
     if existing_math_detail:
         card_math = f"{card_math} {existing_math_detail}"
+
+    from coaching_math import explain_full_house, supporting_math
+    house_explanation = explain_full_house(scorecard, left, right, roll_number, winner_side, edge)
+    if house_explanation:
+        summary, card_takeaway, card_math = house_explanation
+    elif scorecard.get("yahtzee") != 50:
+        extra_math = supporting_math(scorecard, rows, roll_number)
+        if extra_math:
+            card_math = f"{card_math} {extra_math}"
 
     if is_optimal:
         eyebrow = "Why your hold works"

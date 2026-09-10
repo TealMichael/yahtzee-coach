@@ -89,6 +89,6 @@ require("format_func=" not in picker, "dice input does not use the old buggy for
 require("options=options" in picker, "unique pill strings are the actual widget options")
 require("_indices_from_dice_pill_selection" in picker, "pill selections map back to physical positions")
 require('chosen_hold=selected_hold' in SOURCE, "Daily persistence saves exact selected hold multiplicity")
-require('APP_RELEASE = "v43B Phase 2K.14.5"' in SOURCE, "release label is Phase 2K.12.5")
+require('APP_RELEASE = "v43B Phase 2K.14.6"' in SOURCE, "release label is Phase 2K.12.5")
 
 print("\nPhase 2K.12.5 duplicate-dice input regressions: PASS")

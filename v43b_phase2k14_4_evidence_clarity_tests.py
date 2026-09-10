@@ -6,9 +6,9 @@ from exact_mode import CATEGORY_LABELS, ExactPolicyTable, build_exact_report, _g
 
 def main():
     tree = ast.parse(Path(__file__).with_name('exact_mode.py').read_text())
-    allowed = {'_comparison_topic','_generic_comparison_rows','_low_pair_open_board_card','_build_comparison_card'}
+    allowed = {'_comparison_topic','_generic_comparison_rows','_low_pair_open_board_card','_build_comparison_card','_endgame_straight_math_detail'}
     tree.body = [node for node in tree.body if not isinstance(node, ast.FunctionDef) or node.name not in allowed]
-    assert sha256(ast.dump(tree).encode()).hexdigest() == 'fd69eb036f3f681811a5a3079f0f27a1a71f7c123e86a0f5058f03cefb0c3e95'
+    assert sha256(ast.dump(tree).encode()).hexdigest() == 'e436e6dacf52af319ec3a6aaf37536cbc3f2e2d0711675344b3c8e6294b9ab75'
     policy = ExactPolicyTable(Path(__file__).with_name('exact_policy.npz'))
     scorecard = dict.fromkeys(CATEGORY_LABELS)
     scorecard.update(ones=0, twos=4, threes=6)

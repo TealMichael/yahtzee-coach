@@ -129,7 +129,7 @@ def test_existing_daily_click_opens_the_complete_card():
     assert "render_comparison_card(feedback[\"comparison_card\"])" in app
     assert "comparison_card = record.get(\"comparison_card\")" in app
     assert "evidence-grid" in app and "evidence-summary" in app
-    assert 'APP_RELEASE = "v43B Phase 2K.14.5"' in app
+    assert 'APP_RELEASE = "v43B Phase 2K.14.6"' in app
     print("PASS the existing one-click Daily review reveals the complete shared comparison card")
 
 

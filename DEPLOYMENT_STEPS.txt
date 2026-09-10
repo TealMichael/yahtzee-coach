@@ -1,3 +1,6 @@
+CURRENT RELEASE: v43B Phase 2K.14.6. Use MATH_CLARITY_RELEASE_NOTES.md for installation and scope.
+The following is historical documentation.
+
 CURRENT RELEASE: v43B Phase 2K.14.5. Use REALISM_RELEASE_NOTES.md for current scope and deployment.
 The following is retained historical documentation for 2K.14.4 and earlier.
 
