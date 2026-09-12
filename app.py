@@ -33,13 +33,14 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.14.6"
+APP_RELEASE = "v43B Phase 2K.14.7"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
 YESTERDAY_RESULTS_STORAGE_PREFIX = "yc_yesterday_results_seen_v1"
-REMEMBER_DEVICE_DAYS = 30
-REMEMBER_COOKIE_MAX_AGE = REMEMBER_DEVICE_DAYS * 24 * 60 * 60
+REMEMBER_DEVICE_DAYS = None
+# Cookie refreshed at restore; localStorage has no scheduled expiration.
+REMEMBER_COOKIE_MAX_AGE = 400 * 24 * 60 * 60
 
 st.set_page_config(
     page_title="Yahtzee Coach",
@@ -2543,7 +2544,7 @@ def _queue_remember_cookie_delete():
 
 
 def render_remember_storage_bridge() -> dict:
-    """Read/write the 30-day device token through first-party browser localStorage."""
+    """Read/write the persistent device token through first-party browser localStorage."""
     command = st.session_state.get("remember_storage_command") or {}
     action = str(command.get("action") or "read")
     token = str(command.get("token") or "")
@@ -2711,6 +2712,7 @@ def _restore_remembered_cookie_fast_path(cookie_token: str) -> bool:
     st.session_state.remember_restore_checked = True
     _activate_player(player, created=False)
     st.session_state.active_device_token = token
+    _queue_remember_cookie_set(token)
     return True
 
 
@@ -3282,7 +3284,7 @@ def render_player_identity_gate():
                 autocomplete="current-password",
             )
             return_remember = st.checkbox(
-                "Keep me signed in on this device for 30 days",
+                "Keep me logged in",
                 value=True,
                 key="returning_player_remember",
                 help="Use this only on a device you trust. Your PIN is never stored in the browser.",
@@ -3292,7 +3294,7 @@ def render_player_identity_gate():
             )
         st.caption("Your PIN is private.")
         with st.expander("Forgot your PIN?", expanded=False):
-            st.write("PIN recovery isn't available during this beta yet. If you get locked out, contact Mike or the person who invited you so we can help.")
+            st.write("Forgot your PIN? Ask Mike to reset it. Your results and medals will stay with your account.")
             st.caption("Never send anyone your PIN — just share your display name when asking for help.")
         if return_submitted:
             try:
@@ -3333,7 +3335,7 @@ def render_player_identity_gate():
                 autocomplete="new-password",
             )
             create_remember = st.checkbox(
-                "Keep me signed in on this device for 30 days",
+                "Keep me logged in",
                 value=True,
                 key="create_player_remember",
                 help="Use this only on a device you trust. Your PIN is never stored in the browser.",
@@ -4771,6 +4773,8 @@ def render_my_player_mode():
         _open_avatar_editor()
         st.rerun()
 
+    render_pin_admin()
+
     with st.expander("Account", expanded=False):
         st.caption(f"Signed in as {player_name}")
         if st.button("Sign out", use_container_width=True, key="player_sign_out"):
@@ -4830,6 +4834,40 @@ def _practice_choice_fragment():
             st.session_state.scroll_to_result = True
             st.session_state.scroll_to_top = False
             st.rerun()
+
+
+def render_pin_admin():
+    actor_id = str(st.session_state.get("active_player_id") or "")
+    configured_id = str(st.secrets.get("YAHTZEE_ADMIN_PLAYER_ID", "")).strip()
+    if not configured_id or actor_id != configured_id:
+        return
+    with st.expander("Admin: Reset a PIN", expanded=False):
+        st.caption("Choose a player and enter your own PIN. Their saved game history stays intact.")
+        try:
+            store = load_daily_store()
+            players = store.list_reset_players(actor_id)
+        except Exception:
+            st.error("Player list could not be loaded. Please try again.")
+            return
+        names = {player.player_id: player.display_name for player in players}
+        if not names:
+            st.info("No players found.")
+            return
+        with st.form("admin_reset_pin_form", clear_on_submit=True):
+            target = st.selectbox("Player to reset", list(names), format_func=names.get)
+            admin_pin = st.text_input("Your PIN", type="password", max_chars=12)
+            submitted = st.form_submit_button("Reset this player's PIN")
+        if submitted:
+            try:
+                new_pin = store.admin_reset_pin(actor_id, admin_pin, target)
+            except PermissionError:
+                st.error("Your admin PIN was not recognized.")
+            except Exception:
+                st.error("Reset could not be confirmed. Check that the login migration has been installed, then try again.")
+            else:
+                st.success(f"PIN reset for {names[target]}.")
+                st.code(new_pin, language=None)
+                st.caption("Tell them this PIN privately. It disappears when you leave or refresh this screen. Their remembered logins have been revoked.")
 
 
 def render_practice_mode():
@@ -4982,7 +5020,7 @@ def render_help_feedback_footer():
                 st.success("Thanks — feedback sent!")
 
         st.markdown("**Forgot your PIN?**")
-        st.write("PIN recovery isn't available during the beta yet. Contact Mike or the person who invited you for help, and only share your display name — never your PIN.")
+        st.write("Ask Mike to reset it. Share your display name — never your PIN.")
 
 
 initialize_state()

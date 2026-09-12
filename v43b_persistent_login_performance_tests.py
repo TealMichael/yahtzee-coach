@@ -33,7 +33,7 @@ def run():
     sql = (ROOT / "v43b_phase2k4_persistent_login_migration.sql").read_text()
     supa = (ROOT / "supabase_daily_store.py").read_text()
 
-    checks.append(("returning players get a 30-day remember checkbox", 'Keep me signed in on this device for 30 days' in app and 'returning_player_remember' in app))
+    checks.append(("returning players get a persistent login checkbox", 'Keep me logged in' in app and 'returning_player_remember' in app))
     checks.append(("new players can also remember the device", 'create_player_remember' in app))
     checks.append(("new Streamlit sessions retain the first-party cookie fallback", 'st.context.cookies.get(REMEMBER_COOKIE_NAME' in app and '_restore_remembered_player(' in app))
     checks.append(("browser cookie is secure and same-site", 'SameSite=Lax; Secure' in app and 'Max-Age={REMEMBER_COOKIE_MAX_AGE}' in app))

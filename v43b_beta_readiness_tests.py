@@ -27,7 +27,7 @@ def run():
 
     checks = [
         ("returning player remains first/default tab", 'st.tabs(["Returning Player", "Create Player"])' in app),
-        ("forgot PIN help is visible but low-profile", 'with st.expander("Forgot your PIN?"' in app and "PIN recovery isn't available" in app),
+        ("forgot PIN help is visible but low-profile", 'with st.expander("Forgot your PIN?"' in app and "Ask Mike to reset it" in app),
         ("help and feedback lives in a collapsed footer", 'with st.expander("❓ Help & feedback", expanded=False)' in app),
         ("beta version label is only in help area", 'APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"' in app and 'st.caption(APP_PUBLIC_VERSION)' in app),
         ("feedback form has useful categories", 'Bug / something broke' in app and 'Idea / suggestion' in app and 'Account / PIN help' in app),

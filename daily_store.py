@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 TIE_TOLERANCE = 1e-9
 JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-REMEMBER_DEVICE_DAYS = 30
+REMEMBER_DEVICE_DAYS = None
 
 
 def displayed_points_lost(value: float) -> float:
@@ -261,7 +261,7 @@ class DailyStore(Protocol):
 
     def create_player(self, display_name: str, pin: str) -> PublicPlayer: ...
     def authenticate_player(self, display_name: str, pin: str) -> PublicPlayer | None: ...
-    def create_device_session(self, player_id: str, days: int = REMEMBER_DEVICE_DAYS) -> str: ...
+    def create_device_session(self, player_id: str, days: int | None = REMEMBER_DEVICE_DAYS) -> str: ...
     def authenticate_device_session(self, token: str) -> PublicPlayer | None: ...
     def revoke_device_session(self, token: str) -> None: ...
     def create_group(self, player_id: str, group_name: str) -> GroupRecord: ...
@@ -349,9 +349,9 @@ class InMemoryDailyStore:
         player = self.players[player_id]
         return player.public() if verify_pin(pin, player.pin_hash) else None
 
-    def create_device_session(self, player_id: str, days: int = REMEMBER_DEVICE_DAYS) -> str:
+    def create_device_session(self, player_id: str, days: int | None = REMEMBER_DEVICE_DAYS) -> str:
         self._require_player(player_id)
-        ttl_days = max(1, min(int(days), 90))
+        ttl_days = None if days is None else max(1, min(int(days), 90))
         session_id = str(uuid4())
         secret = secrets.token_urlsafe(32)
         now = self._now()
@@ -359,7 +359,7 @@ class InMemoryDailyStore:
             "player_id": str(player_id),
             "token_hash": hash_device_token_secret(secret),
             "created_at": now,
-            "expires_at": now + timedelta(days=ttl_days),
+            "expires_at": None if ttl_days is None else now + timedelta(days=ttl_days),
             "last_used_at": now,
             "revoked_at": None,
         }
@@ -373,7 +373,7 @@ class InMemoryDailyStore:
         if row is None or row.get("revoked_at") is not None:
             return None
         now = self._now()
-        if row.get("expires_at") is None or row["expires_at"] <= now:
+        if row.get("expires_at") is not None and row["expires_at"] <= now:
             return None
         actual_hash = hash_device_token_secret(secret)
         if not hmac.compare_digest(actual_hash, str(row.get("token_hash") or "")):

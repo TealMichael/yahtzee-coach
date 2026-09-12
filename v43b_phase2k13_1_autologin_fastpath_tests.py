@@ -14,7 +14,7 @@ def require(condition, message):
     print(f"PASS: {message}")
 
 
-require('APP_RELEASE = "v43B Phase 2K.14.6"' in APP, "release label is Phase 2K.13.1")
+require('APP_RELEASE = "v43B Phase 2K.14.7"' in APP, "release label is Phase 2K.13.1")
 
 # The durable localStorage token must heal the first-party cookie so later fresh
 # Streamlit connections can restore identity from the initial request.
@@ -56,8 +56,8 @@ EXPECTED_HASHES = {
     "exact_mode.py": "b0d5395973a1b6918f298f21a951eac8c5f6e9d82a7b140749720811983524b5",
     "puzzle_bank.py": "017bb56bf2f963efb7604240788bf59872a393dcd72bd633ca31c6392bf940fb",
     "daily_challenge.py": "c362a311f353bf0bfe2a462a6abc2c4471ea44994e5781c83af645ac7f2ecfe5",
-    "daily_store.py": "8eb46257a3ee02d14efd821f642637dde5d68cef13fa424a40f7d21f8912bbd0",
-    "supabase_daily_store.py": "826d0061d33609d99f203f88c63df25301b49050cb4d467828ba3f0224523e7c",
+    "daily_store.py": "209ac3aa8c3bad39ba72473b1db31fa9a3396918c1bd7df2fee0d8c1dc8b9585",
+    "supabase_daily_store.py": "aa70d56e2f42ad1f15c4136a6df0b43ce1e34fb23bb49b6fb2c041005cd764e1",
     "session_learning.py": "695ea20fcd82ffe8979b5900f34b929d15cedcc902dc8ef92c30a4baf999963a",
     "practice_progress.py": "8f78b05eb867e716fbe845c81969b12f33617a7cd5f7c8dd7fe09b04c4632915",
     "player_avatar.py": "a78416d7ea56910be580f1b42befc3acc0ba296fa9021198c564e32d48815add",

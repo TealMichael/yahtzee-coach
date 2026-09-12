@@ -203,14 +203,17 @@ class SupabaseDailyStore:
         self.supabase_url = url
         self.url_was_normalized = was_normalized
         self.client: Client = client or create_client(url, key)
+        self.admin_player_id = ""
 
     @classmethod
     def from_secrets(cls, secrets: Mapping[str, str]) -> "SupabaseDailyStore":
         """Build from a mapping such as Streamlit's ``st.secrets`` object."""
-        return cls(
+        store = cls(
             str(secrets["SUPABASE_URL"]),
             str(secrets["SUPABASE_SECRET_KEY"]),
         )
+        store.admin_player_id = str(secrets.get("YAHTZEE_ADMIN_PLAYER_ID", "")).strip()
+        return store
 
     # ---------- Small DB helpers ----------
 
@@ -312,16 +315,16 @@ class SupabaseDailyStore:
             return None
         return _player_from_row(row)
 
-    def create_device_session(self, player_id: str, days: int = 30) -> str:
-        """Create a revocable 30-day browser credential without storing the player's PIN."""
+    def create_device_session(self, player_id: str, days: int | None = None) -> str:
+        """Create a revocable persistent browser credential without storing the player's PIN."""
         self._require_player_row(player_id)
-        ttl_days = max(1, min(int(days), 90))
+        ttl_days = None if days is None else max(1, min(int(days), 90))
         secret = secrets.token_urlsafe(32)
         now = utc_now()
         payload = {
             "player_id": str(player_id),
             "token_hash": hash_device_token_secret(secret),
-            "expires_at": (now + timedelta(days=ttl_days)).isoformat(),
+            "expires_at": None if ttl_days is None else (now + timedelta(days=ttl_days)).isoformat(),
             "last_used_at": now.isoformat(),
         }
         response = (
@@ -350,8 +353,13 @@ class SupabaseDailyStore:
         row = _first_row(response)
         if row is None or row.get("revoked_at") is not None:
             return None
-        expires_at = _as_datetime(row.get("expires_at"))
-        if expires_at is None or expires_at <= utc_now():
+        if "expires_at" not in row:
+            return None
+        try:
+            expires_at = _as_datetime(row.get("expires_at"))
+        except (TypeError, ValueError):
+            return None
+        if row.get("expires_at") is not None and (expires_at is None or expires_at <= utc_now()):
             return None
         actual_hash = hash_device_token_secret(secret)
         if not hmac.compare_digest(actual_hash, str(row.get("token_hash") or "")):
@@ -372,6 +380,33 @@ class SupabaseDailyStore:
             .eq("token_hash", token_hash)
             .execute()
         )
+
+    def _require_pin_admin(self, actor_id: str) -> None:
+        if not self.admin_player_id or str(actor_id) != self.admin_player_id:
+            raise PermissionError("PIN reset is available only to the configured admin.")
+
+    def list_reset_players(self, actor_id: str) -> list[PublicPlayer]:
+        self._require_pin_admin(actor_id)
+        response = self.client.table("players").select(
+            "player_id,display_name,created_at"
+        ).order("display_name").execute()
+        return [_player_from_row(row) for row in _row_list(response)]
+
+    def admin_reset_pin(self, actor_id: str, admin_pin: str, target_id: str) -> str:
+        self._require_pin_admin(actor_id)
+        actor = self._require_player_row(actor_id)
+        if not verify_pin(admin_pin, str(actor["pin_hash"])):
+            raise PermissionError("Your admin PIN was not recognized.")
+        new_pin = f"{secrets.randbelow(1_000_000):06d}"
+        response = self.client.rpc("yahtzee_admin_reset_pin", {
+            "actor_id": str(actor_id),
+            "actor_pin_hash": str(actor["pin_hash"]),
+            "target_id": str(target_id),
+            "new_pin_hash": hash_pin(new_pin),
+        }).execute()
+        if response.data is not True:
+            raise DailyStoreError("PIN reset was not confirmed. Please try again.")
+        return new_pin
 
     # ---------- Friend groups ----------
 

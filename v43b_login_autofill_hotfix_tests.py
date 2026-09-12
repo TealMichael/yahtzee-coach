@@ -17,7 +17,7 @@ def between(start: str, end: str) -> str:
 def main():
     tests = []
 
-    require('APP_RELEASE = "v43B Phase 2K.14.6"', "release label should advance while preserving the autofill fix")
+    require('APP_RELEASE = "v43B Phase 2K.14.7"', "release label should advance while preserving the autofill fix")
     tests.append("release label")
 
     returning = between('with return_tab:', 'with create_tab:')
@@ -43,7 +43,7 @@ def main():
     tests.append("confirm PIN autocomplete")
 
     # Persistent-login implementation must remain present.
-    require('Keep me signed in on this device for 30 days', "remember-device UI must remain")
+    require('Keep me logged in', "remember-device UI must remain")
     require('_remember_storage_component', "browser remembered-login bridge must remain")
     require('create_device_session', "server-side device session creation must remain")
     tests.extend(["remember UI preserved", "browser bridge preserved", "device session preserved"])
