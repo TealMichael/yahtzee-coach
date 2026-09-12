@@ -217,6 +217,40 @@ class SupabaseDailyStore:
 
     # ---------- Small DB helpers ----------
 
+    @staticmethod
+    def _all_history_rows(query_factory, key: str) -> list[dict]:
+        """Read history by unique ID so new inserts cannot shift page offsets."""
+        rows = []
+        cursor = None
+        while True:
+            query = query_factory()
+            if cursor is not None:
+                query = query.gt(key, cursor)
+            response = query.range(0, 499).execute()
+            page = _row_list(response)
+            total = getattr(response, "count", None)
+            if not page:
+                if total is not None and total > 0:
+                    raise DailyStoreError("History could not be read completely. Please retry.")
+                return rows
+            rows.extend(page)
+            cursor = page[-1][key]
+            if total is not None and len(page) >= total:
+                return rows
+
+    def _history_challenges(self, challenge_ids) -> list[dict]:
+        rows = []
+        ids = sorted(set(challenge_ids))
+        # Keep PostgREST URLs bounded as account history grows.
+        for start in range(0, len(ids), 100):
+            batch = ids[start:start + 100]
+            rows.extend(self._all_history_rows(lambda: (
+                self.client.table("daily_challenges")
+                .select("challenge_id,challenge_date", count="exact")
+                .in_("challenge_id", batch).order("challenge_id")
+            ), "challenge_id"))
+        return rows
+
     def health_check(self) -> bool:
         """Make a harmless server-side query to verify credentials/table access."""
         self.client.table("players").select("player_id").limit(1).execute()
@@ -345,7 +379,7 @@ class SupabaseDailyStore:
             return None
         response = (
             self.client.table("player_sessions")
-            .select("session_id,player_id,token_hash,expires_at,revoked_at")
+            .select("session_id,player_id,token_hash,expires_at,revoked_at,player:players(player_id,display_name,created_at)")
             .eq("session_id", str(session_id))
             .limit(1)
             .execute()
@@ -364,7 +398,9 @@ class SupabaseDailyStore:
         actual_hash = hash_device_token_secret(secret)
         if not hmac.compare_digest(actual_hash, str(row.get("token_hash") or "")):
             return None
-        player_row = self._require_player_row(str(row["player_id"]))
+        player_row = row.get("player")
+        if not isinstance(player_row, dict) or str(player_row.get("player_id")) != str(row["player_id"]):
+            return None
         return _player_from_row(player_row)
 
     def revoke_device_session(self, token: str) -> None:
@@ -584,23 +620,17 @@ class SupabaseDailyStore:
         if len(player_ids) < 2:
             return {"gold": 0, "silver": 0, "bronze": 0, "total": 0}
 
-        attempt_rows = _row_list(
+        attempt_rows = self._all_history_rows(lambda: (
             self.client.table("daily_attempts")
-            .select("player_id,challenge_id,completed_at,total_ev_loss")
-            .in_("player_id", player_ids)
-            .execute()
-        )
+            .select("attempt_id,player_id,challenge_id,completed_at,total_ev_loss", count="exact")
+            .in_("player_id", player_ids).order("attempt_id")
+        ), "attempt_id")
         completed_rows = [row for row in attempt_rows if row.get("completed_at") is not None]
         challenge_ids = sorted({str(row["challenge_id"]) for row in completed_rows})
         if not challenge_ids:
             return {"gold": 0, "silver": 0, "bronze": 0, "total": 0}
 
-        challenge_rows = _row_list(
-            self.client.table("daily_challenges")
-            .select("challenge_id,challenge_date")
-            .in_("challenge_id", challenge_ids)
-            .execute()
-        )
+        challenge_rows = self._history_challenges(challenge_ids)
         challenge_dates = {
             str(row["challenge_id"]): date.fromisoformat(str(row["challenge_date"]))
             for row in challenge_rows
@@ -826,7 +856,7 @@ class SupabaseDailyStore:
     def get_resume_state(self, player_id: str, challenge_id: str) -> ResumeState | None:
         response = (
             self.client.table("daily_attempts")
-            .select("*")
+            .select("*,answers:daily_answers(*)")
             .eq("player_id", str(player_id))
             .eq("challenge_id", str(challenge_id))
             .limit(1)
@@ -836,7 +866,11 @@ class SupabaseDailyStore:
         if row is None:
             return None
         attempt = _attempt_from_row(row)
-        answers = tuple(self._answers_for_attempt(attempt.attempt_id))
+        answers = tuple(
+            _answer_from_row(answer) for answer in sorted(
+                row.get("answers") or [], key=lambda answer: int(answer["question_number"])
+            )
+        )
         next_question = None if attempt.complete else len(answers) + 1
         return ResumeState(
             attempt=attempt,
@@ -1268,12 +1302,11 @@ class SupabaseDailyStore:
     def current_participation_streak(self, player_id: str, current_date: str) -> int:
         self._require_player_row(player_id)
         today = date.fromisoformat(str(current_date))
-        attempt_rows = _row_list(
+        attempt_rows = self._all_history_rows(lambda: (
             self.client.table("daily_attempts")
-            .select("challenge_id,completed_at")
-            .eq("player_id", str(player_id))
-            .execute()
-        )
+            .select("attempt_id,challenge_id,completed_at", count="exact")
+            .eq("player_id", str(player_id)).order("attempt_id")
+        ), "attempt_id")
         challenge_ids = sorted({
             str(row["challenge_id"])
             for row in attempt_rows
@@ -1281,12 +1314,7 @@ class SupabaseDailyStore:
         })
         if not challenge_ids:
             return 0
-        challenge_rows = _row_list(
-            self.client.table("daily_challenges")
-            .select("challenge_id,challenge_date")
-            .in_("challenge_id", challenge_ids)
-            .execute()
-        )
+        challenge_rows = self._history_challenges(challenge_ids)
         completed_dates = {date.fromisoformat(str(row["challenge_date"])) for row in challenge_rows}
 
         cursor = today if today in completed_dates else today - timedelta(days=1)

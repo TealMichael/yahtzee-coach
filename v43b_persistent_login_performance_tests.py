@@ -48,10 +48,10 @@ def run():
     checks.append(("group member lookup batches player rows", '.in_("player_id", player_ids)' in supa))
     checks.append(("leaderboard batches group attempts", '.in_("player_id", player_ids)' in supa and 'completed = [_attempt_from_row' in supa))
     checks.append(("question stats batch all completed answers", '.in_("attempt_id", attempt_ids)' in supa and 'by_question' in supa))
-    checks.append(("streak lookup batches challenge dates", '.in_("challenge_id", challenge_ids)' in supa))
+    checks.append(("streak lookup batches challenge dates", 'self._history_challenges(challenge_ids)' in supa and '.in_("challenge_id", batch)' in supa))
 
     checks.append(("short-lived Streamlit caches reduce repeated social reads", '@st.cache_data(ttl=12' in app and '@st.cache_data(ttl=20' in app and '@st.cache_data(ttl=60' in app))
-    checks.append(("writes clear social caches", app.count('_clear_social_caches()') >= 4))
+    checks.append(("writes clear social caches", app.count('_clear_social_caches()') >= 3 and '_clear_completed_daily_caches()' in app))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

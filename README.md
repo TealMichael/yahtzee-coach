@@ -1,3 +1,5 @@
+> Current release: **v43B Phase 2K.14.8**. Read **PERFORMANCE_RELEASE_NOTES.md**. No new SQL or secrets step is required when upgrading from 2K.14.7. Earlier release notes follow.
+
 > Current release: **v43B Phase 2K.14.7**. Start with **LOGIN_RESET_RELEASE_NOTES.md** for the required SQL migration, admin setting, browser-upload instructions, and current scope. The notes below describe earlier releases.
 
 CURRENT RELEASE: v43B Phase 2K.14.6. Use MATH_CLARITY_RELEASE_NOTES.md for installation and scope.

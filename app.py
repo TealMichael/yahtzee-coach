@@ -33,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.14.7"
+APP_RELEASE = "v43B Phase 2K.14.8"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -223,6 +223,25 @@ def _clear_social_caches():
     _cached_participation_streak.clear()
     _cached_player_profile.clear()
     _cached_player_medal_totals.clear()
+
+
+def _clear_completed_daily_caches():
+    """Refresh this Daily's affected standings, leaving unrelated caches warm."""
+    player_id = str(st.session_state.active_player_id)
+    challenge_id = str(st.session_state.daily_set_id)
+    try:
+        groups = _cached_player_groups(player_id)
+    except Exception:
+        # Cache refresh must not turn a successfully committed Daily into an error.
+        _cached_group_daily_snapshot.clear()
+        _cached_group_leaderboard.clear()
+        _cached_group_question_stats.clear()
+    else:
+        for group in groups:
+            _cached_group_daily_snapshot.clear(group.group_id, challenge_id)
+            _cached_group_leaderboard.clear(group.group_id, challenge_id)
+            _cached_group_question_stats.clear(group.group_id, challenge_id)
+    _cached_participation_streak.clear(player_id, str(st.session_state.daily_date_key))
 
 
 def database_check_enabled():
@@ -3428,7 +3447,7 @@ def render_group_selector(groups, *, key="friend_group_selector"):
     return next(group for group in groups if group.group_id == chosen_id)
 
 
-def render_friend_group_hub(*, expanded: bool = False):
+def render_friend_group_hub(*, expanded: bool = False, member_snapshot=None):
     """Keep friend-group administration secondary to the Daily experience."""
     groups = _load_player_groups()
     active = _select_active_group(groups)
@@ -3437,7 +3456,11 @@ def render_friend_group_hub(*, expanded: bool = False):
         if groups:
             active = render_group_selector(groups, key="friend_group_manage_selector")
             try:
-                members = _cached_group_members(active.group_id)
+                members = (
+                    list(member_snapshot[1])
+                    if member_snapshot is not None and member_snapshot[0] == active.group_id
+                    else _cached_group_members(active.group_id)
+                )
             except Exception:
                 members = []
             member_count = len(members)
@@ -4091,7 +4114,7 @@ def render_daily_submission_review():
             return
         try:
             load_daily_store().complete_attempt(attempt_id)
-            _clear_social_caches()
+            _clear_completed_daily_caches()
         except Exception as exc:
             st.error("Your Daily couldn't be submitted yet. Your 10 choices are still saved and editable.")
             if database_check_enabled():
@@ -4683,7 +4706,10 @@ def render_daily_results():
     )
 
     # Group administration stays below results, insights, personal grades, and optional friend peeks.
-    render_friend_group_hub(expanded=active_group is None)
+    render_friend_group_hub(
+        expanded=active_group is None,
+        member_snapshot=(active_group.group_id, members) if active_group is not None else None,
+    )
 
     render_solver_panel(records)
 

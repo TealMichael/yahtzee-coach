@@ -36,7 +36,10 @@ def main():
         def execute(self):
             if getattr(self,"inserted",False): return SimpleNamespace(data=[{"session_id":"new-device"}])
             rows=self.client.players if self.table=='players' else self.client.sessions
-            return SimpleNamespace(data=[copy.copy(r) for r in rows if all(r.get(k)==v for k,v in self.filters.items())])
+            selected=[copy.copy(r) for r in rows if all(r.get(k)==v for k,v in self.filters.items())]
+            if self.table=='player_sessions':
+                for row in selected:row['player']=next((p for p in self.client.players if p['player_id']==row['player_id']),None)
+            return SimpleNamespace(data=selected)
     class Client:
         def __init__(self):
             self.players=[dict(player_id=p.player_id,display_name=p.display_name,created_at=p.created_at.isoformat(),pin_hash=memory.players[p.player_id].pin_hash) for p in (mike,paul)]

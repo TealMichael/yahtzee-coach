@@ -1313,6 +1313,14 @@ def _one_reroll_scoring_stat(
 def _evidence_category_result(
     dice: Sequence[int], category: str
 ) -> tuple[float, float, float]:
+    """Reuse immutable scoring facts without changing category calculations."""
+    return _cached_evidence_category_result(canonical(dice), category)
+
+
+@lru_cache(maxsize=4096)
+def _cached_evidence_category_result(
+    dice: tuple[int, ...], category: str
+) -> tuple[float, float, float]:
     """Return (hit, score, benchmark-hit) for one explanatory target.
 
     ``best_straight`` is a teaching-only target: 40 for a Large Straight,
