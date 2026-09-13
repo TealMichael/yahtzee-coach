@@ -28,12 +28,12 @@ from daily_challenge import (
 from supabase_daily_store import SupabaseDailyStore
 from daily_store import (
     AttemptAlreadyComplete, ChallengeMismatch, DailyStoreError, DuplicateAnswer,
-    GroupNotFound, InvalidOfficialAnswer, InvalidPin, OutOfOrderAnswer, PlayerNameTaken,
+    GroupRecord, GroupNotFound, InvalidOfficialAnswer, InvalidPin, OutOfOrderAnswer, PlayerNameTaken,
 )
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.14.9"
+APP_RELEASE = "v43B Phase 2K.14.10"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -164,8 +164,26 @@ def load_daily_store():
 
 
 @st.cache_data(ttl=60, show_spinner=False)
+def _cached_player_group_rows(player_id: str):
+    # Cache only built-in values: records retained across a module reload may
+    # refer to an older class identity and fail Streamlit's pickle step.
+    return [
+        {
+            "group_id": group.group_id,
+            "group_name": group.group_name,
+            "join_code": group.join_code,
+            "created_by_player_id": group.created_by_player_id,
+            "created_at": group.created_at.isoformat(),
+        }
+        for group in load_daily_store().list_groups(str(player_id))
+    ]
+
+
 def _cached_player_groups(player_id: str):
-    return load_daily_store().list_groups(str(player_id))
+    return [
+        GroupRecord(**{**row, "created_at": datetime.fromisoformat(row["created_at"])})
+        for row in _cached_player_group_rows(player_id)
+    ]
 
 
 @st.cache_data(ttl=20, show_spinner=False)
@@ -214,7 +232,7 @@ def _cached_player_medal_totals(player_id: str, group_id: str, through_date: str
 
 def _clear_social_caches():
     """Clear small public-result caches after a write that changes social state."""
-    _cached_player_groups.clear()
+    _cached_player_group_rows.clear()
     _cached_group_members.clear()
     _cached_group_leaderboard.clear()
     _cached_group_question_stats.clear()
@@ -3544,9 +3562,10 @@ def render_friend_group_hub(*, expanded: bool = False, member_snapshot=None):
     return active
 
 
-def _real_group_context():
+def _real_group_context(groups=None):
     """Return active group and one batched social snapshot for today's Daily."""
-    groups = _load_player_groups()
+    if groups is None:
+        groups = _load_player_groups()
     active = _select_active_group(groups)
     if active is None:
         return None, [], [], []
@@ -4584,7 +4603,7 @@ def render_daily_results():
         render_group_selector(groups, key="daily_results_group_selector")
 
     try:
-        active_group, members, board, stats = _real_group_context()
+        active_group, members, board, stats = _real_group_context(groups=groups)
     except Exception as exc:
         active_group, members, board, stats = None, [], [], []
         st.warning("Your Daily result is safe, but friend standings couldn't be refreshed right now.")

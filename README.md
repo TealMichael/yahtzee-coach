@@ -1,3 +1,7 @@
+# Current release: v43B Phase 2K.14.10
+
+See GROUP_CACHE_HOTFIX_NOTES.md for this targeted cache fix.
+
 # Current release: v43B Phase 2K.14.9
 
 See CEREMONY_RELEASE_NOTES.md and CEREMONY_VALIDATION.md for this targeted visual update.
