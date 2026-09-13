@@ -33,7 +33,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.14.8"
+APP_RELEASE = "v43B Phase 2K.14.9"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -3732,6 +3732,14 @@ def render_yesterday_final_standings_if_needed() -> bool:
     if not board:
         return False
 
+    if st.button(
+        "🎲 PLAY TODAY'S 10 →",
+        type="primary",
+        use_container_width=True,
+        key="yesterday_final_start_today",
+    ):
+        _start_today_from_yesterday_recap()
+
     # A social medal only makes sense when the group has somebody to compete with.
     # A multi-member group may still have only one finisher; that player can earn
     # gold because the next-day board is final for that group/day.
@@ -3748,7 +3756,7 @@ def render_yesterday_final_standings_if_needed() -> bool:
             medal_totals=medals,
         )
         components.html(ceremony, height=560, scrolling=False)
-        st.caption("Tap the medal moment or SKIP to jump to the finished screen. Silent by design.")
+        st.caption("Tap the celebration to finish, or start today’s ten above.")
     else:
         st.markdown(
             "<div class='daily-hero'>"
@@ -3764,13 +3772,6 @@ def render_yesterday_final_standings_if_needed() -> bool:
     with st.expander("View yesterday's standings", expanded=False):
         render_leaderboard_cards(board, allow_review=False)
 
-    if st.button(
-        "🎲 PLAY TODAY'S 10 →",
-        type="primary",
-        use_container_width=True,
-        key="yesterday_final_start_today",
-    ):
-        _start_today_from_yesterday_recap()
     return True
 
 

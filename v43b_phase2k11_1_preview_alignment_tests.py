@@ -17,13 +17,13 @@ def run():
     avatar = (ROOT / "player_avatar.py").read_text(encoding="utf-8")
     retro = (ROOT / "retro_podium.py").read_text(encoding="utf-8")
 
-    require('APP_RELEASE = "v43B Phase 2K.14.8"' in app, "visual alignment patch has its own release label")
+    require('APP_RELEASE = "v43B Phase 2K.14.9"' in app, "visual alignment patch has its own release label")
     require("CREATE YOUR PLAYER" in app and "Tap a category, choose a style" in app, "creator keeps the approved light retro direction in a tighter mobile layout")
     require("avatar_creator_category_" in app and "chosen_value = st.selectbox(" in app, "creator keeps category-first customization with readable mobile controls")
     require("grid-template-columns:repeat(3,1fr)" in avatar, "medal counter keeps clean three-column preview layout")
     require("pose == \"give\"" in avatar and "pose == \"receive\"" in avatar, "sprites include dedicated medal-handoff poses")
-    require("background:#fff9ea" in retro and ".stadium" not in retro and "confetti" not in retro.lower(), "medal moment stays light and simple with no stadium production")
-    require("text-shadow:3px 0 #172033" in retro and "ALL-TIME MEDALS" in retro, "medal moment follows approved preview typography and collection panel")
+    require("#182443" in retro and "if medal_rank == 1 else" in retro, "approved midnight stage restricts confetti to gold")
+    require("color:#ffda85" in retro and "ALL-TIME MEDALS" in retro, "medal moment follows approved preview typography and collection panel")
 
     cfg = {"hair": "curly", "outfit": "pink_tee", "skin": "warm", "accessory": "none", "shoes": "blue"}
     require("LIVE PREVIEW" in avatar_preview_html(cfg, player_name="Mike", setup_complete=False), "creator preview has the intended live-preview treatment")
