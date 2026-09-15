@@ -16,6 +16,7 @@ from exact_runtime import (
 from session_learning import build_session_learning_summary
 from practice_progress import build_practice_progress, newly_unlocked_badges
 from retro_podium import personal_medal_moment_html
+from perfect_ten import is_perfect_ten, perfect_ten_html
 from player_avatar import (
     AVATAR_CHOICES, CATEGORY_LABELS, avatar_option_tile_html,
     avatar_preview_html, default_avatar_for_player, medal_counter_html, normalize_avatar_config,
@@ -33,7 +34,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.14.10"
+APP_RELEASE = "v43B Phase 2K.14.11"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -4182,11 +4183,12 @@ def render_leaderboard_cards(board, *, allow_review=False):
         display_name = str(item.get("display_name") or "Player")
         is_you = player_id == active_player_id
         you_note = " <span>YOU</span>" if is_you else ""
+        perfect_note = " <span style='color:#805b09;background:#fff0bd;border-radius:6px;padding:2px 5px;font-size:.7rem;display:inline-block'>🏅 Perfect Ten</span>" if int(item.get("exact_count") or 0) == 10 else ""
         row_class = "leaderboard-row you" if is_you else "leaderboard-row"
         rows.append(
             f"<div class='{row_class}'>"
             f"<div class='leaderboard-rank'>{medals.get(rank, '')} {rank}</div>"
-            f"<div class='leaderboard-name'>{html.escape(display_name)}{you_note}</div>"
+            f"<div class='leaderboard-name'>{html.escape(display_name)}{you_note}{perfect_note}</div>"
             f"<div class='leaderboard-score'><b>{float(item['total_ev_loss']):.2f}</b>"
             f"Points Lost · {int(item['exact_count'])}/10 best</div>"
             "</div>"
@@ -4226,6 +4228,8 @@ def build_daily_share_text(records, summary, rank=None, completed_count=0, rank_
         second_row,
         f"🔥 Best-hold streak: {summary['best_exact_streak']}",
     ]
+    if is_perfect_ten(summary):
+        lines.insert(1, "🏅 PERFECT TEN — every best hold!")
     if rank is not None and int(completed_count or 0) > 0:
         if rank_tied:
             lines.append(f"🏆 Group rank right now: Tied for #{int(rank)} of {int(completed_count)}")
@@ -4614,14 +4618,23 @@ def render_daily_results():
     story = _story_from_group_stats(stats)
     rank_value = f"T-{rank} of {len(board)}" if rank_tied else (f"#{rank} of {len(board)}" if rank is not None else "—")
 
-    st.markdown(
-        "<div class='daily-hero'>"
-        "<div class='daily-kicker'>✅ Today's Daily</div>"
-        f"<div class='daily-title'>{_daily_date_label(st.session_state.daily_date_key)}</div>"
-        "<div class='daily-rule'>Nice work. Here's how your 10 decisions turned out.</div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
+    if is_perfect_ten(summary):
+        profile = _active_player_profile()
+        components.html(perfect_ten_html(
+            player_id=str(st.session_state.get("active_player_id") or ""),
+            challenge_id=str(st.session_state.daily_set_id),
+            player_name=str(st.session_state.get("active_player_name") or "Player"),
+            avatar_config=_active_avatar_config(profile),
+        ), height=200, scrolling=False)
+    else:
+        st.markdown(
+            "<div class='daily-hero'>"
+            "<div class='daily-kicker'>✅ Today's Daily</div>"
+            f"<div class='daily-title'>{_daily_date_label(st.session_state.daily_date_key)}</div>"
+            "<div class='daily-rule'>Nice work. Here's how your 10 decisions turned out.</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
     st.markdown(
         "<div class='daily-result-grid'>"
         f"<div class='daily-result-box'><div class='daily-result-label'>Points Lost</div><div class='daily-result-value'>{summary['total_ev_loss']:.2f}</div><div class='daily-result-sub'>lower is better</div></div>"

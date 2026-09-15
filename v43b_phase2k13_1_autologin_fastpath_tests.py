@@ -14,7 +14,7 @@ def require(condition, message):
     print(f"PASS: {message}")
 
 
-require('APP_RELEASE = "v43B Phase 2K.14.10"' in APP, "release label is Phase 2K.13.1")
+require('APP_RELEASE = "v43B Phase 2K.14.11"' in APP, "release label is Phase 2K.13.1")
 
 # The durable localStorage token must heal the first-party cookie so later fresh
 # Streamlit connections can restore identity from the initial request.
@@ -61,7 +61,7 @@ EXPECTED_HASHES = {
     "session_learning.py": "695ea20fcd82ffe8979b5900f34b929d15cedcc902dc8ef92c30a4baf999963a",
     "practice_progress.py": "8f78b05eb867e716fbe845c81969b12f33617a7cd5f7c8dd7fe09b04c4632915",
     "player_avatar.py": "a78416d7ea56910be580f1b42befc3acc0ba296fa9021198c564e32d48815add",
-    "retro_podium.py": "b4a650e656603b56bfe4f49ae58f0cef88b5a3e464e367dd9fa40be05789bd98",
+    "retro_podium.py": "a114816393537bc963abb15e194785ca61d5e6301acc9c6c7e703b3b332d49c5",
     "exact_policy.npz": "cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b",
     "puzzle_bank.npz": "22f26f136a690c552fd7a8ad3a3335090f6085468219f197f16cea32e0276a8f",
     "challenge_catalog.npz": "fe92b90e4c2ce4261ac384711061756336af4b151e267946d26e4f8a4b649ecd",

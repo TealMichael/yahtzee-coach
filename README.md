@@ -1,3 +1,7 @@
+# Current release: v43B Phase 2K.14.11
+
+See PERFECT_TEN_RELEASE_NOTES.md.
+
 # Current release: v43B Phase 2K.14.10
 
 See GROUP_CACHE_HOTFIX_NOTES.md for this targeted cache fix.

@@ -148,6 +148,8 @@ def personal_medal_moment_html(
         exact = mine.get("exact_count")
         if isinstance(exact, int) and 0 <= exact <= 10:
             subhead = f"You found {exact} best {'hold' if exact == 1 else 'holds'} yesterday."
+    if mine and mine.get("exact_count") == 10:
+        subhead = "Yesterday, you played a perfect ten."
     confetti = "".join(
         f"<i style='--x:{7 + n * 7}%;--d:{(n % 4) * .09}s;--c:{('#ffd369', '#64dbcb', '#ff89b6')[n % 3]}'></i>"
         for n in range(13)
