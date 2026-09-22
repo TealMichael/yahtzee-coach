@@ -1,4 +1,10 @@
-# Current release: v43B Phase 2K.14.11
+# Current release: v43B Phase 2K.14.12 — Points Now vs. Value Later
+
+See CONTINUATION_COACHING_RELEASE_NOTES.md for this explanation-only update.
+No SQL, secrets, account reset or dependency change is required from 2K.14.11.
+The table, policy, rankings, grades and gameplay are unchanged.
+
+# Previous release: v43B Phase 2K.14.11
 
 See PERFECT_TEN_RELEASE_NOTES.md.
 

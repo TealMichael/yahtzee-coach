@@ -2422,6 +2422,13 @@ def _build_comparison_card(
         if extra_math:
             card_math = f"{card_math} {extra_math}"
 
+    from continuation_coaching import explain_continuation
+    continuation = explain_continuation(
+        scorecard_state_key(scorecard), left, right, roll_number, winner_side, edge,
+    )
+    if continuation:
+        summary, card_takeaway, card_math = continuation
+
     if is_optimal:
         eyebrow = "Why your hold works"
         title = f"{hold_text(left).capitalize()} wins"

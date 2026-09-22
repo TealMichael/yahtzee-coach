@@ -20,7 +20,7 @@ def sha(name):
 def run():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
 
-    require('APP_RELEASE = "v43B Phase 2K.14.11"' in app, "UI polish release has its own release label")
+    require('APP_RELEASE = "v43B Phase 2K.14.12"' in app, "UI polish release has its own release label")
     require(set(AVATAR_CHOICES["style"]) == {"classic", "soft"}, "creator offers two unlabeled base character silhouettes")
     for hair in ("ponytail", "bob", "waves", "bun", "braids"):
         require(hair in AVATAR_CHOICES["hair"], f"inclusive hairstyle {hair} is available")
@@ -60,7 +60,7 @@ def run():
     expected = {
         "yahtzee_engine.py": "9b175f3f3f59f9937943856c01e1e7aeced7662742756766a54a6061ccaba6b1",
         "exact_runtime.py": "322e50715ca49e53d78e9cc6eda85a7af0712b881273fb57ea4c4f4b67da171a",
-        "exact_mode.py": "c344ed3e94e4a7d4879db89f28d77a6496b6c3220e1183d2b9da03660ed33154",
+        "exact_mode.py": "bb503eb66b8296779e9e5cbc7a18e4622f12348b8c11de01276a894367fdab05",
         "daily_store.py": "209ac3aa8c3bad39ba72473b1db31fa9a3396918c1bd7df2fee0d8c1dc8b9585",
         "supabase_daily_store.py": "4572a962855f337780e4fdd9428b6acaeef18c700466a1be46d796f32fdfc96b",
         "session_learning.py": "695ea20fcd82ffe8979b5900f34b929d15cedcc902dc8ef92c30a4baf999963a",

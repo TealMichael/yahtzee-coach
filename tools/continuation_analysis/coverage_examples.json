@@ -1,0 +1,426 @@
+{
+  "counts": {
+    "1": 1283,
+    "2": 1265
+  },
+  "examples": [
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        1,
+        1,
+        1,
+        2,
+        2
+      ],
+      "other": [],
+      "best": [
+        2,
+        2
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Rerolling everything earns about 1.62 more points this turn, but keeping 2, 2 leaves 2.44 more expected points for later. That leaves a 0.82-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        1,
+        1,
+        2,
+        2,
+        5
+      ],
+      "other": [
+        5
+      ],
+      "best": [
+        2,
+        2
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 5 earns about 2.51 more points this turn, but keeping 2, 2 leaves 2.84 more expected points for later. That leaves a 0.33-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        1,
+        1,
+        3,
+        3,
+        6
+      ],
+      "other": [
+        3,
+        3,
+        6
+      ],
+      "best": [
+        3,
+        3
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 3, 3, 6 earns about 0.41 more points this turn, but keeping 3, 3 leaves 1.14 more expected points for later. That leaves a 0.73-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        1,
+        2,
+        2,
+        3,
+        5
+      ],
+      "other": [
+        5
+      ],
+      "best": [
+        2,
+        2
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 5 earns about 2.51 more points this turn, but keeping 2, 2 leaves 2.84 more expected points for later. That leaves a 0.33-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        1,
+        2,
+        2,
+        4,
+        5
+      ],
+      "other": [
+        5
+      ],
+      "best": [
+        2,
+        2
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 5 earns about 2.51 more points this turn, but keeping 2, 2 leaves 2.84 more expected points for later. That leaves a 0.33-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        1,
+        2,
+        3,
+        3,
+        6
+      ],
+      "other": [
+        3,
+        3,
+        6
+      ],
+      "best": [
+        3,
+        3
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 3, 3, 6 earns about 0.41 more points this turn, but keeping 3, 3 leaves 1.14 more expected points for later. That leaves a 0.73-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        1,
+        3,
+        3,
+        4,
+        6
+      ],
+      "other": [
+        3,
+        3,
+        6
+      ],
+      "best": [
+        3,
+        3
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 3, 3, 6 earns about 0.41 more points this turn, but keeping 3, 3 leaves 1.14 more expected points for later. That leaves a 0.73-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        1,
+        3,
+        3,
+        5,
+        6
+      ],
+      "other": [
+        3,
+        3,
+        6
+      ],
+      "best": [
+        3,
+        3
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 3, 3, 6 earns about 0.41 more points this turn, but keeping 3, 3 leaves 1.14 more expected points for later. That leaves a 0.73-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        2,
+        2,
+        2,
+        5,
+        5
+      ],
+      "other": [
+        5,
+        5
+      ],
+      "best": [
+        2,
+        2,
+        2
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 5, 5 earns about 5.60 more points this turn, but keeping 2, 2, 2 leaves 5.74 more expected points for later. That leaves a 0.14-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        2,
+        2,
+        3,
+        3,
+        6
+      ],
+      "other": [
+        3,
+        3,
+        6
+      ],
+      "best": [
+        3,
+        3
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 3, 3, 6 earns about 0.41 more points this turn, but keeping 3, 3 leaves 1.14 more expected points for later. That leaves a 0.73-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        2,
+        2,
+        3,
+        4,
+        5
+      ],
+      "other": [
+        5
+      ],
+      "best": [
+        2,
+        2
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 5 earns about 2.51 more points this turn, but keeping 2, 2 leaves 2.84 more expected points for later. That leaves a 0.33-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        2,
+        3,
+        3,
+        4,
+        6
+      ],
+      "other": [
+        3,
+        3,
+        6
+      ],
+      "best": [
+        3,
+        3
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 3, 3, 6 earns about 0.41 more points this turn, but keeping 3, 3 leaves 1.14 more expected points for later. That leaves a 0.73-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        2,
+        3,
+        3,
+        5,
+        6
+      ],
+      "other": [
+        3,
+        3,
+        6
+      ],
+      "best": [
+        3,
+        3
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 3, 3, 6 earns about 0.41 more points this turn, but keeping 3, 3 leaves 1.14 more expected points for later. That leaves a 0.73-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 1,
+      "dice": [
+        3,
+        3,
+        4,
+        5,
+        6
+      ],
+      "other": [
+        3,
+        3,
+        6
+      ],
+      "best": [
+        3,
+        3
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 3, 3, 6 earns about 0.41 more points this turn, but keeping 3, 3 leaves 1.14 more expected points for later. That leaves a 0.73-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 2,
+      "dice": [
+        1,
+        1,
+        1,
+        5,
+        5
+      ],
+      "other": [
+        5,
+        5
+      ],
+      "best": [
+        1,
+        1,
+        1
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 5, 5 earns about 5.29 more points this turn, but keeping 1, 1, 1 leaves 5.51 more expected points for later. That leaves a 0.23-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 2,
+      "dice": [
+        1,
+        4,
+        4,
+        4,
+        6
+      ],
+      "other": [
+        4,
+        4,
+        4,
+        6
+      ],
+      "best": [
+        4,
+        4,
+        4
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 4, 4, 4, 6 earns about 1.00 more points this turn, but keeping 4, 4, 4 leaves 2.80 more expected points for later. That leaves a 1.80-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 2,
+      "dice": [
+        1,
+        4,
+        6,
+        6,
+        6
+      ],
+      "other": [
+        4,
+        6,
+        6,
+        6
+      ],
+      "best": [
+        6,
+        6,
+        6
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 4, 6, 6, 6 earns about 0.78 more points this turn, but keeping 6, 6, 6 leaves 3.35 more expected points for later. That leaves a 2.58-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 2,
+      "dice": [
+        1,
+        5,
+        5,
+        5,
+        6
+      ],
+      "other": [
+        5,
+        5,
+        5,
+        6
+      ],
+      "best": [
+        5,
+        5,
+        5
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 5, 5, 5, 6 earns about 1.94 more points this turn, but keeping 5, 5, 5 leaves 3.83 more expected points for later. That leaves a 1.88-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 2,
+      "dice": [
+        1,
+        5,
+        6,
+        6,
+        6
+      ],
+      "other": [
+        5,
+        6,
+        6,
+        6
+      ],
+      "best": [
+        6,
+        6,
+        6
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 5, 6, 6, 6 earns about 2.44 more points this turn, but keeping 6, 6, 6 leaves 4.42 more expected points for later. That leaves a 1.97-point edge."
+    },
+    {
+      "state": 255,
+      "roll": 2,
+      "dice": [
+        2,
+        4,
+        4,
+        4,
+        6
+      ],
+      "other": [
+        4,
+        4,
+        4,
+        6
+      ],
+      "best": [
+        4,
+        4,
+        4
+      ],
+      "summary": "A bigger score now can use up a box that is worth saving for a better turn. Keeping 4, 4, 4, 6 earns about 1.00 more points this turn, but keeping 4, 4, 4 leaves 2.80 more expected points for later. That leaves a 1.80-point edge."
+    }
+  ]
+}
