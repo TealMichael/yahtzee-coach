@@ -18,6 +18,7 @@ from time import perf_counter
 from typing import Mapping, Sequence
 
 import numpy as np
+from loss_display import format_points_loss
 
 CATEGORIES: tuple[str, ...] = (
     "ones", "twos", "threes", "fours", "fives", "sixes",
@@ -1654,14 +1655,14 @@ def _margin_verdict(points_lost: float, optimal_hold: Sequence[int]) -> str:
     optimal_text = _keeping_text(optimal_hold)
     if points_lost <= 0.10:
         return (
-            f"Those advantages nearly cancel: {optimal_text} leads by only {points_lost:.2f} points, "
+            f"Those advantages nearly cancel: {optimal_text} leads by only {format_points_loss(points_lost)} points, "
             "so this was not a meaningful strategy mistake."
         )
     if points_lost <= 0.50:
-        return f"After full-game lookahead, {optimal_text} has only a slight {points_lost:.2f}-point edge."
+        return f"After full-game lookahead, {optimal_text} has only a slight {format_points_loss(points_lost)}-point edge."
     if points_lost <= 1.50:
-        return f"After all future rolls and scorecard choices, {optimal_text} finishes {points_lost:.2f} expected points higher."
-    return f"Across the rest of the game, the exact model values {optimal_text} {points_lost:.2f} expected points higher."
+        return f"After all future rolls and scorecard choices, {optimal_text} finishes {format_points_loss(points_lost)} expected points higher."
+    return f"Across the rest of the game, the exact model values {optimal_text} {format_points_loss(points_lost)} expected points higher."
 
 
 def _low_pair_open_board_value_explanation(
@@ -1756,16 +1757,16 @@ def _rank_context_line(
     if rank >= 4 and points_lost <= 1.50:
         return (
             f"Crowded field: #{rank} means {better_text} legal {noun} {verb} ahead, but your hold is only "
-            f"{points_lost:.2f} expected points from first. Rank is order; Points Lost is distance."
+            f"{format_points_loss(points_lost)} expected points from first. Rank is order; Points Lost is distance."
         )
     if points_lost <= 0.10:
         return (
-            f"Exact rank #{rank} means {better_text} legal {noun} {verb} ahead, but the {points_lost:.2f}-point gap is a practical tie. "
+            f"Exact rank #{rank} means {better_text} legal {noun} {verb} ahead, but the {format_points_loss(points_lost)}-point gap is a practical tie. "
             "Rank is order; Points Lost is distance."
         )
     return (
         f"Exact rank #{rank} means {better_text} legal {noun} {verb} ahead. Points Lost gives the meaningful distance from first: "
-        f"{points_lost:.2f} expected points."
+        f"{format_points_loss(points_lost)} expected points."
     )
 
 
@@ -1965,7 +1966,7 @@ def _endgame_straight_flexibility_explanation(
         f"Adding the {released_text} locks you into the second route and rerolls one fewer die. "
         f"{immediate_note}Across both rerolls, the straight chance is {optimal_two_roll:.1%} with {_format_faces(optimal)} "
         f"versus {user_two_roll:.1%} with {_format_faces(user)}. {upper_help}"
-        f"Full-game lookahead gives {_format_faces(optimal)} a {points_lost:.2f}-point edge."
+        f"Full-game lookahead gives {_format_faces(optimal)} a {format_points_loss(points_lost)}-point edge."
     )
 
 
@@ -2012,7 +2013,7 @@ def _endgame_straight_math_detail(
         f"({optimal_immediate:.1%}); {_keeping_text(user)} succeeds on {user_hits} of {user_total} ({user_immediate:.1%}). "
         f"After every Roll 2 result and the best final hold, the two-reroll chances are {optimal_two_roll:.1%} versus {user_two_roll:.1%}. "
         f"That {straight_gain:.1%} probability gain is worth about {straight_points:.2f} expected Large Straight points, "
-        f"for that isolated straight target. The model's {points_lost:.2f}-point full-game edge also values other scoring choices; "
+        f"for that isolated straight target. The model's {format_points_loss(points_lost)}-point full-game edge also values other scoring choices; "
         f"the two figures are not a breakdown of the same total.{bonus_detail}"
     )
 
@@ -2319,7 +2320,7 @@ def _low_pair_open_board_card(
         f"Your pair better protects the three-{CATEGORY_LABELS[user_category]} benchmark—not the overall bonus probability. "
         f"{_keeping_text(optimal).capitalize()} offers about {straight_gain:.2f} more expected straight points "
         f"and {5 - len(optimal) - (5 - len(user))} extra fresh die. Separately, the full-game model gives it a "
-        f"{points_lost:.2f}-point edge."
+        f"{format_points_loss(points_lost)}-point edge."
     )
     takeaway = (
         "Three of every number is a benchmark, not a requirement. A recoverable upper shortfall can be worth accepting "
@@ -2394,14 +2395,14 @@ def _build_comparison_card(
             summary = (
                 (f"Your hold offers stronger {left_text}. " if left_topics else "")
                 + (f"{_keeping_text(right).capitalize()} offers stronger {right_text}. " if right_topics else "These individual paths do not isolate the model's tiny edge. ")
-                + f"The exact {points_lost:.2f}-point edge is a practical tie."
+                + f"The exact {format_points_loss(points_lost)}-point edge is a practical tie."
             )
         else:
             player_clause = f" Your hold is stronger for {left_text}." if left_topics else ""
             summary = (
                 (f"{_keeping_text(right).capitalize()} offers stronger {right_text}." if right_topics else "These individual paths do not isolate why the best hold leads.")
                 + player_clause
-                + f" Across the remaining scorecard, {_keeping_text(right)} leads by {points_lost:.2f} expected points."
+                + f" Across the remaining scorecard, {_keeping_text(right)} leads by {format_points_loss(points_lost)} expected points."
             )
         card_takeaway = "" if practical_tie else takeaway
         horizon = "through Roll 3" if roll_number == 1 else "on the final roll"
@@ -2428,6 +2429,12 @@ def _build_comparison_card(
     )
     if continuation:
         summary, card_takeaway, card_math = continuation
+
+    if not is_optimal and format_points_loss(points_lost) == "<0.01":
+        summary = (
+            f"Effectively tied. {_keeping_text(right).capitalize()} has a tiny mathematical edge; "
+            f"{_keeping_text(left)} was an excellent choice. The difference is less than 0.01 expected points."
+        )
 
     if is_optimal:
         eyebrow = "Why your hold works"
@@ -2465,7 +2472,7 @@ def _build_comparison_card(
             if not right
             else "Why the best hold wins"
         ),
-        "edge": f"{edge:.2f}",
+        "edge": format_points_loss(edge),
         "edge_label": edge_label,
         "left_role": left_role,
         "left_hold": hold_text(left),
@@ -2517,7 +2524,7 @@ def _comparative_simple_why(
     if low_pair_value:
         return (
             "low_pair_open_board_value",
-            f"{low_pair_value} Full-game lookahead puts {_keeping_text(optimal_hold)} {points_lost:.2f} expected points ahead.",
+            f"{low_pair_value} Full-game lookahead puts {_keeping_text(optimal_hold)} {format_points_loss(points_lost)} expected points ahead.",
         )
 
     user_candidates, best_candidates = _rate_evidence_candidates(
@@ -2617,14 +2624,14 @@ def _closeness_line(points_lost: float, is_optimal: bool) -> str:
     if is_optimal:
         return "Exact best play: no legal hold has a higher full-game expected score."
     if points_lost <= 0.10:
-        return f"Essentially tied: your hold is only {points_lost:.2f} expected game points behind. There is no practical strategy error to correct."
+        return f"Essentially tied: your hold is only {format_points_loss(points_lost)} expected game points behind. There is no practical strategy error to correct."
     if points_lost <= 0.50:
-        return f"Slight mathematical edge: the exact play is {points_lost:.2f} expected game points better. Your idea is still very strong."
+        return f"Slight mathematical edge: the exact play is {format_points_loss(points_lost)} expected game points better. Your idea is still very strong."
     if points_lost <= 1.50:
-        return f"Meaningful edge: the exact play gains about {points_lost:.2f} expected game points over your hold."
+        return f"Meaningful edge: the exact play gains about {format_points_loss(points_lost)} expected game points over your hold."
     if points_lost <= 6.00:
-        return f"Clear edge: the exact play gains about {points_lost:.2f} expected game points, enough to make the structural difference worth learning."
-    return f"Large edge: the exact play gains about {points_lost:.2f} expected game points. This is a pattern worth correcting, not just a tiny solver preference."
+        return f"Clear edge: the exact play gains about {format_points_loss(points_lost)} expected game points, enough to make the structural difference worth learning."
+    return f"Large edge: the exact play gains about {format_points_loss(points_lost)} expected game points. This is a pattern worth correcting, not just a tiny solver preference."
 
 
 def _top_hold_lines(results: Sequence[dict], user_hold: Sequence[int], user_value: float) -> list[str]:
@@ -2632,11 +2639,14 @@ def _top_hold_lines(results: Sequence[dict], user_hold: Sequence[int], user_valu
     lines: list[str] = []
     for index, result in enumerate(results[:3], start=1):
         gap = max(0.0, best - float(result["strategy_value"]))
-        suffix = "best" if gap <= TIE_TOLERANCE else f"-{gap:.2f} expected pts"
+        suffix = "best" if gap <= TIE_TOLERANCE else (
+            "<0.01 expected pts behind" if format_points_loss(gap) == "<0.01"
+            else f"-{gap:.2f} expected pts"
+        )
         lines.append(f"#{index}: {hold_text(result['hold'])} ({suffix})")
     rank = _hold_rank(results, user_value)
     if rank > 3:
-        lines.append(f"Your hold: #{rank} ({max(0.0, best - user_value):.2f} expected pts behind)")
+        lines.append(f"Your hold: #{rank} ({format_points_loss(max(0.0, best - user_value))} expected pts behind)")
     return lines
 
 
@@ -2775,7 +2785,7 @@ def build_exact_report(
         recommendation = f"Yes — {hold_text(display_optimal)}. {visible_reason}"
     elif points_lost <= 0.10:
         recommendation = (
-            f"Essentially tied: {hold_text(user_hold)} is only {points_lost:.2f} points behind {hold_text(display_optimal)}. "
+            f"Essentially tied: {hold_text(user_hold)} is only {format_points_loss(points_lost)} points behind {hold_text(display_optimal)}. "
             "This is not a practical mistake."
         )
     elif points_lost <= 0.50:
@@ -2801,7 +2811,7 @@ def build_exact_report(
         f"Hold rank: #{rank} of {len(results)} legal holds",
         f"Your exact expected game value: {user_value:.2f}",
         f"Optimal exact expected game value: {best_value:.2f}",
-        f"Expected game points lost: {points_lost:.2f}",
+        f"Expected game points lost: {points_lost:.6f}" if format_points_loss(points_lost) == "<0.01" else f"Expected game points lost: {points_lost:.2f}",
         "",
         "Your idea vs. best idea:",
         f"- Your idea: {user_idea}",
@@ -2849,7 +2859,7 @@ def build_exact_report(
             report.append(f"- {difference}")
         report.append(f"- {simple_why}")
         report.append(
-            f"- That exact choice finishes about {points_lost:.2f} expected game point(s) higher from this scorecard state."
+            f"- That exact choice finishes about {format_points_loss(points_lost)} expected game point(s) higher from this scorecard state."
         )
 
     for note in context_notes:

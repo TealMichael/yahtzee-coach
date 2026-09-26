@@ -53,7 +53,7 @@ def test_close_generic_takeaway_is_scorecard_specific():
 
 def test_daily_review_surfaces_near_tie_without_opening_details():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
-    marker = "**⚖️ Essentially tied:** Only {loss:.2f} Points Lost separates these holds."
+    marker = "**⚖️ Essentially tied:** Only {format_points_loss(loss)} Points Lost separates these holds."
     assert marker in app
     assert "practical_tie = 0.0 < loss <= 0.10" in app
     assert "There is no practical strategy error to correct." in app

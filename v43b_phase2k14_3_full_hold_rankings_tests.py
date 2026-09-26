@@ -50,12 +50,12 @@ def test_shared_practice_and_daily_renderer_remain_intact():
     assert "render_comparison_card(" in daily
     assert 'top_holds=extract_section(report, "Top exact holds:")' in daily
     assert ".evidence-about-math" in app
-    assert 'APP_RELEASE = "v43B Phase 2K.14.12"' in app
+    assert 'APP_RELEASE = "v43B Phase 2K.14.13"' in app
     print("PASS Practice and Daily reuse the unchanged shared comparison component")
 
 
 def test_strategy_and_comparison_engine_are_byte_for_byte_unchanged():
-    assert file_sha("exact_mode.py") == "bb503eb66b8296779e9e5cbc7a18e4622f12348b8c11de01276a894367fdab05"
+    assert file_sha("exact_mode.py") == "61c2aa8e1d478f4d245b7681f6697d3464c6f4dfda9e72b3100ab60274a05ff8"
     assert file_sha("daily_spotlight.py") == "119c516ee9c82118b462619d63d00b87c93bd02883af34e7629e9aa929d4f274"
     assert file_sha("exact_policy.npz") == "cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b"
     print("PASS strategy, turn-aware evidence, Spotlight, rankings, and Points Lost are unchanged")

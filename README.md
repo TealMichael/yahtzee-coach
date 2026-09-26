@@ -1,4 +1,10 @@
-# Current release: v43B Phase 2K.14.12 — Points Now vs. Value Later
+# Current release: v43B Phase 2K.14.13 — Tiny-Loss Display Hotfix
+
+See TINY_LOSS_RELEASE_NOTES.md. Tiny positive decision losses now display
+`<0.01` instead of a misleading `0.00`. Grading and scoring are unchanged.
+No SQL or dependency change is required from 2K.14.12.
+
+# Previous release: v43B Phase 2K.14.12 — Points Now vs. Value Later
 
 See CONTINUATION_COACHING_RELEASE_NOTES.md for this explanation-only update.
 No SQL, secrets, account reset or dependency change is required from 2K.14.11.

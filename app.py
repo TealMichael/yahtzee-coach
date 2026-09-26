@@ -34,7 +34,7 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.14.12"
+APP_RELEASE = "v43B Phase 2K.14.13"
 APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
@@ -2100,6 +2100,7 @@ def render_comparison_card(card, *, grade="", top_holds=None, subject_name="You"
 
     def player_rank_line(value):
         line = str(value or "").strip()
+        line = line.replace(" (<0.01 expected pts behind)", " — <0.01 expected points behind")
         line = re.sub(r" \(best\)$", " — Best", line)
         line = re.sub(r" \(-([0-9]+(?:\.[0-9]+)?) expected pts\)$", r" — −\1 expected points", line)
         line = re.sub(r" \(([0-9]+(?:\.[0-9]+)?) expected pts behind\)$", r" — −\1 expected points", line)
@@ -2197,7 +2198,7 @@ def render_comparison_card(card, *, grade="", top_holds=None, subject_name="You"
         f"<div class='evidence-eyebrow'>{esc(card.get('eyebrow'))}</div>"
         f"<div class='evidence-title'>{esc(card.get('title'))}</div>"
         "</div><div class='evidence-edge'>"
-        f"<strong>+{esc(card.get('edge'))}</strong><span>{esc(card.get('edge_label'))}</span>"
+        f"<strong>{'' if str(card.get('edge', '')).startswith('<') else '+'}{esc(card.get('edge'))}</strong><span>{esc(card.get('edge_label'))}</span>"
         "</div></div>"
         "<div class='evidence-rankline'>"
         f"<span>{esc(rank_text)}</span><span class='evidence-badges'>{''.join(badges)}</span>"
@@ -4316,6 +4317,7 @@ def render_daily_share_result(records, summary, rank=None, completed_count=0, ra
 
 
 def _render_daily_review_body(answer, *, subject_name="You"):
+    from loss_display import format_points_loss
     record = answer["solver_record"]
     challenge = answer["challenge"]
     report = answer["report"]
@@ -4346,7 +4348,7 @@ def _render_daily_review_body(answer, *, subject_name="You"):
         f"<div class='review-box'><div class='review-label'>{html.escape(str(subject_name))} kept</div><div class='review-value'>{record.get('user_hold', '—')}</div></div>"
         f"<div class='review-box'><div class='review-label'>Best hold</div><div class='review-value'>{record.get('optimal_hold', '—')}</div></div>"
         f"<div class='review-box'><div class='review-label'>Exact rank</div><div class='review-value'>#{record.get('hold_rank', '—')} of {record.get('legal_hold_count', '—')}</div></div>"
-        f"<div class='review-box'><div class='review-label'>Points Lost</div><div class='review-value'>{loss:.2f}</div></div>"
+        f"<div class='review-box'><div class='review-label'>Points Lost</div><div class='review-value'>{html.escape(format_points_loss(loss))}</div></div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -4361,7 +4363,7 @@ def _render_daily_review_body(answer, *, subject_name="You"):
         st.markdown(f"**📊 Rank context:** {rank_context}")
     if practical_tie:
         st.markdown(
-            f"**⚖️ Essentially tied:** Only {loss:.2f} Points Lost separates these holds. "
+            f"**⚖️ Essentially tied:** Only {format_points_loss(loss)} Points Lost separates these holds. "
             "There is no practical strategy error to correct."
         )
     elif 0.0 < loss <= 0.25:
@@ -4393,12 +4395,13 @@ def _render_daily_review_body(answer, *, subject_name="You"):
 
 def _daily_review_item(answer):
     """Compatibility wrapper for a single compact review expander."""
+    from loss_display import format_points_loss
     record = answer["solver_record"]
     challenge = answer["challenge"]
     number = int(challenge.get("daily_number") or 0)
     loss = float(record.get("points_lost", 0.0) or 0.0)
     grade = record.get("grade", "") or extract_line(answer["report"], "Grade:")
-    label = f"Q{number} · {grade} · {loss:.2f} points lost"
+    label = f"Q{number} · {grade} · {format_points_loss(loss)} points lost"
     with st.expander(label, expanded=False):
         _render_daily_review_body(answer)
 

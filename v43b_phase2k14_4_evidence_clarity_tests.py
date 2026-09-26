@@ -8,7 +8,7 @@ def main():
     tree = ast.parse(Path(__file__).with_name('exact_mode.py').read_text())
     allowed = {'_comparison_topic','_generic_comparison_rows','_low_pair_open_board_card','_build_comparison_card','_endgame_straight_math_detail','_evidence_category_result','_cached_evidence_category_result'}
     tree.body = [node for node in tree.body if not isinstance(node, ast.FunctionDef) or node.name not in allowed]
-    assert sha256(ast.dump(tree).encode()).hexdigest() == '51deaad879dca766364dca66865cc4ef1ae7adc199e2a6e810ae941667dcb101'
+    assert sha256(ast.dump(tree).encode()).hexdigest() == 'b53b1629b805349bdd271af29c2e8f13e54e5dde6250561d1eca496aa937b2cb'
     policy = ExactPolicyTable(Path(__file__).with_name('exact_policy.npz'))
     scorecard = dict.fromkeys(CATEGORY_LABELS)
     scorecard.update(ones=0, twos=4, threes=6)

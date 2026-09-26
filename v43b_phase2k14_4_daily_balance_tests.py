@@ -22,7 +22,7 @@ def main():
     assert daily_challenge_version('2026-09-06') == '43B-bank42.6-2K12'
     assert daily_challenge_version('2026-09-07') == '43B-bank42.6-2K14-4'
     for file, expected in {
-        'exact_mode.py':'bb503eb66b8296779e9e5cbc7a18e4622f12348b8c11de01276a894367fdab05',
+        'exact_mode.py':'61c2aa8e1d478f4d245b7681f6697d3464c6f4dfda9e72b3100ab60274a05ff8',
         'exact_policy.npz':'cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b',
         'daily_spotlight.py':'119c516ee9c82118b462619d63d00b87c93bd02883af34e7629e9aa929d4f274',
     }.items():
