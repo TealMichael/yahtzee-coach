@@ -1,1 +1,1 @@
-v2.5 - improve student input, Mystery rules, Top 10, and finish screen
+v43B Phase 2K.14.14 - explain zero-Yahtzee Joker opportunities

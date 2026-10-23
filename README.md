@@ -1,4 +1,12 @@
-# Current release: v43B Phase 2K.14.13 — Tiny-Loss Display Hotfix
+# Current release: v43B Phase 2K.14.14 — Zero-Yahtzee Joker Coaching
+
+See JOKER_COACHING_RELEASE_NOTES.md. This is a coaching-only correction to the
+explanation shown in Daily and Practice reviews when a 0-point Yahtzee still
+allows a Joker finish in an open straight box. The frozen exact policy, all
+hold rankings, grades, Points Lost, existing challenge IDs, and player data are
+unchanged. No Supabase or secrets changes are required.
+
+# Previous release: v43B Phase 2K.14.13 — Tiny-Loss Display Hotfix
 
 See TINY_LOSS_RELEASE_NOTES.md. Tiny positive decision losses now display
 `<0.01` instead of a misleading `0.00`. Grading and scoring are unchanged.

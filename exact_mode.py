@@ -2436,6 +2436,90 @@ def _build_comparison_card(
             f"{_keeping_text(left)} was an excellent choice. The difference is less than 0.01 expected points."
         )
 
+    # A scored ZERO in Yahtzee disables the 100-point bonus, NOT the Joker
+    # rule.  If the matching upper box is filled, five matching dice can still
+    # score an open straight box.  This subtle rule often explains why four of
+    # a kind beats an attractive ordinary-straight chase in a late game.
+    # Change teaching only: the frozen full-game policy above owns the ranking.
+    winner_hold = left if is_optimal else right
+    if (
+        scorecard.get("yahtzee") == 0
+        and len(winner_hold) == 4
+        and len(set(winner_hold)) == 1
+        and scorecard.get(UPPER_BY_FACE[winner_hold[0]]) is not None
+        and (
+            _is_open(scorecard, "large_straight")
+            or _is_open(scorecard, "small_straight")
+        )
+    ):
+        face = winner_hold[0]
+        upper_name = CATEGORY_LABELS[UPPER_BY_FACE[face]]
+        joker_category = (
+            "large_straight" if _is_open(scorecard, "large_straight")
+            else "small_straight"
+        )
+        joker_name = CATEGORY_LABELS[joker_category]
+        joker_points = 40 if joker_category == "large_straight" else 30
+        attempts_per_die = 3 - roll_number
+        success_per_die = 1 - (5 / 6) ** attempts_per_die
+        winner_chance = success_per_die  # Exactly one die is missing.
+        horizon = "by Roll 3" if roll_number == 1 else "on the final roll"
+
+        # Compare the same five-of-a-kind target only when BOTH opening holds
+        # consist entirely of this face; never present an apples-to-oranges
+        # probability for a mixed-face hold as though it were comparable.
+        def same_face_joker_chance(held: tuple[int, ...]) -> float | None:
+            if any(value != face for value in held):
+                return None
+            return success_per_die ** (5 - len(held))
+
+        left_chance = same_face_joker_chance(left)
+        right_chance = same_face_joker_chance(right)
+        if left_chance is not None and right_chance is not None:
+            joker_row = _comparison_row(
+                "Joker five-of-a-kind",
+                f"{left_chance:.1%}", f"five {face}s → {joker_points} in {joker_name}",
+                f"{right_chance:.1%}", f"five {face}s → {joker_points} in {joker_name}",
+                _numeric_advantage(left_chance, right_chance),
+            )
+            # A Joker scoring route is more illuminating here than counting
+            # generic 'Live scoring routes'. Keep the card at its old size.
+            rows = [joker_row] + [
+                row for row in rows if row["label"] != "Live scoring routes"
+            ]
+            rows = rows[:5]
+
+        for row in rows:
+            if row["label"] == "Straight chances":
+                row["left_note"] = "ordinary straights; excludes Joker"
+                row["right_note"] = "ordinary straights; excludes Joker"
+
+        gap_text = (
+            f"your hold leads by {edge:.2f}"
+            if is_optimal else
+            f"{_keeping_text(right)} leads by {format_points_loss(points_lost)}"
+        )
+        summary = (
+            f"A zero in Yahtzee removes the 100-point bonus, but NOT the Joker rule. "
+            f"Because {upper_name} is filled, five {face}s can score {joker_points} "
+            f"in {joker_name} without making an ordinary straight. "
+            f"Keeping four {face}s gives a {winner_chance:.1%} chance to finish "
+            f"five {face}s {horizon}. The displayed natural-straight chances exclude Jokers. "
+            f"Across the remaining scorecard, {gap_text} expected points."
+        )
+        card_takeaway = (
+            "Even a zero in Yahtzee leaves the Joker rule active. When the matching "
+            "upper box is filled, five of a kind can score in an open straight box."
+        )
+        card_math = (
+            f"The {winner_chance:.1%} Joker-finish chance assumes holding four {face}s "
+            f"and chasing the last matching die {horizon}. "
+            "The ordinary-straight row counts naturally connected numbers only, "
+            "and does not include Joker finishes. "
+            "These category-specific odds are not additive; the unchanged exact "
+            "full-game policy determines the recommendation and Points Lost."
+        )
+
     if is_optimal:
         eyebrow = "Why your hold works"
         title = f"{hold_text(left).capitalize()} wins"
