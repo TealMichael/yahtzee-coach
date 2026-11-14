@@ -42,9 +42,9 @@ def run():
     checks.append(("group comparison produces killer/most-solved cards", story['toughest'] is not None and story['easiest'] is not None))
 
     app_text = (ROOT / "app.py").read_text()
-    checks.append(("Daily Challenge is first/default mode", 'options=["Daily Challenge", "Practice", "My Player"]' in app_text and 'st.session_state.app_mode = "Daily Challenge"' in app_text))
+    checks.append(("Daily Challenge is first/default mode", 'options=["Daily Challenge", "Weekly", "Practice", "My Player"]' in app_text and 'st.session_state.app_mode = "Daily Challenge"' in app_text))
     checks.append(("daily answers hide strategy hints", 'No strategy label or difficulty hint is shown during the official run.' not in app_text and 'Which dice would you keep?' in app_text))
-    checks.append(("visible segmented Daily progress bar", "daily-progress-copy" in app_text and "Question {index + 1} of 10" in app_text and "daily-progress-percent" not in app_text))
+    checks.append(("visible segmented Daily progress bar", "daily-progress-copy" in app_text and "Question {index + 1} of {_daily_count()}" in app_text and "daily-progress-percent" not in app_text))
     checks.append(("intro summary boxes removed", "<div class='review-label'>Format</div>" not in app_text and "<div class='review-label'>Reset</div>" not in app_text))
     checks.append(("Daily results link back to Practice", "Go to open Practice" in app_text and "on_click=_set_app_mode" in app_text and 'args=("Practice",)' in app_text))
     checks.append(("Practice can return to completed leaderboard", ("View today's Daily leaderboard" in app_text or "Daily complete · View leaderboard" in app_text) and "on_click=_set_app_mode" in app_text and 'args=("Daily Challenge",)' in app_text))

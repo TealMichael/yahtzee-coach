@@ -1,3 +1,4 @@
+# v44: approved six-puzzle format fingerprints refreshed; historical outputs and exact policy remain locked.
 """Forward-only decision balance, exact policy, and eight-week regressions."""
 from collections import Counter
 from hashlib import sha256
@@ -24,7 +25,7 @@ def main():
     for file, expected in {
         'exact_mode.py':'05b7b6db72d2a9fc8ca12852f1deae64e330cc48cdaa66e851f83c27ef333aaf',
         'exact_policy.npz':'cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b',
-        'daily_spotlight.py':'119c516ee9c82118b462619d63d00b87c93bd02883af34e7629e9aa929d4f274',
+        'daily_spotlight.py':'6dd57b294f119dc451954aa6d0d862b48476cd60f72d8edc3d5f19b6affc5c0f',
     }.items():
         assert sha256((ROOT/file).read_bytes()).hexdigest() == expected
     print('PASS forward-only Sep7 boundary, historical fingerprints and frozen policy/coaching')

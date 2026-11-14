@@ -27,6 +27,7 @@ DAILY_CHALLENGE_VERSION = "43B-bank42.6-2K12"
 BALANCED_DAILY_CHALLENGE_VERSION = "43B-bank42.6-2K14-4"
 DAILY_2K9_EFFECTIVE_DATE = date(2026, 8, 19)
 DAILY_REALISM_EFFECTIVE_DATE = date(2026, 8, 22)
+SIX_DAILY_CHALLENGE_VERSION = "43B-bank42.6-six-v1"
 DAILY_TIMEZONE = "America/New_York"
 TIE_TOLERANCE = 1e-9
 
@@ -69,7 +70,11 @@ def current_daily_date_key(now: datetime | None = None, timezone_name: str = DAI
     return now.date().isoformat()
 
 
-def daily_challenge_version(date_key: str) -> str:
+def daily_challenge_version(date_key: str, count: int = 10) -> str:
+    if count == 6:
+        return SIX_DAILY_CHALLENGE_VERSION
+    if count != 10:
+        raise ValueError("Unsupported Daily length")
     day = date.fromisoformat(str(date_key))
     if day >= DAILY_UPPER_ZERO_EFFECTIVE_DATE:
         return "43B-bank42.6-2K14-5"
@@ -83,15 +88,15 @@ def daily_challenge_version(date_key: str) -> str:
 
 
 @lru_cache(maxsize=16)
-def _cached_daily_challenge_template(date_key: str) -> tuple[dict, ...]:
+def _cached_daily_challenge_template(date_key: str, count: int = 10) -> tuple[dict, ...]:
     """Build one deterministic Daily template per date for the shared app process.
 
     Every player receives the same Daily 10, so recomputing the selector for each
     new Streamlit session only wastes CPU.  The public helper returns a deep copy
     below so no session can mutate the shared cached template.
     """
-    challenges = generate_daily_challenge_set(str(date_key), count=10)
-    version = daily_challenge_version(str(date_key))
+    challenges = generate_daily_challenge_set(str(date_key), count=count)
+    version = daily_challenge_version(str(date_key), count)
     for number, challenge in enumerate(challenges, start=1):
         challenge["daily_number"] = number
         challenge["daily_version"] = version
@@ -99,9 +104,9 @@ def _cached_daily_challenge_template(date_key: str) -> tuple[dict, ...]:
     return tuple(challenges)
 
 
-def daily_challenges(date_key: str) -> list[dict]:
+def daily_challenges(date_key: str, count: int = 10) -> list[dict]:
     """Return an isolated copy of the deterministic Daily 10 for this session."""
-    return deepcopy(list(_cached_daily_challenge_template(str(date_key))))
+    return deepcopy(list(_cached_daily_challenge_template(str(date_key), count)))
 
 
 def challenge_set_id(date_key: str, challenges: Sequence[Mapping]) -> str:
@@ -263,3 +268,15 @@ def user_rank(leaderboard: Sequence[Mapping]) -> int | None:
         if entry.get("is_user"):
             return int(entry.get("rank", 0)) or None
     return None
+
+
+def registered_daily_challenges(date_key: str, store) -> list[dict]:
+    """Use the persisted format; refuse to reinterpret an existing challenge."""
+    metadata = store.daily_format(str(date_key))
+    challenges = daily_challenges(str(date_key), count=int(metadata["question_count"]))
+    if metadata.get("challenge_id"):
+        if (metadata["challenge_id"] != challenge_set_id(str(date_key), challenges)
+                or list(metadata["puzzle_ids"]) != [c["challenge_id"] for c in challenges]
+                or metadata["challenge_version"] != challenges[0]["daily_version"]):
+            raise ValueError("Saved Daily identity does not match this generator version")
+    return challenges

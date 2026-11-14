@@ -1,3 +1,4 @@
+# v44: approved six-puzzle format fingerprints refreshed; historical outputs and exact policy remain locked.
 """Phase 2K.13: performance-only guards with zero gameplay/UI drift."""
 from __future__ import annotations
 
@@ -82,7 +83,7 @@ require(all(_dice_pattern(roll) == reference_pattern(list(roll)) for roll in pro
         "dice-pattern optimization preserves all 7,776 possible five-die rolls")
 
 app = (ROOT / "app.py").read_text(encoding="utf-8")
-require('APP_RELEASE = "v43B Phase 2K.14.14"' in app, "release label is Phase 2K.13")
+require('APP_RELEASE = "v44.0 Weekly Challenge + Daily Six"' in app, "release label is Phase 2K.13")
 
 # Hard guards: no strategy, persistence, social, avatar, or binary-data implementation changed.
 EXPECTED_HASHES = {
@@ -91,12 +92,12 @@ EXPECTED_HASHES = {
     # 2K.14.14 only changes the shared Joker explanation in exact_mode.py.
     # The exact-policy artifact and strategy class are independently guarded.
     "exact_mode.py": "05b7b6db72d2a9fc8ca12852f1deae64e330cc48cdaa66e851f83c27ef333aaf",
-    "daily_store.py": "209ac3aa8c3bad39ba72473b1db31fa9a3396918c1bd7df2fee0d8c1dc8b9585",
-    "supabase_daily_store.py": "4572a962855f337780e4fdd9428b6acaeef18c700466a1be46d796f32fdfc96b",
+    "daily_store.py": "771b7d0070226f853df4563dc6c75af27b3fb6d3317f5b8de06d1d82555c4916",
+    "supabase_daily_store.py": "32a68b623e7e8af6e8e4a3a120f2c1c102138ae8f724718bfd059deb65a23d1f",
     "session_learning.py": "695ea20fcd82ffe8979b5900f34b929d15cedcc902dc8ef92c30a4baf999963a",
     "practice_progress.py": "8f78b05eb867e716fbe845c81969b12f33617a7cd5f7c8dd7fe09b04c4632915",
     "player_avatar.py": "a78416d7ea56910be580f1b42befc3acc0ba296fa9021198c564e32d48815add",
-    "retro_podium.py": "a114816393537bc963abb15e194785ca61d5e6301acc9c6c7e703b3b332d49c5",
+    "retro_podium.py": "168c8535403ece792a916dfd58723f521c0e0b0e61474dc5ada33953d23c6f2f",
     "exact_policy.npz": "cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b",
     "puzzle_bank.npz": "22f26f136a690c552fd7a8ad3a3335090f6085468219f197f16cea32e0276a8f",
     "challenge_catalog.npz": "fe92b90e4c2ce4261ac384711061756336af4b151e267946d26e4f8a4b649ecd",

@@ -20,7 +20,7 @@ def run():
     results = _block(app, "def render_daily_results():", "def render_daily_mode():")
     share = _block(app, "def render_daily_share_result(", "def _daily_review_item")
 
-    review_pos = results.index('st.markdown("### 📝 Your 10 Grades")')
+    review_pos = results.index('st.markdown(f"### 📝 Your {_daily_count()} Grades")')
     manage_pos = results.index("render_friend_group_hub(")
     share_pos = results.index("render_daily_share_result(")
     social_pos = results.index('st.markdown(f"### 🏆 {active_group.group_name}")')
@@ -38,7 +38,7 @@ def run():
         ("completed lock copy is human-facing", "Today's Daily is complete. Come back tomorrow for a new set." in results),
         ("group leaderboard removes internal real-v43B wording", "Real v43B results" not in results and "official attempts" not in results),
         ("group insights use friendlier labels", "😈 Today's Killer" in results and "🎯 Everyone Nailed It" in results),
-        ("main mode note is player-facing", "Today's 10-puzzle Daily Challenge" in app and "Daily Challenge first ·" not in app),
+        ("main mode note is player-facing", "Today's Daily Challenge" in app and "Daily Challenge first ·" not in app),
         ("native page icon is configured at startup", 'page_icon=APP_ICON_PATH' in app and 'APP_ICON_PATH = "apple_touch_icon.png"' in app),
     ]
 

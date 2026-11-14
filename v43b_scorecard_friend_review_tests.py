@@ -34,7 +34,7 @@ def run():
     contract = (ROOT / "daily_store.py").read_text(encoding="utf-8")
 
     checks = [
-        ('APP_RELEASE = "v43B Phase 2K.14.14"' in app, "release advances to Phase 2K.9.1"),
+        ('APP_RELEASE = "v44.0 Weekly Challenge + Daily Six"' in app, "release advances to Phase 2K.9.1"),
         ("CATEGORY_SCORECARD = dict(CATEGORY_SHORT)" in app, "live scorecard restores original short labels"),
         ("font-size:1.02rem; font-weight:950" in app, "score values are larger than compact 2K.6.1 layout"),
         ("min-height:2.45rem" in app, "score boxes are slightly larger while retaining compact grid"),
@@ -45,7 +45,7 @@ def run():
         ("That player has not finished this Daily yet." in contract and "That player has not finished this Daily yet." in backend, "store blocks unfinished-friend answers"),
         ("👀 Peek at a Friend's Picks" in app and "_render_friend_pick_peek(active_group, board)" in app, "friend picks live in a separate optional section below personal results"),
         ("You made different" not in app and "biggest miss was Q" not in app, "side-by-side comparison analytics are removed"),
-        ("See {friend_name}'s 10 picks" in app and "Q{q}" in app, "friend peek shows a simple ten-pick list"),
+        ("See {friend_name}'s picks" in app and "Q{q}" in app, "friend peek shows a simple pick list"),
         ("_cached_group_player_daily_review" in app, "friend picks still use the spoiler-safe immutable review path"),
     ]
     for ok, message in checks:

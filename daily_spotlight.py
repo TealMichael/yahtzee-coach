@@ -1,4 +1,4 @@
-"""Optional, read-only learning after the official Daily Ten.
+"""Optional, read-only learning after the official Daily.
 
 No database, scoring, selection, random-state, or persistence side effects.
 Counterfactuals use only states supported by the unchanged exact policy.
@@ -30,9 +30,9 @@ def select_spotlight(answers, *, completed=False, policy=None, seed=""):
     A practical tie alone is not a lesson. Strong, specific optimal-answer
     comparisons are eligible and receive a small preference over corrections.
     """
-    if not completed or len(answers) != 10:
+    if not completed or len(answers) not in (6, 10):
         return None
-    if [a.get("challenge", {}).get("daily_number") for a in answers] != list(range(1, 11)):
+    if [a.get("challenge", {}).get("daily_number") for a in answers] != list(range(1, len(answers) + 1)):
         return None
     dates = {a.get("challenge", {}).get("daily_date") for a in answers}
     if len(dates) != 1 or not next(iter(dates)):

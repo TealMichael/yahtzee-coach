@@ -180,7 +180,7 @@ def test_ui_boundary():
     assert "evaluate_what_if(load_exact_policy()" in reveal
     for banned in ("save_answer", "revise_answer", "complete_attempt", "load_daily_store"):
         assert banned not in reveal
-    assert results.index("render_leaderboard_cards") < results.index("Your 10 Grades") < results.index("render_daily_spotlight()")
+    assert results.index("render_leaderboard_cards") < results.index("Your {_daily_count()} Grades") < results.index("render_daily_spotlight()")
     assert results.index("render_daily_spotlight()") < results.index("_daily_review_item(answer)")
     for name in ("render_daily_question", "render_daily_submission_review", "render_daily_intro", "_render_friend_pick_peek"):
         assert "spotlight" not in ast.get_source_segment(source, funcs[name])

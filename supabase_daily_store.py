@@ -717,6 +717,19 @@ class SupabaseDailyStore:
 
     # ---------- Challenge registration ----------
 
+    def daily_format(self, date_key: str) -> dict:
+        data = self.client.rpc("yc_daily_format", {"p_day": str(date_key)}).execute().data
+        if not isinstance(data, dict) or data.get("question_count") not in (6, 10):
+            raise DailyStoreError("Daily format could not be loaded. Check the Daily Six migration.")
+        return data
+
+    def _challenge_count(self, challenge_id: str) -> int:
+        row = _first_row(self.client.table("daily_challenges").select("puzzle_ids")
+                         .eq("challenge_id", str(challenge_id)).limit(1).execute())
+        if not row or len(row.get("puzzle_ids", [])) not in (6, 10):
+            raise DailyStoreError("Unknown or unsupported Daily Challenge")
+        return len(row["puzzle_ids"])
+
     def ensure_challenge(
         self,
         challenge_id: str,
@@ -728,9 +741,11 @@ class SupabaseDailyStore:
         parsed_date = date.fromisoformat(str(challenge_date)).isoformat()
         challenge_version = str(challenge_version).strip()
         puzzle_tuple = tuple(str(value) for value in puzzle_ids)
-        if len(puzzle_tuple) != 10 or len(set(puzzle_tuple)) != 10:
-            raise ValueError("An official Daily Challenge must contain exactly 10 unique puzzle IDs.")
+        if len(puzzle_tuple) not in (6, 10) or len(set(puzzle_tuple)) != len(puzzle_tuple):
+            raise ValueError("An official Daily Challenge must contain six or ten unique puzzle IDs.")
 
+        if (len(puzzle_tuple) == 6) != (challenge_version == "43B-bank42.6-six-v1"):
+            raise ChallengeMismatch("Daily length does not match its format version.")
         existing_response = (
             self.client.table("daily_challenges")
             .select("*")
@@ -1002,8 +1017,9 @@ class SupabaseDailyStore:
             return attempt
 
         answers = self._answers_for_attempt(attempt_id)
-        if len(answers) != 10 or [a.question_number for a in answers] != list(range(1, 11)):
-            raise DailyStoreError("A Daily attempt cannot complete until all 10 answers are saved.")
+        question_count = self._challenge_count(attempt.challenge_id)
+        if len(answers) != question_count or [a.question_number for a in answers] != list(range(1, question_count + 1)):
+            raise DailyStoreError(f"A Daily attempt cannot complete until all {question_count} answers are saved.")
 
         losses = [answer.points_lost for answer in answers]
         best_streak = 0
@@ -1106,7 +1122,7 @@ class SupabaseDailyStore:
             by_question: dict[int, list[dict]] = {}
             for row in answer_rows:
                 by_question.setdefault(int(row["question_number"]), []).append(row)
-            for question_number in range(1, 11):
+            for question_number in sorted(by_question):
                 answers = by_question.get(question_number, [])
                 if not answers:
                     continue
@@ -1204,7 +1220,7 @@ class SupabaseDailyStore:
             by_question.setdefault(answer.question_number, []).append(answer)
 
         stats: list[dict] = []
-        for question_number in range(1, 11):
+        for question_number in sorted(by_question):
             answers = by_question.get(question_number, [])
             if not answers:
                 continue
@@ -1274,8 +1290,8 @@ class SupabaseDailyStore:
             .order("question_number")
             .execute()
         )
-        if len(answer_rows) != 10:
-            raise DailyStoreError("That completed Daily does not have all 10 answers.")
+        if len(answer_rows) != self._challenge_count(challenge_id):
+            raise DailyStoreError("That completed Daily does not have all its answers.")
         answers = []
         for row in answer_rows:
             answers.append({

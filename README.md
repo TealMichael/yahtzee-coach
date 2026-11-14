@@ -1,4 +1,19 @@
-# Current release: v43B Phase 2K.14.14 — Zero-Yahtzee Joker Coaching
+# Current release: v44.0 — Weekly Challenge + Daily Six
+
+**Ready to install. Browser journeys and phone-width layouts verified November 13, 2026.**
+
+Adds a saved 13-round Weekly game, one locked official result, friend standings
+that unlock after completion, and unlimited practice replays using the same
+weekly dice. New Daily sets switch to six after the persisted launch boundary;
+registered ten-puzzle days, scores, streaks and Perfect Ten awards are preserved.
+
+**Install with `INSTALL_v44_0.md`. SQL is required before the app upload.**
+Use `RUN_THIS_ONCE_IN_SUPABASE_v44_0.sql`, not the baseline or classroom schema.
+No new secrets or production dependencies are required. The current exact
+policy and coaching math are unchanged. See `VALIDATION_v44_0.md` for verified
+coverage and outstanding deployment/device checks.
+
+# Previous release: v43B Phase 2K.14.14 — Zero-Yahtzee Joker Coaching
 
 See JOKER_COACHING_RELEASE_NOTES.md. This is a coaching-only correction to the
 explanation shown in Daily and Practice reviews when a 0-point Yahtzee still

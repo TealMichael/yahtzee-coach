@@ -1,3 +1,11 @@
+v44.0 FINAL RELEASE — Weekly Challenge + Daily Six
+
+Read INSTALL_v44_0.md and VALIDATION_v44_0.md.
+SQL is required BEFORE the browser upload. No production changes have been made.
+Browser journeys and phone-width layouts passed. Follow the post-install phone/hosting check in the guide.
+
+Historical notes below do not describe this installation:
+
 CURRENT RELEASE: v43B Phase 2K.14.6. Use MATH_CLARITY_RELEASE_NOTES.md for installation and scope.
 The following is historical documentation.
 

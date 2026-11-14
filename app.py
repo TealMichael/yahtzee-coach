@@ -24,9 +24,11 @@ from player_avatar import (
 from puzzle_bank import generate_practice_challenge as generate_expanded_practice_challenge
 from daily_challenge import (
     DAILY_CHALLENGE_VERSION, DAILY_TIMEZONE, challenge_set_id,
-    current_daily_date_key, daily_challenges as get_daily_challenges, summarize_attempt,
+    current_daily_date_key, daily_challenges as get_daily_challenges, registered_daily_challenges, summarize_attempt,
 )
 from supabase_daily_store import SupabaseDailyStore
+from weekly_store import SupabaseWeeklyStore, WeeklyActor, WeeklyAuthRequired
+from weekly_ui import render_weekly, clear_weekly_state
 from daily_store import (
     AttemptAlreadyComplete, ChallengeMismatch, DailyStoreError, DuplicateAnswer,
     GroupRecord, GroupNotFound, InvalidOfficialAnswer, InvalidPin, OutOfOrderAnswer, PlayerNameTaken,
@@ -34,8 +36,8 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v43B Phase 2K.14.14"
-APP_PUBLIC_VERSION = "Yahtzee Coach Beta · v43B"
+APP_RELEASE = "v44.0 Weekly Challenge + Daily Six"
+APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
 YESTERDAY_RESULTS_STORAGE_PREFIX = "yc_yesterday_results_seen_v1"
@@ -162,6 +164,15 @@ _yesterday_results_seen_writer = st.components.v2.component(
 def load_daily_store():
     """Create the v43B Supabase store from private Streamlit secrets."""
     return SupabaseDailyStore.from_secrets(st.secrets)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _registered_daily_for_date(date_key: str):
+    return registered_daily_challenges(str(date_key), load_daily_store())
+
+
+def _daily_count():
+    return len(st.session_state.get("daily_challenges", [])) or 10
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -2400,7 +2411,7 @@ st.markdown(
     .daily-title { font-size:1.35rem; line-height:1.15; font-weight:950; margin:0.14rem 0 0.22rem 0; }
     .daily-rule { color:#5f6b7a !important; font-size:0.88rem; line-height:1.35; }
     .daily-progress {
-        display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:0.24rem; margin:0.28rem 0 0.18rem 0;
+        display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:0.24rem; margin:0.28rem 0 0.18rem 0;
     }
     .daily-dot {
         height:0.58rem; border-radius:999px; background:#e5e7eb; border:1px solid rgba(127,127,127,.12);
@@ -2472,6 +2483,7 @@ def _reset_daily_local_attempt(date_key: str | None = None):
     st.session_state.daily_challenges = get_daily_challenges(date_key)
     st.session_state.daily_set_id = challenge_set_id(date_key, st.session_state.daily_challenges)
     st.session_state.daily_started = False
+    st.session_state.daily_start_requested = False
     st.session_state.daily_completed = False
     st.session_state.daily_ready_to_submit = False
     st.session_state.daily_question_index = 0
@@ -2496,7 +2508,7 @@ def initialize_daily_state():
         _reset_daily_local_attempt(today)
     if "app_mode" not in st.session_state:
         st.session_state.app_mode = "Daily Challenge"
-    elif st.session_state.app_mode not in {"Daily Challenge", "Practice", "My Player"}:
+    elif st.session_state.app_mode not in {"Daily Challenge", "Weekly", "Practice", "My Player"}:
         # Phase 2K.11.3 removed the old Add-to-Home-Screen mode. A browser tab
         # that survived a deploy may still carry that legacy value in session state.
         st.session_state.app_mode = "Daily Challenge"
@@ -2803,9 +2815,29 @@ def _remember_this_device(player_id: str) -> bool:
     return True
 
 
+def _establish_player_session(player_id: str, remember: bool):
+    """Issue a revocable credential only immediately after successful PIN login.
+
+    With remembering off, keep it in this server session only, for at most a day.
+    Weekly can then recheck revocation without changing the existing login model.
+    """
+    st.session_state.active_device_token = None
+    if remember:
+        return _remember_this_device(player_id)
+    _queue_remember_cookie_delete()
+    try:
+        st.session_state.active_device_token = load_daily_store().create_device_session(str(player_id), 1)
+        return True
+    except Exception:
+        st.session_state.player_auth_flash = "Signed in, but Weekly needs a fresh sign-in connection. Please sign in again to use Weekly."
+        return False
+
+
 def _activate_player(player, *, created: bool = False):
     """Switch the active v43B player without carrying another player's Daily state."""
     previous_id = st.session_state.get("active_player_id")
+    clear_weekly_state()
+    st.session_state.active_device_token = None
     if previous_id != player.player_id:
         _reset_daily_local_attempt(current_daily_date_key())
         st.session_state.active_group_id = None
@@ -2826,6 +2858,9 @@ def _activate_player(player, *, created: bool = False):
 
 
 def _sign_out_player():
+    st.session_state.pop("player_signin_request", None)
+    st.session_state.pop("player_signin_error", None)
+    clear_weekly_state()
     token = st.session_state.get("active_device_token") or _browser_remember_cookie()
     if token:
         try:
@@ -2963,7 +2998,9 @@ def _hold_values_from_exact_label(label: str) -> list[int]:
 
 
 def _register_today_in_database(store):
-    challenges = st.session_state.daily_challenges
+    challenges = _registered_daily_for_date(st.session_state.daily_date_key)
+    st.session_state.daily_challenges = challenges
+    st.session_state.daily_set_id = challenge_set_id(st.session_state.daily_date_key, challenges)
     version = (
         str(challenges[0].get("daily_version"))
         if challenges
@@ -3015,7 +3052,7 @@ def _apply_daily_resume_state(resume_state, *, resumed_message: bool = False):
     if resumed_message and 0 < len(rebuilt) < len(challenges):
         st.session_state.daily_flash = f"Welcome back — {len(rebuilt)} choice{'s' if len(rebuilt) != 1 else ''} restored."
     elif resumed_message and st.session_state.daily_ready_to_submit:
-        st.session_state.daily_flash = "All 10 choices are ready to review."
+        st.session_state.daily_flash = f"All {len(challenges)} choices are ready to review."
 
 
 def _daily_sync_key():
@@ -3049,7 +3086,7 @@ def sync_daily_attempt_from_database(*, force: bool = False) -> bool:
             st.session_state.daily_question_index = 0
             st.session_state.daily_answers = []
             st.session_state.daily_attempt_id = None
-        st.session_state.daily_persistence_sync_key = sync_key
+        st.session_state.daily_persistence_sync_key = _daily_sync_key()
         return True
     except Exception as exc:
         st.error("Today's Daily Challenge couldn't be loaded right now. Please try again.")
@@ -3083,6 +3120,12 @@ def start_persistent_daily_attempt() -> bool:
         if database_check_enabled():
             st.caption(f"Daily start detail: {type(exc).__name__}: {exc}")
         return False
+
+
+def _request_daily_start():
+    # A component-triggered rerun can interrupt a database request. Keep the
+    # player's intent until its idempotent create/resume operation completes.
+    st.session_state.daily_start_requested = True
 
 
 def _set_app_mode(mode: str):
@@ -3291,8 +3334,38 @@ def render_player_avatar_creator():
 
 
 
+def _submit_returning_player():
+    """Preserve the submitted form until authentication completes."""
+    st.session_state.player_signin_request = (
+        st.session_state.get("returning_player_name", ""),
+        st.session_state.get("returning_player_pin", ""),
+        bool(st.session_state.get("returning_player_remember", True)),
+    )
+
+
+def _complete_returning_player():
+    name, pin, remember = st.session_state.player_signin_request
+    st.session_state.pop("player_signin_error", None)
+    try:
+        player = load_daily_store().authenticate_player(name, pin)
+    except Exception:
+        st.session_state.player_signin_error = "Sign-in isn't available right now. Please try again."
+    else:
+        if player is None:
+            st.session_state.player_signin_error = "Display name or PIN did not match."
+        else:
+            st.session_state.pop("player_signin_request", None)
+            _activate_player(player, created=False)
+            _establish_player_session(player.player_id, remember)
+    st.session_state.pop("player_signin_request", None)
+
+
 def render_player_identity_gate():
     """Create or restore the player used for Daily Challenge."""
+    if st.session_state.get("player_signin_request"):
+        _complete_returning_player()
+        if st.session_state.get("active_player_id"):
+            st.rerun()
     st.markdown(
         "<div class='daily-hero'>"
         "<div class='daily-kicker'>👋 Welcome to Yahtzee Coach</div>"
@@ -3329,25 +3402,15 @@ def render_player_identity_gate():
                 help="Use this only on a device you trust. Your PIN is never stored in the browser.",
             )
             return_submitted = st.form_submit_button(
-                "Sign in", type="primary", use_container_width=True
+                "Sign in", type="primary", use_container_width=True,
+                on_click=_submit_returning_player,
             )
         st.caption("Your PIN is private.")
         with st.expander("Forgot your PIN?", expanded=False):
             st.write("Forgot your PIN? Ask Mike to reset it. Your results and medals will stay with your account.")
             st.caption("Never send anyone your PIN — just share your display name when asking for help.")
-        if return_submitted:
-            try:
-                player = load_daily_store().authenticate_player(return_name, return_pin)
-            except Exception:
-                st.error("Sign-in isn't available right now. Please try again.")
-            else:
-                if player is None:
-                    st.error("Display name or PIN did not match.")
-                else:
-                    _activate_player(player, created=False)
-                    if return_remember:
-                        _remember_this_device(player.player_id)
-                    st.rerun()
+        if st.session_state.get("player_signin_error"):
+            st.error(st.session_state.pop("player_signin_error"))
 
     with create_tab:
         with st.form("create_player_form", clear_on_submit=True):
@@ -3399,8 +3462,7 @@ def render_player_identity_gate():
                     st.error("Player creation isn't available right now. Please try again.")
                 else:
                     _activate_player(player, created=True)
-                    if create_remember:
-                        _remember_this_device(player.player_id)
+                    _establish_player_session(player.player_id, create_remember)
                     st.rerun()
 
     st.button(
@@ -3612,9 +3674,9 @@ def _daily_date_label(date_key: str) -> str:
         return date_key
 
 
-def render_daily_progress(index: int, saved: int, *, complete: bool = False):
+def render_daily_progress(index: int, saved: int, *, complete: bool = False, review: bool = False):
     dots = []
-    for i in range(10):
+    for i in range(_daily_count()):
         if complete:
             css = "done"
         elif i == index:
@@ -3624,7 +3686,7 @@ def render_daily_progress(index: int, saved: int, *, complete: bool = False):
         else:
             css = ""
         dots.append(f"<div class='daily-dot {css}' title='Question {i + 1}'></div>")
-    question_text = "Challenge complete" if complete else ("Review your 10" if saved >= 10 else f"Question {index + 1} of 10")
+    question_text = "Challenge complete" if complete else (f"Review your {_daily_count()}" if review else f"Question {index + 1} of {_daily_count()}")
     status_text = "Finished" if complete else f"{saved} saved"
     st.markdown(
         "<div class='daily-progress-copy'>"
@@ -3688,7 +3750,7 @@ def _previous_daily_date_key(date_key: str) -> str:
 
 
 def _challenge_set_id_for_date(date_key: str) -> str:
-    challenges = get_daily_challenges(str(date_key))
+    challenges = _registered_daily_for_date(str(date_key))
     return challenge_set_id(str(date_key), challenges)
 
 
@@ -3704,10 +3766,8 @@ def _find_player_rank(board) -> int | None:
 
 
 def _start_today_from_yesterday_recap():
-    st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
-    if start_persistent_daily_attempt():
-        _queue_yesterday_result_seen(st.session_state.daily_date_key)
-        st.rerun()
+    _request_daily_start()
+    _queue_yesterday_result_seen(st.session_state.daily_date_key)
 
 
 def render_yesterday_final_standings_if_needed() -> bool:
@@ -3753,13 +3813,13 @@ def render_yesterday_final_standings_if_needed() -> bool:
     if not board:
         return False
 
-    if st.button(
-        "🎲 PLAY TODAY'S 10 →",
+    st.button(
+        "🎲 PLAY TODAY'S DAILY →",
         type="primary",
         use_container_width=True,
         key="yesterday_final_start_today",
-    ):
-        _start_today_from_yesterday_recap()
+        on_click=_start_today_from_yesterday_recap,
+    )
 
     # A social medal only makes sense when the group has somebody to compete with.
     # A multi-member group may still have only one finisher; that player can earn
@@ -3775,9 +3835,10 @@ def render_yesterday_final_standings_if_needed() -> bool:
             date_label=_daily_date_label(yesterday),
             avatar_config=_active_avatar_config(profile),
             medal_totals=medals,
+            question_count=len(_registered_daily_for_date(yesterday)),
         )
         components.html(ceremony, height=560, scrolling=False)
-        st.caption("Tap the celebration to finish, or start today’s ten above.")
+        st.caption("Tap the celebration to finish, or start today’s Daily above.")
     else:
         st.markdown(
             "<div class='daily-hero'>"
@@ -3791,20 +3852,22 @@ def render_yesterday_final_standings_if_needed() -> bool:
     mark_yesterday_ceremony_seen_now(today)
 
     with st.expander("View yesterday's standings", expanded=False):
-        render_leaderboard_cards(board, allow_review=False)
+        render_leaderboard_cards(board, allow_review=False, question_count=len(_registered_daily_for_date(yesterday)))
 
     return True
 
 
 def render_daily_intro():
     date_key = st.session_state.daily_date_key
+    roll_one_count = sum(int(c.get("roll_number", 0)) == 1 for c in st.session_state.daily_challenges)
+    roll_two_count = sum(int(c.get("roll_number", 0)) == 2 for c in st.session_state.daily_challenges)
     st.markdown(
         "<div class='daily-hero'>"
         "<div class='daily-kicker'>🎲 Daily Challenge</div>"
         f"<div class='daily-title'>{_daily_date_label(date_key)}</div>"
-        "<div class='daily-rule'><b>10 hold decisions. Same challenge for everyone.</b><br>"
+        f"<div class='daily-rule'><b>{_daily_count()} hold decisions. Same challenge for everyone.</b><br>"
         "Try to make the best hold on each puzzle. Lower <b>Points Lost</b> is better. You can review your choices before you submit, and coaching unlocks when you finish.<br>"
-        "<span style='font-size:.80rem'>5 Roll 1 · 5 Roll 2 · new challenge at midnight Eastern</span></div>"
+        f"<span style='font-size:.80rem'>{roll_one_count} Roll 1 · {roll_two_count} Roll 2 · new challenge at midnight Eastern</span></div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -3836,10 +3899,10 @@ def render_daily_intro():
                 group_line += " · everyone has finished"
         st.caption(group_line)
 
-    if st.button("Start today's Daily Challenge", type="primary", use_container_width=True):
-        st.session_state.daily_display_name = st.session_state.get("active_player_name") or "Player"
-        if start_persistent_daily_attempt():
-            st.rerun()
+    st.button(
+        "Start today's Daily Challenge", type="primary", use_container_width=True,
+        on_click=_request_daily_start,
+    )
 
     st.button(
         "Open Practice",
@@ -3850,7 +3913,7 @@ def render_daily_intro():
 
     with st.expander("How the Daily Challenge works", expanded=False):
         st.markdown(
-            "- **One Daily each day:** everyone gets the same 10 decisions.\n"
+            f"- **One Daily each day:** everyone gets the same {_daily_count()} decisions.\n"
             "- **Your choices save automatically:** leave and come back without losing your place.\n"
             "- **Review before submitting:** use Back or the final review to fix accidental taps.\n"
             "- **No hints during the run:** grades, best answers, and coaching appear only after you finish.\n"
@@ -3990,11 +4053,11 @@ def _daily_choice_fragment():
     st.markdown(f"<div class='selected-summary'>Your hold: {hold_label(selected_hold)}</div>", unsafe_allow_html=True)
 
     already_saved = index < len(answers)
-    all_ten_saved = len(answers) >= 10
-    if all_ten_saved:
+    all_choices_saved = len(answers) >= len(challenges)
+    if all_choices_saved:
         primary_label = "Save changes & return to review"
     elif index == len(challenges) - 1:
-        primary_label = "Save & review all 10"
+        primary_label = f"Save & review all {len(challenges)}"
     elif already_saved:
         primary_label = "Save changes & next"
     else:
@@ -4025,10 +4088,10 @@ def _daily_choice_fragment():
     if save_clicked:
         if not _save_daily_choice(index, selected_hold):
             return
-        if all_ten_saved or index + 1 >= len(challenges):
+        if all_choices_saved or index + 1 >= len(challenges):
             st.session_state.daily_ready_to_submit = True
             st.session_state.daily_question_index = len(challenges) - 1
-            st.session_state.daily_flash = "Choice saved. Review your 10 before final submission."
+            st.session_state.daily_flash = "Choice saved. Review your choices before final submission."
         else:
             st.session_state.daily_ready_to_submit = False
             st.session_state.daily_question_index = index + 1
@@ -4077,19 +4140,19 @@ def render_daily_question():
     )
 
 def render_daily_submission_review():
-    """Show all 10 chosen holds without feedback, then let the player final-submit."""
+    """Show all chosen holds without feedback, then let the player final-submit."""
     answers = st.session_state.daily_answers
-    if len(answers) < 10:
+    if len(answers) < _daily_count():
         st.session_state.daily_ready_to_submit = False
         st.session_state.daily_question_index = len(answers)
         st.rerun()
         return
 
-    render_daily_progress(9, 10)
+    render_daily_progress(_daily_count() - 1, _daily_count(), review=True)
     st.markdown(
         "<div class='daily-hero'>"
         "<div class='daily-kicker'>Final review</div>"
-        "<div class='daily-title'>Check your 10 choices</div>"
+        f"<div class='daily-title'>Check your {_daily_count()} choices</div>"
         "<div class='daily-rule'><b>No grades, Points Lost, or best answers are shown yet.</b><br>"
         "Edit anything you entered by mistake. Once you submit, your result is final.</div>"
         "</div>",
@@ -4111,7 +4174,7 @@ def render_daily_submission_review():
 
     edit_question = st.selectbox(
         "Need to fix one?",
-        options=list(range(1, 11)),
+        options=list(range(1, _daily_count() + 1)),
         format_func=lambda q: f"Question {q}: {hold_label(answers[q - 1].get('selected_hold', []))}",
         key="daily_review_edit_question",
     )
@@ -4122,12 +4185,12 @@ def render_daily_submission_review():
             st.session_state.daily_question_index = int(edit_question) - 1
             st.rerun()
     with back_col:
-        if st.button("← Back to Question 10", use_container_width=True, key="daily_review_back"):
+        if st.button(f"← Back to Question {_daily_count()}", use_container_width=True, key="daily_review_back"):
             st.session_state.daily_ready_to_submit = False
-            st.session_state.daily_question_index = 9
+            st.session_state.daily_question_index = _daily_count() - 1
             st.rerun()
 
-    st.warning("Submitting ends today's Daily. After this point, your 10 choices cannot be changed.")
+    st.warning("Submitting ends today's Daily. After this point, your choices cannot be changed.")
     if st.button("🏁 Submit final Daily Challenge", type="primary", use_container_width=True, key="daily_final_submit"):
         attempt_id = st.session_state.get("daily_attempt_id")
         if not attempt_id:
@@ -4138,18 +4201,19 @@ def render_daily_submission_review():
             load_daily_store().complete_attempt(attempt_id)
             _clear_completed_daily_caches()
         except Exception as exc:
-            st.error("Your Daily couldn't be submitted yet. Your 10 choices are still saved and editable.")
+            st.error("Your Daily couldn't be submitted yet. Your choices are still saved and editable.")
             if database_check_enabled():
                 st.caption(f"Daily finalize detail: {type(exc).__name__}: {exc}")
             return
         st.session_state.daily_completed = True
         st.session_state.daily_ready_to_submit = False
-        st.session_state.daily_question_index = 10
+        st.session_state.daily_question_index = _daily_count()
         _force_daily_resync()
         st.rerun()
 
 
-def _leaderboard_frame(board):
+def _leaderboard_frame(board, question_count=None):
+    question_count = question_count or _daily_count()
     """Dataframe form retained for exports/tests; player UI uses cards below."""
     rows = []
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
@@ -4160,7 +4224,7 @@ def _leaderboard_frame(board):
             "Rank": f"{medals.get(rank, '')} {rank}".strip(),
             "Player": name,
             "Points Lost": f"{item['total_ev_loss']:.2f}",
-            "Best Holds": f"{item['exact_count']}/10",
+            "Best Holds": f"{item['exact_count']}/{question_count}",
         })
     return pd.DataFrame(rows)
 
@@ -4173,7 +4237,8 @@ def _close_friend_review():
     st.session_state.friend_review_player_id = None
 
 
-def render_leaderboard_cards(board, *, allow_review=False):
+def render_leaderboard_cards(board, *, allow_review=False, question_count=None):
+    question_count = question_count or _daily_count()
     """Render a clean, scan-friendly leaderboard. Friend review lives below the standings."""
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
     active_player_id = str(st.session_state.get("active_player_id") or "")
@@ -4184,14 +4249,15 @@ def render_leaderboard_cards(board, *, allow_review=False):
         display_name = str(item.get("display_name") or "Player")
         is_you = player_id == active_player_id
         you_note = " <span>YOU</span>" if is_you else ""
-        perfect_note = " <span style='color:#805b09;background:#fff0bd;border-radius:6px;padding:2px 5px;font-size:.7rem;display:inline-block'>🏅 Perfect Ten</span>" if int(item.get("exact_count") or 0) == 10 else ""
+        award = "Perfect Six" if question_count == 6 else "Perfect Ten"
+        perfect_note = f" <span style='color:#805b09;background:#fff0bd;border-radius:6px;padding:2px 5px;font-size:.7rem;display:inline-block'>🏅 {award}</span>" if int(item.get("exact_count") or 0) == question_count else ""
         row_class = "leaderboard-row you" if is_you else "leaderboard-row"
         rows.append(
             f"<div class='{row_class}'>"
             f"<div class='leaderboard-rank'>{medals.get(rank, '')} {rank}</div>"
             f"<div class='leaderboard-name'>{html.escape(display_name)}{you_note}{perfect_note}</div>"
             f"<div class='leaderboard-score'><b>{float(item['total_ev_loss']):.2f}</b>"
-            f"Points Lost · {int(item['exact_count'])}/10 best</div>"
+            f"Points Lost · {int(item['exact_count'])}/{question_count} best</div>"
             "</div>"
         )
     if rows:
@@ -4219,18 +4285,21 @@ def _share_square(points_lost: float) -> str:
 def build_daily_share_text(records, summary, rank=None, completed_count=0, rank_tied=False):
     """Build a compact spoiler-free Daily result suitable for text messages/social sharing."""
     squares = [_share_square(item.get("points_lost", 0.0)) for item in records]
-    first_row = "".join(squares[:5])
-    second_row = "".join(squares[5:10])
+    row_size = 3 if len(squares) == 6 else 5
+    first_row = "".join(squares[:row_size])
+    second_row = "".join(squares[row_size:])
     date_label = _daily_date_label(st.session_state.daily_date_key)
     lines = [
         f"🎲 Yahtzee Coach Daily — {date_label}",
-        f"{summary['total_ev_loss']:.2f} Points Lost · {summary['exact_count']}/10 best holds",
+        f"{summary['total_ev_loss']:.2f} Points Lost · {summary['exact_count']}/{summary['questions']} best holds",
         first_row,
         second_row,
         f"🔥 Best-hold streak: {summary['best_exact_streak']}",
     ]
     if is_perfect_ten(summary):
         lines.insert(1, "🏅 PERFECT TEN — every best hold!")
+    elif summary.get("questions") == 6 and summary.get("perfect"):
+        lines.insert(1, "🏅 PERFECT SIX — every best hold!")
     if rank is not None and int(completed_count or 0) > 0:
         if rank_tied:
             lines.append(f"🏆 Group rank right now: Tied for #{int(rank)} of {int(completed_count)}")
@@ -4248,8 +4317,9 @@ def render_daily_share_result(records, summary, rank=None, completed_count=0, ra
     share_text = build_daily_share_text(records, summary, rank=rank, completed_count=completed_count, rank_tied=rank_tied)
     share_text_js = json.dumps(share_text)
     squares = [_share_square(item.get("points_lost", 0.0)) for item in records]
-    first_row = "".join(squares[:5])
-    second_row = "".join(squares[5:10])
+    row_size = 3 if len(squares) == 6 else 5
+    first_row = "".join(squares[:row_size])
+    second_row = "".join(squares[row_size:])
     share_html = f"""
         <div style="font-family:Arial,sans-serif;border:1px solid #d1d5db;border-radius:16px;padding:15px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);box-shadow:0 2px 10px rgba(0,0,0,0.04);">
           <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;font-weight:800;color:#64748b;">Your Daily · Spoiler-free</div>
@@ -4409,12 +4479,12 @@ def _rebuild_friend_daily_answers(review_payload):
     """Rebuild exact local coaching for a completed friend's immutable DB answers."""
     rows = list(review_payload.get("answers", []))
     challenges = st.session_state.daily_challenges
-    if len(rows) != 10:
-        raise ChallengeMismatch("That completed Daily does not have all 10 saved answers.")
+    if len(rows) != len(challenges):
+        raise ChallengeMismatch("That completed Daily does not have all its saved answers.")
     rebuilt = []
     for row in sorted(rows, key=lambda item: int(item.get("question_number") or 0)):
         q = int(row.get("question_number") or 0)
-        if not 1 <= q <= 10:
+        if not 1 <= q <= len(challenges):
             raise ChallengeMismatch("Friend Daily question number is invalid.")
         challenge = challenges[q - 1]
         if str(challenge.get("challenge_id", "")) != str(row.get("puzzle_id", "")):
@@ -4433,7 +4503,7 @@ def _rebuild_friend_daily_answers(review_payload):
 
 
 def _render_friend_pick_peek(active_group, board):
-    """Optional spoiler-safe peek at a completed friend's ten held-dice choices."""
+    """Optional spoiler-safe peek at a completed friend's held-dice choices."""
     if active_group is None:
         return
     active_player_id = str(st.session_state.get("active_player_id") or "")
@@ -4455,7 +4525,7 @@ def _render_friend_pick_peek(active_group, board):
         friend = friend_by_id[str(friend_id)]
         friend_name = str(friend.get("display_name") or "Friend")
         if st.button(
-            f"👀 See {friend_name}'s 10 picks",
+            f"👀 See {friend_name}'s picks",
             use_container_width=True,
             key="friend_pick_peek_button",
         ):
@@ -4480,7 +4550,7 @@ def _render_friend_pick_peek(active_group, board):
                 st.caption(f"Friend picks detail: {type(exc).__name__}: {exc}")
             return
 
-        st.markdown(f"**{html.escape(target_name)}'s 10 picks**")
+        st.markdown(f"**{html.escape(target_name)}'s picks**")
         for q, answer in enumerate(friend_answers, start=1):
             record = answer["solver_record"]
             selected = record.get("user_hold", "—")
@@ -4497,10 +4567,10 @@ def render_daily_spotlight():
     try:
         _render_daily_spotlight_content()
     except Exception:
-        # This optional feature must never block standings or the original ten reviews.
+        # This optional feature must never block standings or the original reviews.
         import logging
         logging.getLogger(__name__).exception("Optional Daily spotlight unavailable")
-        st.caption("The optional spotlight isn't available right now. Your ten reviews and Daily result are unchanged.")
+        st.caption("The optional spotlight isn't available right now. Your reviews and Daily result are unchanged.")
 
 
 def _toggle_daily_spotlight_open(state_key):
@@ -4595,7 +4665,7 @@ def _render_daily_spotlight_content():
             st.caption(feedback["comparison_label"])
             st.table(feedback["comparison_rows"])
             st.caption(feedback["note"])
-        st.caption("That's today's optional follow-up. Your official ten are unchanged.")
+        st.caption("That's today's optional follow-up. Your official choices are unchanged.")
 
 
 def render_daily_results():
@@ -4629,19 +4699,21 @@ def render_daily_results():
             player_name=str(st.session_state.get("active_player_name") or "Player"),
             avatar_config=_active_avatar_config(profile),
         ), height=200, scrolling=False)
+    elif summary.get("questions") == 6 and summary.get("perfect"):
+        st.success("🏅 PERFECT SIX! Six decisions. You found every best hold.")
     else:
         st.markdown(
             "<div class='daily-hero'>"
             "<div class='daily-kicker'>✅ Today's Daily</div>"
             f"<div class='daily-title'>{_daily_date_label(st.session_state.daily_date_key)}</div>"
-            "<div class='daily-rule'>Nice work. Here's how your 10 decisions turned out.</div>"
+            "<div class='daily-rule'>Nice work. Here's how your decisions turned out.</div>"
             "</div>",
             unsafe_allow_html=True,
         )
     st.markdown(
         "<div class='daily-result-grid'>"
         f"<div class='daily-result-box'><div class='daily-result-label'>Points Lost</div><div class='daily-result-value'>{summary['total_ev_loss']:.2f}</div><div class='daily-result-sub'>lower is better</div></div>"
-        f"<div class='daily-result-box'><div class='daily-result-label'>Best Holds</div><div class='daily-result-value'>{summary['exact_count']}/10</div></div>"
+        f"<div class='daily-result-box'><div class='daily-result-label'>Best Holds</div><div class='daily-result-value'>{summary['exact_count']}/{summary['questions']}</div></div>"
         f"<div class='daily-result-box'><div class='daily-result-label'>Group Rank</div><div class='daily-result-value'>{rank_value}</div></div>"
         f"<div class='daily-result-box'><div class='daily-result-label'>Best Streak</div><div class='daily-result-value'>🔥 {summary['best_exact_streak']}</div></div>"
         "</div>",
@@ -4722,7 +4794,7 @@ def render_daily_results():
         st.markdown("### 🏆 Play with friends")
         st.caption("Create or join a friend group to compare Daily results on a shared leaderboard.")
 
-    st.markdown("### 📝 Your 10 Grades")
+    st.markdown(f"### 📝 Your {_daily_count()} Grades")
     render_daily_spotlight()
     st.caption("Tap any question to open its full coaching.")
     for answer in answers:
@@ -4750,10 +4822,35 @@ def render_daily_results():
     render_solver_panel(records)
 
 
+def render_weekly_mode():
+    if not st.session_state.get("active_player_id"):
+        st.info("Sign in from Daily Challenge to play your Weekly game.")
+        st.button("Go to sign in", use_container_width=True, key="weekly_signin",
+                  on_click=_set_app_mode, args=("Daily Challenge",))
+        return
+    try:
+        actor = WeeklyActor.from_token(st.session_state.active_player_id,
+                                       st.session_state.get("active_device_token") or "")
+        store = SupabaseWeeklyStore(load_daily_store().client, actor)
+    except WeeklyAuthRequired:
+        st.info("Sign in again to connect your saved Weekly game.")
+    except Exception:
+        st.error("Weekly couldn't connect right now. Please try again.")
+    else:
+        render_weekly(store, st.session_state.active_player_id)
+    st.button("Sign out", key="weekly_signout", use_container_width=True, on_click=_sign_out_player)
+
+
 def render_daily_mode():
     if not st.session_state.get("active_player_id"):
         render_player_identity_gate()
         return
+    if st.session_state.get("daily_start_requested"):
+        started = start_persistent_daily_attempt()
+        st.session_state.daily_start_requested = False
+        if not started:
+            render_daily_intro()
+            return
     if not sync_daily_attempt_from_database():
         return
     if not st.session_state.daily_started:
@@ -4769,6 +4866,11 @@ def render_daily_mode():
         return
     st.caption("Your Daily progress saves automatically.")
     render_daily_question()
+
+
+def _sign_out_to_daily():
+    _sign_out_player()
+    st.session_state.app_mode = "Daily Challenge"
 
 
 def render_my_player_mode():
@@ -4839,10 +4941,7 @@ def render_my_player_mode():
 
     with st.expander("Account", expanded=False):
         st.caption(f"Signed in as {player_name}")
-        if st.button("Sign out", use_container_width=True, key="player_sign_out"):
-            _sign_out_player()
-            st.session_state.app_mode = "Daily Challenge"
-            st.rerun()
+        st.button("Sign out", use_container_width=True, key="player_sign_out", on_click=_sign_out_to_daily)
 
 
 @st.fragment
@@ -4968,7 +5067,7 @@ def render_practice_mode():
             st.caption(f"{type(exc).__name__}: {exc}")
         return
 
-    if st.session_state.get("daily_completed") and len(st.session_state.get("daily_answers", [])) >= 10:
+    if st.session_state.get("daily_completed") and len(st.session_state.get("daily_answers", [])) >= _daily_count():
         st.button(
             "🏆 Daily complete · View leaderboard",
             use_container_width=True,
@@ -5113,13 +5212,15 @@ st.markdown("<div class='subtitle'>Hold Strategy Trainer</div>", unsafe_allow_ht
 
 mode = st.radio(
     "Mode",
-    options=["Daily Challenge", "Practice", "My Player"],
+    options=["Daily Challenge", "Weekly", "Practice", "My Player"],
     horizontal=True,
     key="app_mode",
     label_visibility="collapsed",
 )
 if mode == "Practice":
     player_note = "Unlimited hold-strategy practice"
+elif mode == "Weekly":
+    player_note = "Your weekly 13-round Yahtzee game"
 elif mode == "My Player":
     player_note = "Your sprite · your all-time medals"
     if not st.session_state.get("active_player_id"):
@@ -5127,11 +5228,13 @@ elif mode == "My Player":
 elif st.session_state.get("active_player_id"):
     player_note = f"Today's Daily · {st.session_state.get('active_player_name')}"
 else:
-    player_note = "Today's 10-puzzle Daily Challenge"
+    player_note = "Today's Daily Challenge"
 st.markdown(f"<div class='mode-note'>{html.escape(player_note)}</div>", unsafe_allow_html=True)
 
 if mode == "Daily Challenge":
     render_daily_mode()
+elif mode == "Weekly":
+    render_weekly_mode()
 elif mode == "Practice":
     render_practice_mode()
 else:

@@ -127,6 +127,7 @@ def personal_medal_moment_html(
     date_label: str,
     avatar_config: Mapping | None,
     medal_totals: Mapping | None,
+    question_count: int = 10,
 ) -> str:
     """Return one compact, silent, skippable next-day personal result moment."""
     rows = [dict(row) for row in board]
@@ -146,10 +147,10 @@ def personal_medal_moment_html(
     mine = _viewer_row(rows, active_player_id)
     if mine and not medal_rank:
         exact = mine.get("exact_count")
-        if isinstance(exact, int) and 0 <= exact <= 10:
+        if isinstance(exact, int) and 0 <= exact <= question_count:
             subhead = f"You found {exact} best {'hold' if exact == 1 else 'holds'} yesterday."
-    if mine and mine.get("exact_count") == 10:
-        subhead = "Yesterday, you played a perfect ten."
+    if mine and mine.get("exact_count") == question_count:
+        subhead = "Yesterday, you played a perfect six." if question_count == 6 else "Yesterday, you played a perfect ten."
     confetti = "".join(
         f"<i style='--x:{7 + n * 7}%;--d:{(n % 4) * .09}s;--c:{('#ffd369', '#64dbcb', '#ff89b6')[n % 3]}'></i>"
         for n in range(13)

@@ -542,14 +542,25 @@ class InMemoryDailyStore:
         totals["total"] = totals["gold"] + totals["silver"] + totals["bronze"]
         return totals
 
+    def daily_format(self, date_key: str) -> dict:
+        rows = [c for c in self.challenges.values() if c.challenge_date == str(date_key)]
+        if rows:
+            c = max(rows, key=lambda c: (c.created_at, c.challenge_id))
+            return {"question_count": len(c.puzzle_ids), "challenge_id": c.challenge_id,
+                    "challenge_version": c.challenge_version, "puzzle_ids": list(c.puzzle_ids)}
+        effective = getattr(self, "six_effective_date", None)
+        return {"question_count": 6 if effective and str(date_key) >= str(effective) else 10}
+
     def ensure_challenge(self, challenge_id: str, challenge_date: str,
                          challenge_version: str, puzzle_ids: Sequence[str]) -> ChallengeRecord:
         challenge_id = str(challenge_id).strip()
         challenge_version = str(challenge_version).strip()
         parsed_date = date.fromisoformat(str(challenge_date)).isoformat()
         puzzle_ids = tuple(str(value) for value in puzzle_ids)
-        if len(puzzle_ids) != 10 or len(set(puzzle_ids)) != 10:
-            raise ValueError("An official Daily Challenge must contain exactly 10 unique puzzle IDs.")
+        if len(puzzle_ids) not in (6, 10) or len(set(puzzle_ids)) != len(puzzle_ids):
+            raise ValueError("An official Daily Challenge must contain six or ten unique puzzle IDs.")
+        if (len(puzzle_ids) == 6) != (challenge_version == "43B-bank42.6-six-v1"):
+            raise ChallengeMismatch("Daily length does not match its format version.")
         existing = self.challenges.get(challenge_id)
         if existing:
             if (existing.challenge_date != parsed_date or
@@ -557,9 +568,11 @@ class InMemoryDailyStore:
                     existing.puzzle_ids != puzzle_ids):
                 raise ChallengeMismatch("Existing challenge_id does not match date/version/puzzle IDs.")
             return existing
-        # One challenge set per exact (date, version) contract.
+        # Legacy fixtures may contain multiple ten-question versions per date.
+        # A six-question registration must never fork an existing day's identity.
         for other in self.challenges.values():
-            if other.challenge_date == parsed_date and other.challenge_version == challenge_version:
+            if other.challenge_date == parsed_date and (other.challenge_version == challenge_version
+                    or len(puzzle_ids) == 6 or len(other.puzzle_ids) == 6):
                 raise ChallengeMismatch("That date/version is already registered under another challenge_id.")
         record = ChallengeRecord(
             challenge_id=challenge_id,
@@ -611,8 +624,9 @@ class InMemoryDailyStore:
         if str(solver_source) != "exact":
             raise InvalidOfficialAnswer("Official Daily answers must be scored by the exact solver.")
         question_number = int(question_number)
-        if not 1 <= question_number <= 10:
-            raise ValueError("question_number must be 1-10.")
+        question_count = len(self.challenges[attempt.challenge_id].puzzle_ids)
+        if not 1 <= question_number <= question_count:
+            raise ValueError(f"question_number must be 1-{question_count}.")
         key = (attempt_id, question_number)
         if key in self.answers:
             raise DuplicateAnswer("That Daily answer is already locked.")
@@ -656,8 +670,9 @@ class InMemoryDailyStore:
         if str(solver_source) != "exact":
             raise InvalidOfficialAnswer("Official Daily answers must be scored by the exact solver.")
         question_number = int(question_number)
-        if not 1 <= question_number <= 10:
-            raise ValueError("question_number must be 1-10.")
+        question_count = len(self.challenges[attempt.challenge_id].puzzle_ids)
+        if not 1 <= question_number <= question_count:
+            raise ValueError(f"question_number must be 1-{question_count}.")
         key = (attempt_id, question_number)
         if key not in self.answers:
             raise DailyStoreError("That Daily answer has not been saved yet.")
@@ -688,8 +703,9 @@ class InMemoryDailyStore:
         if attempt.complete:
             return attempt
         answers = self._answers_for_attempt(attempt_id)
-        if len(answers) != 10 or [answer.question_number for answer in answers] != list(range(1, 11)):
-            raise DailyStoreError("A Daily attempt cannot complete until all 10 answers are saved.")
+        question_count = len(self.challenges[attempt.challenge_id].puzzle_ids)
+        if len(answers) != question_count or [answer.question_number for answer in answers] != list(range(1, question_count + 1)):
+            raise DailyStoreError(f"A Daily attempt cannot complete until all {question_count} answers are saved.")
         losses = [answer.points_lost for answer in answers]
         best_streak = 0
         current = 0
@@ -735,7 +751,7 @@ class InMemoryDailyStore:
             raise GroupNotFound(group_id)
         completed_player_ids = {row["player_id"] for row in self.leaderboard(group_id, challenge_id)}
         rows: list[dict] = []
-        for question_number in range(1, 11):
+        for question_number in range(1, len(self.challenges[challenge_id].puzzle_ids) + 1):
             answers: list[AnswerRecord] = []
             for player_id in completed_player_ids:
                 attempt_id = self.attempt_id_by_player_challenge[(player_id, challenge_id)]
@@ -773,8 +789,8 @@ class InMemoryDailyStore:
         target_attempt = self.attempts[target_attempt_id]
         target = self.players[target_player_id]
         answers = self._answers_for_attempt(target_attempt_id)
-        if len(answers) != 10:
-            raise DailyStoreError("That completed Daily does not have all 10 answers.")
+        if len(answers) != len(self.challenges[challenge_id].puzzle_ids):
+            raise DailyStoreError("That completed Daily does not have all its answers.")
         return {
             "player_id": target_player_id,
             "display_name": target.display_name,

@@ -20,7 +20,7 @@ def run():
         doc=personal_medal_moment_html([{'player_id':'p','display_name':'Mike','rank':rank,'exact_count':10}],active_player_id='p',active_player_name='Mike',group_name='Friends',date_label='Yesterday',avatar_config={},medal_totals={})
         assert 'Yesterday, you played a perfect ten.' in doc
     tree=ast.parse((Path(__file__).parent/'app.py').read_text())
-    nodes=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in ('build_daily_share_text','render_leaderboard_cards')]
+    nodes=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in ('build_daily_share_text','render_leaderboard_cards','_daily_count')]
     import html
     rendered=[]
     class Expander:

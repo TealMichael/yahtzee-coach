@@ -605,6 +605,16 @@ def _generate_legacy_daily_challenge_set(date_key: str, count: int = 10) -> list
     # Nine realistic game-history cards plus one intentionally curated edge case
     # keeps the Daily 10 believable while still teaching rare situations.
     origin_plan = ["Simulated Game"] * 9 + ["Curated Edge Case"]
+    if count == 6:
+        stage_plan = ["Opening", "Midgame", "Midgame", "Late Game", "Late Game", "True Endgame"]
+        roll_plan = [1] * 3 + [2] * 3
+        difficulty_plan = ["Clear", "Medium", "Medium", "Hard", "Hard", rng.choice(("Punishing", "Knife-edge"))]
+        origin_plan = ["Simulated Game"] * 6
+        if day.toordinal() % 3 == 0:
+            origin_plan[-1] = "Curated Edge Case"
+        if decision_balance:
+            straight_target = min(straight_target, 2)
+            bonus_target = min(bonus_target, 2)
     rng.shuffle(stage_plan)
     rng.shuffle(roll_plan)
     rng.shuffle(difficulty_plan)
@@ -682,13 +692,15 @@ def _generate_legacy_daily_challenge_set(date_key: str, count: int = 10) -> list
 
 
 def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10, *, decision_balance: bool = False) -> list[dict]:
-    if count != 10:
-        raise ValueError("The Daily Challenge format is currently designed for exactly 10 situations.")
+    if count not in (6, 10):
+        raise ValueError("Daily challenges must contain six or ten situations.")
 
     data = _data()
     rows = data["rows"]
     rng = random.Random(_daily_seed(str(date_key)))
     day = date.fromisoformat(str(date_key))
+    if count == 6:
+        rng = _stable_daily_random("daily-six-v1", day)
     # Preserve every historical Daily, including its candidate ordering and IDs.
     realism_enabled = (True if day >= DAILY_UPPER_ZERO_EFFECTIVE_DATE else "legacy") if day >= DAILY_REALISM_EFFECTIVE_DATE else False
     if decision_balance:
@@ -720,6 +732,16 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10, *, de
     difficulty_plan = ["Hard", "Medium", "Clear", "Medium", "Punishing",
                        "Hard", "Clear", "Medium", "Punishing", "Knife-edge"]
     origin_plan = ["Simulated Game"] * 9 + ["Curated Edge Case"]
+    if count == 6:
+        stage_plan = ["Opening", "Midgame", "Midgame", "Late Game", "Late Game", "True Endgame"]
+        roll_plan = [1] * 3 + [2] * 3
+        difficulty_plan = ["Clear", "Medium", "Medium", "Hard", "Hard", rng.choice(("Punishing", "Knife-edge"))]
+        origin_plan = ["Simulated Game"] * 6
+        if day.toordinal() % 3 == 0:
+            origin_plan[-1] = "Curated Edge Case"
+        if decision_balance:
+            straight_target = min(straight_target, 2)
+            bonus_target = min(bonus_target, 2)
     rng.shuffle(stage_plan)
     rng.shuffle(roll_plan)
     rng.shuffle(difficulty_plan)
@@ -737,7 +759,7 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10, *, de
     special_slot: int | None = None
     special_candidates: list[int] = []
     if target_bank_break:
-        slot_order = list(range(10))
+        slot_order = list(range(count))
         rng.shuffle(slot_order)
         slot_order.sort(key=lambda slot: (roll_plan[slot] != 2, difficulty_plan[slot] in {"Punishing", "Knife-edge"}))
         for slot in slot_order:
@@ -876,6 +898,8 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10, *, de
                 if roll_number == 2:
                     score += 2.0
 
+            if count == 6:
+                score -= 12.0 * skill_counts.get(skill_code, 0)
             score += rng.random() * 0.01
             if decision_balance:
                 score += balance_score(idx)
@@ -916,6 +940,8 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10, *, de
                 gap = float(row["top_gap"])
                 if 0.15 <= gap <= 4.0:
                     score += 3.0
+                if count == 6:
+                    score -= 12.0 * skill_counts.get(skill_code, 0)
                 score += rng.random() * 0.01
                 if decision_balance:
                     score += balance_score(idx)
@@ -947,6 +973,8 @@ def _generate_phase2k9_daily_challenge_set(date_key: str, count: int = 10, *, de
             generation_tag = "42.6-2K14-4"
         if day >= DAILY_UPPER_ZERO_EFFECTIVE_DATE:
             generation_tag = "42.6-2K14-5"
+        if count == 6:
+            generation_tag = "42.6-six-v1"
         raw_id = f"{generation_tag}|{date_key}|{challenge['bank_state_key']}|{challenge['dice']}|{challenge['roll_number']}"
         challenge["challenge_id"] = sha256(raw_id.encode("utf-8")).hexdigest()[:16]
         chosen.append(challenge)
@@ -962,6 +990,8 @@ def generate_daily_challenge_set(date_key: str, count: int = 10) -> list[dict]:
     The conservative scorecard-realism filter begins forward-only on Aug 22, 2026.
     """
     day = date.fromisoformat(str(date_key))
+    if count == 6:
+        return _generate_phase2k9_daily_challenge_set(str(date_key), count=6, decision_balance=True)
     if day >= DAILY_BALANCE_EFFECTIVE_DATE:
         return _generate_phase2k9_daily_challenge_set(str(date_key), count=count, decision_balance=True)
     if day < DAILY_2K9_EFFECTIVE_DATE:

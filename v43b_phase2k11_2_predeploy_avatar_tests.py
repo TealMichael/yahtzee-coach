@@ -1,3 +1,4 @@
+# v44: approved six-puzzle format fingerprints refreshed; historical outputs and exact policy remain locked.
 from pathlib import Path
 from xml.etree import ElementTree as ET
 import hashlib
@@ -20,7 +21,7 @@ def sha(name):
 def run():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
 
-    require('APP_RELEASE = "v43B Phase 2K.14.14"' in app, "UI polish release has its own release label")
+    require('APP_RELEASE = "v44.0 Weekly Challenge + Daily Six"' in app, "UI polish release has its own release label")
     require(set(AVATAR_CHOICES["style"]) == {"classic", "soft"}, "creator offers two unlabeled base character silhouettes")
     for hair in ("ponytail", "bob", "waves", "bun", "braids"):
         require(hair in AVATAR_CHOICES["hair"], f"inclusive hairstyle {hair} is available")
@@ -61,8 +62,8 @@ def run():
         "yahtzee_engine.py": "9b175f3f3f59f9937943856c01e1e7aeced7662742756766a54a6061ccaba6b1",
         "exact_runtime.py": "322e50715ca49e53d78e9cc6eda85a7af0712b881273fb57ea4c4f4b67da171a",
         "exact_mode.py": "05b7b6db72d2a9fc8ca12852f1deae64e330cc48cdaa66e851f83c27ef333aaf",
-        "daily_store.py": "209ac3aa8c3bad39ba72473b1db31fa9a3396918c1bd7df2fee0d8c1dc8b9585",
-        "supabase_daily_store.py": "4572a962855f337780e4fdd9428b6acaeef18c700466a1be46d796f32fdfc96b",
+        "daily_store.py": "771b7d0070226f853df4563dc6c75af27b3fb6d3317f5b8de06d1d82555c4916",
+        "supabase_daily_store.py": "32a68b623e7e8af6e8e4a3a120f2c1c102138ae8f724718bfd059deb65a23d1f",
         "session_learning.py": "695ea20fcd82ffe8979b5900f34b929d15cedcc902dc8ef92c30a4baf999963a",
         "practice_progress.py": "8f78b05eb867e716fbe845c81969b12f33617a7cd5f7c8dd7fe09b04c4632915",
         "exact_policy.npz": "cdb704537146aed438cf7f6b8f8a9d6ec9ac5e97d505bd50af1702bb5935b39b",

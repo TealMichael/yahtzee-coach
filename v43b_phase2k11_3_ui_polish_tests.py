@@ -11,8 +11,8 @@ def require(ok, message):
 
 def run():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
-    require('APP_RELEASE = "v43B Phase 2K.14.14"' in app, "release label is Phase 2K.12.3")
-    require('options=["Daily Challenge", "Practice", "My Player"]' in app, "top selector is Daily / Practice / My Player")
+    require('APP_RELEASE = "v44.0 Weekly Challenge + Daily Six"' in app, "release label is Phase 2K.12.3")
+    require('options=["Daily Challenge", "Weekly", "Practice", "My Player"]' in app, "top selector is Daily / Weekly / Practice / My Player")
     require('📲 Add to Home Screen' not in app and 'def render_install_mode(' not in app, "Add-to-Home-Screen feature is removed")
     require('def render_my_player_mode()' in app, "My Player has a dedicated top-level page")
     require('if st.session_state.get("avatar_editor_open"):' in app[app.index('def render_my_player_mode'):], "My Player owns avatar editing")
@@ -22,7 +22,7 @@ def run():
     require('avatar_option_tile_html' not in creator, "creator does not stack giant option cards")
     require('selected_category = st.selectbox(' in creator and 'chosen_value = st.selectbox(' in creator, "creator uses readable mobile-safe select controls")
     require('st.session_state.app_mode = "My Player"' in app[app.index('def _activate_player'):app.index('def _sign_out_player')], "new players land in My Player creator")
-    require('st.session_state.app_mode not in {"Daily Challenge", "Practice", "My Player"}' in app, "legacy mode session values are handled safely")
+    require('st.session_state.app_mode not in {"Daily Challenge", "Weekly", "Practice", "My Player"}' in app, "legacy mode session values are handled safely")
     print("Phase 2K.11.3 UI polish checks passed")
 
 

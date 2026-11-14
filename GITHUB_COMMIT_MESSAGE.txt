@@ -1,1 +1,1 @@
-v43B Phase 2K.14.14 - explain zero-Yahtzee Joker opportunities
+v44.0 - add saved Weekly games and versioned six-puzzle Daily
