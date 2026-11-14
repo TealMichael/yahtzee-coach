@@ -271,7 +271,7 @@ def _roll_animation_css(indices):
         delay = pos * 45
         css.append(
             f'.st-key-weekly_dice div[role="group"] > button:nth-child({index + 1})'
-            f'{{animation:weekly-die-bounce .6s {delay}ms ease-out both!important;'
+            f'{{animation:weekly-die-bounce .52s {delay}ms ease-out both!important;'
             'position:relative!important;overflow:hidden!important}}'
         )
         css.append(
@@ -280,7 +280,7 @@ def _roll_animation_css(indices):
             'display:flex;align-items:center;justify-content:center;'
             'border-radius:inherit;background:#f8fafc;color:#142344;'
             'font-size:3.3rem;font-weight:500;'
-            f'animation:weekly-face-shuffle .6s {delay}ms steps(1,end) both!important;}}'
+            f'animation:weekly-face-shuffle .52s {delay}ms steps(1,end) both!important;}}'
         )
     return '<style>' + ''.join(css) + '</style>'
 
@@ -358,7 +358,10 @@ def _render_weekly_tile_section(section, categories, indices, *, prefix, choice_
                     index = indices[row_start + col_index]
                     label, enabled, status = _scorecard_tile_label(category, index, scores, options, revealed)
                     with columns[col_index]:
-                        with st.container(key=f"weekly_score_tile_{index}_{status}"):
+                        # Every offered category stays tappable, including +0. Emphasize
+                        # positive opportunities visually, never change eligibility.
+                        tone = ("gain" if options[category].points > 0 else "zero") if enabled else "saved"
+                        with st.container(key=f"weekly_score_tile_{index}_{status}_{tone}"):
                             st.button(label, key=f"{prefix}_category_{category}",
                                       type="primary" if current == category else "secondary",
                                       disabled=not enabled, use_container_width=True,
@@ -451,7 +454,7 @@ def _play(game, scope):
                           key=f"{prefix}_first_roll", on_click=_reveal_first_roll, args=(scope, game))
             else:
                 st.caption("Tap dice to hold." if roll_number < 3 else
-                           "Final roll. Choose a category.")
+                           "Choose a scoring category below.")
                 with st.container(key="weekly_dice"):
                     # Same st.pills widget, symbols and unique invisible position IDs as Daily.
                     options = _dice_pill_options(dice)
@@ -476,13 +479,23 @@ def _play(game, scope):
                               on_click=_queue_roll, args=(scope, game, dice, pill_key))
                     if len(held_indices) == 5:
                         st.caption("Release a die to reroll, or score this hand.")
+                else:
+                    # Same control footprint as the prior Roll button: no mobile
+                    # scorecard jump as soon as the third roll finishes.
+                    st.caption("All three rolls completed")
+                    st.markdown('<div class="weekly-final-roll-banner" role="status">✓ Final roll — choose a score</div>',
+                                unsafe_allow_html=True)
                 # Game actions are still saved server-side; local selection needs no explanation.
         with card_col:
             _scorecard_picker(game, scope, dice, revealed, prefix)
-    _mobile_summary_visibility_watcher(st.session_state.pop(f"{scope}_scroll_after_score", False))
+    _mobile_summary_visibility_watcher(
+        st.session_state.pop(f"{scope}_scroll_after_score", False),
+        animate_indices=animate_indices,
+        animation_token=f"{game['game_id']}:{game['revision']}:{rounds_done}:{roll_number}",
+    )
 
 
-def _mobile_summary_visibility_watcher(scroll_after_score=False):
+def _mobile_summary_visibility_watcher(scroll_after_score=False, *, animate_indices=(), animation_token=None):
     """Mobile-only scroll affordance; DOM observer never touches game or DB state.
 
     Streamlit renders this 0-height component after the play controls. No network,
@@ -493,6 +506,8 @@ def _mobile_summary_visibility_watcher(scroll_after_score=False):
     if components is None or not hasattr(components, "v1"):
         return  # Also keeps the isolated test shim fully offline.
     scroll_command = "true" if scroll_after_score else "false"
+    roll_positions = json.dumps(list(animate_indices))
+    roll_token = json.dumps(str(animation_token or ""))
     components.v1.html(r"""
     <script>
     (() => {
@@ -518,6 +533,30 @@ def _mobile_summary_visibility_watcher(scroll_after_score=False):
           obs.disconnect();
         };
         update();
+        // Saved-roll celebration is cosmetic. A new revision has a new token,
+        // and repeating a Streamlit rerun must not replay the animation.
+        const rollPositions = ROLL_POSITIONS;
+        const rollToken = ROLL_TOKEN;
+        const pills = doc.querySelectorAll('.st-key-weekly_dice div[role="group"] > button');
+        if (rollPositions.length && rollToken && pills.length === 5 &&
+            win.__ycWeeklyLastAnimated !== rollToken) {
+          win.__ycWeeklyLastAnimated = rollToken;
+          if (!win.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            win.requestAnimationFrame(() => {
+              rollPositions.forEach((index, order) => {
+                const die = pills[index];
+                if (!die) return;
+                die.style.setProperty('animation', 'none', 'important');
+                void die.offsetWidth; // Make WebKit/iPhone Chrome restart the keyframe.
+                die.style.setProperty('animation',
+                  `weekly-die-bounce .52s ${order * 45}ms ease-out both`, 'important');
+                die.addEventListener('animationend', () => {
+                  die.style.removeProperty('animation');
+                }, {once:true});
+              });
+            });
+          }
+        }
         if (SCROLL_AFTER_SCORE) {
           win.requestAnimationFrame(() => win.requestAnimationFrame(() => {
             const head = doc.querySelector('.weekly-play-head');
@@ -526,7 +565,9 @@ def _mobile_summary_visibility_watcher(scroll_after_score=False):
         }
       } catch (_) { /* Full round header remains visible without the mini bar. */ }
     })();
-    </script>""".replace("SCROLL_AFTER_SCORE", scroll_command), height=0, scrolling=False)
+    </script>""".replace("SCROLL_AFTER_SCORE", scroll_command)
+               .replace("ROLL_POSITIONS", roll_positions)
+               .replace("ROLL_TOKEN", roll_token), height=0, scrolling=False)
 
 
 @st.fragment
@@ -580,10 +621,10 @@ def render_weekly(store, player_id):
     .st-key-weekly_dice div[data-testid="stButton"]>button:not(:disabled):active{
         transform:translateY(3px)!important;box-shadow:0 1px 0 #c7c9cc,0 3px 8px #00000030!important}
     @keyframes weekly-die-bounce{
-        0%{transform:translateY(-7px) rotate(-10deg) scale(.93)}
-        20%{transform:translateY(2px) rotate(12deg) scale(1.05)}
-        43%{transform:translateY(-4px) rotate(-8deg)}
-        69%{transform:translateY(1px) rotate(5deg)}
+        0%{transform:translateY(-10px) rotate(-11deg) scale(.93)}
+        20%{transform:translateY(3px) rotate(13deg) scale(1.04)}
+        43%{transform:translateY(-7px) rotate(-9deg)}
+        69%{transform:translateY(2px) rotate(6deg)}
         88%{transform:translateY(-2px) rotate(-2deg)}
         100%{transform:translateY(0) rotate(0) scale(1)}
     }
@@ -763,6 +804,19 @@ def render_weekly(store, player_id):
         font-size:.67rem!important}
       div[class*="st-key-weekly_score_tile_"] [data-testid="stButton"]>button p strong{
         font-size:.98rem!important}
+    }
+    /* v44.0.6: keep the action slot in place on roll three and improve score contrast. */
+    .weekly-final-roll-banner{display:flex;align-items:center;justify-content:center;
+      min-height:2.75rem;margin:0;padding:.4rem .6rem;border-radius:12px;
+      background:#ecf6ef;border:1px solid #a9d7b7;color:#166534;
+      font-weight:850;font-size:.9rem;text-align:center}
+    div[class*="st-key-weekly_score_tile_"][class*="_available_gain"]
+      [data-testid="stButton"]>button p strong{color:#16733c!important}
+    div[class*="st-key-weekly_score_tile_"][class*="_available_zero"]
+      [data-testid="stButton"]>button p strong{color:#69758b!important}
+    @media(prefers-reduced-motion:reduce){
+      .st-key-weekly_dice div[role="group"]>button{animation:none!important}
+      .st-key-weekly_dice div[role="group"]>button::after{animation:none!important;content:none!important}
     }
     </style>""", unsafe_allow_html=True)
     st.markdown("<div class='weekly-page-title'>Weekly Yahtzee</div>", unsafe_allow_html=True)
