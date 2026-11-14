@@ -28,6 +28,7 @@ from daily_challenge import (
 )
 from supabase_daily_store import SupabaseDailyStore
 from weekly_store import SupabaseWeeklyStore, WeeklyActor, WeeklyAuthRequired
+from weekly_game import current_week_id
 from weekly_ui import render_weekly, clear_weekly_state
 from daily_store import (
     AttemptAlreadyComplete, ChallengeMismatch, DailyStoreError, DuplicateAnswer,
@@ -36,8 +37,8 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v44.0 Weekly Challenge + Daily Six"
-APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0"
+APP_RELEASE = "v44.0.1 Challenge Hub Visual Update"
+APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.1"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
 YESTERDAY_RESULTS_STORAGE_PREFIX = "yc_yesterday_results_seen_v1"
@@ -2507,11 +2508,11 @@ def initialize_daily_state():
     elif "daily_challenges" not in st.session_state:
         _reset_daily_local_attempt(today)
     if "app_mode" not in st.session_state:
-        st.session_state.app_mode = "Daily Challenge"
-    elif st.session_state.app_mode not in {"Daily Challenge", "Weekly", "Practice", "My Player"}:
+        st.session_state.app_mode = "Home"
+    elif st.session_state.app_mode not in {"Home", "Daily Challenge", "Weekly", "Practice", "My Player"}:
         # Phase 2K.11.3 removed the old Add-to-Home-Screen mode. A browser tab
         # that survived a deploy may still carry that legacy value in session state.
-        st.session_state.app_mode = "Daily Challenge"
+        st.session_state.app_mode = "Home"
     if "daily_attempt_id" not in st.session_state:
         st.session_state.daily_attempt_id = None
     if "daily_ready_to_submit" not in st.session_state:
@@ -3129,7 +3130,7 @@ def _request_daily_start():
 
 
 def _set_app_mode(mode: str):
-    """Widget callback: switch the top navigation safely before the next rerun renders it."""
+    """Widget callback: switch sections without mutating a saved challenge."""
     st.session_state.app_mode = mode
 
 
@@ -5184,6 +5185,190 @@ def render_help_feedback_footer():
         st.write("Ask Mike to reset it. Share your display name — never your PIN.")
 
 
+# v44.0.1: Challenge Hub — appearance and read-only status only.
+# The two large actions never call start_official(), start_persistent_daily_attempt(),
+# or any scoring endpoint. The existing Daily/Weekly screens retain that responsibility.
+
+
+def _home_registered_daily(date_key: str) -> dict | None:
+    """Read an already-registered Daily without activating the Daily Six switch.
+
+    Calling yc_daily_format from Home would schedule the six-puzzle migration
+    before the player's first visit to Daily, so it is intentionally avoided.
+    """
+    response = (
+        load_daily_store().client.table("daily_challenges")
+        .select("challenge_id,puzzle_ids")
+        .eq("challenge_date", str(date_key))
+        .limit(1).execute()
+    )
+    rows = response.data or []
+    if not rows:
+        return None
+    row = rows[0]
+    return {"challenge_id": str(row["challenge_id"]), "count": len(row["puzzle_ids"])}
+
+
+def _home_daily_status() -> dict:
+    """The visible numerator is saved answers, not a local button-click count."""
+    base = {"value": "—", "total": "—", "detail": "Today's puzzles are ready to open", "action": "Play Daily"}
+    player_id = st.session_state.get("active_player_id")
+    if not player_id:
+        return {**base, "detail": "Sign in to save today's puzzles", "action": "Sign in for Daily"}
+    try:
+        record = _home_registered_daily(st.session_state.daily_date_key)
+        if record is None:
+            # Do not guess 6 vs. 10 or register the day from this home screen.
+            return base
+        total = int(record["count"])
+        saved = load_daily_store().get_resume_state(str(player_id), record["challenge_id"])
+        done = min(total, len(saved.answers)) if saved is not None else 0
+        if saved is not None and saved.attempt.complete:
+            return {"value": str(total), "total": str(total), "detail": "Today's challenge complete", "action": "View Daily Results"}
+        if done:
+            return {"value": str(done), "total": str(total), "detail": f"{done} of {total} puzzles saved", "action": "Continue Daily"}
+        return {"value": "0", "total": str(total), "detail": "Puzzles completed today", "action": "Play Daily"}
+    except Exception:
+        # Never convert an unavailable database read into a false 0/6 claim.
+        return {**base, "detail": "Daily progress temporarily unavailable", "action": "Open Daily"}
+
+
+def _home_weekly_status() -> dict:
+    base = {"value": "—", "total": "1", "detail": "Saved status temporarily unavailable", "action": "Open Weekly", "note": "One official attempt. Replays are practice only."}
+    player_id = st.session_state.get("active_player_id")
+    if not player_id:
+        return {**base, "value": "0", "detail": "Sign in to play your official game", "action": "Sign in for Weekly"}
+    token = st.session_state.get("active_device_token") or ""
+    if not token:
+        return {**base, "detail": "A fresh sign-in is needed for Weekly"}
+    try:
+        actor = WeeklyActor.from_token(str(player_id), str(token))
+        dashboard = SupabaseWeeklyStore(load_daily_store().client, actor).dashboard(current_week_id())
+        official = dashboard.get("official")
+        if official is None:
+            return {**base, "value": "0", "detail": "Official game completed this week", "action": "Play Weekly"}
+        if official.get("completed_at"):
+            return {**base, "value": "1", "detail": "Official score locked · view friend standings", "action": "View Weekly Standings", "note": "Practice replays are unlocked. Your official score stays locked."}
+        rounds = len((official.get("state") or {}).get("rounds") or [])
+        return {**base, "value": "0", "detail": f"Official game in progress · round {min(rounds + 1, 13)}/13", "action": "Resume Weekly"}
+    except Exception:
+        return base
+
+
+def _home_yesterday_results() -> None:
+    """Read-only stage. Do not mark the once-per-day Daily ceremony as viewed."""
+    st.markdown("<div class='yc-results-title'>🏆 Yesterday's Results</div>", unsafe_allow_html=True)
+    yesterday = _previous_daily_date_key(st.session_state.daily_date_key)
+    try:
+        daily = _home_registered_daily(yesterday)
+        groups = _load_player_groups()
+        if not daily or not groups:
+            st.markdown("<div class='yc-empty-results'>Yesterday's friend podium appears here when results are available.</div>", unsafe_allow_html=True)
+            return
+        snapshots = {}
+        eligible = []
+        for group in groups:
+            try:
+                snapshot = _cached_group_daily_snapshot(group.group_id, daily["challenge_id"])
+            except Exception:
+                continue
+            if snapshot.get("leaderboard"):
+                eligible.append(group)
+                snapshots[group.group_id] = snapshot
+        if not eligible:
+            st.markdown("<div class='yc-empty-results'>No completed friend standings are available for yesterday yet.</div>", unsafe_allow_html=True)
+            return
+        active = render_group_selector(eligible, key="home_yesterday_group_selector")
+        board = [dict(row) for row in snapshots[active.group_id]["leaderboard"]]
+        profile = _active_player_profile()
+        medals = _avatar_medals_for_group(active.group_id, yesterday)
+        picture = personal_medal_moment_html(
+            board, active_player_id=str(st.session_state.active_player_id),
+            active_player_name=str(st.session_state.get("active_player_name") or "Player"),
+            group_name=str(active.group_name), date_label=_daily_date_label(yesterday),
+            avatar_config=_active_avatar_config(profile), medal_totals=medals,
+            question_count=daily["count"],
+        )
+        # The existing animated award moment remains once-only in Daily. The
+        # home recap is *static*, never triggers a medal or writes seen-state.
+        picture = picture.replace("class='moment ", "class='moment skip-now ", 1)
+        components.html(picture, height=560, scrolling=False)
+        st.caption("Your original Daily awards and full results remain available in Daily Challenge.")
+    except Exception:
+        st.markdown("<div class='yc-empty-results'>Yesterday's results couldn't load right now. Your saved medals and history are unchanged.</div>", unsafe_allow_html=True)
+
+
+def _home_tile(title: str, icon: str, status: dict, *, which: str, target: str) -> None:
+    with st.container(key=f"home_{which}_tile"):
+        st.markdown(
+            f"<div class='yc-card-head'><span class='yc-tile-icon'>{icon}</span>{html.escape(title)}</div>"
+            f"<div class='yc-progress'><strong>{html.escape(status['value'])}</strong><span> / {html.escape(status['total'])}</span></div>"
+            f"<div class='yc-progress-desc'>{html.escape(status['detail'])}</div>",
+            unsafe_allow_html=True,
+        )
+        st.button(
+            f"▶ {status['action']}", key=f"home_{which}_cta", type="primary",
+            use_container_width=True, on_click=_set_app_mode, args=(target,),
+        )
+        if which == "weekly":
+            st.markdown(f"<div class='yc-tile-foot'>{html.escape(status['note'])}</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div class='yc-tile-foot'>New Daily at midnight Eastern.</div>", unsafe_allow_html=True)
+
+
+def render_challenge_hub() -> None:
+    """Two equally prominent challenge entries, plus yesterday's saved podium."""
+    with st.container(key="yc_home_tiles"):
+        daily, weekly = st.columns(2, gap="small")
+        with daily:
+            _home_tile("Daily Challenge", "🎲", _home_daily_status(), which="daily",
+                       target="Daily Challenge")
+        with weekly:
+            _home_tile("Weekly Challenge", "🏆", _home_weekly_status(), which="weekly",
+                       target="Weekly" if st.session_state.get("active_player_id") else "Daily Challenge")
+    if not st.session_state.get("active_player_id"):
+        render_player_identity_gate()
+        return
+    _home_yesterday_results()
+
+
+st.markdown("""
+<style>
+/* v44.0.1 challenge hub: same navy/cream cards, restrained crimson actions. */
+.yc-brand{font-size:clamp(1.6rem,4.5vw,2.45rem);line-height:1.15;font-weight:900;letter-spacing:-.04em;color:#142344!important;white-space:nowrap}
+.yc-tagline{font-size:.74rem;letter-spacing:.11em;text-transform:uppercase;color:#5a6880!important;font-weight:850;margin-top:.12rem}
+.st-key-yc_header{margin-bottom:.58rem}
+.st-key-yc_header [data-testid="stHorizontalBlock"]{align-items:center!important;gap:.5rem!important}
+.st-key-yc_header [data-testid="stColumn"]{min-width:0!important}
+.st-key-yc_header.st-key-yc_header div[data-testid="stHorizontalBlock"] div[data-testid="stButton"]>button{width:100%!important;min-width:0!important;max-width:none!important;height:2.35rem!important;min-height:2.35rem!important;padding:.28rem .35rem!important;border-radius:12px!important;background:#fff!important;border:1.5px solid #142344!important;color:#142344!important;box-shadow:0 2px 5px #14234415!important}
+.st-key-yc_header.st-key-yc_header div[data-testid="stButton"]>button p{font-family:inherit!important;font-size:.77rem!important;line-height:1.1!important;color:#142344!important}
+.st-key-yc_home_tiles [data-testid="stHorizontalBlock"]{align-items:stretch!important}
+.st-key-home_daily_tile [data-testid="stVerticalBlock"],.st-key-home_weekly_tile [data-testid="stVerticalBlock"]{gap:.12rem!important}
+.st-key-home_daily_tile,.st-key-home_weekly_tile{background:#f8f3ea;border:1.5px solid #dfd4c5;border-radius:20px;padding:0 0 .62rem;overflow:hidden;box-shadow:0 6px 15px rgba(20,35,68,.10);color:#142344!important;height:100%}
+.yc-card-head{background:linear-gradient(125deg,#182f54,#101f3d);color:#fff!important;font-size:clamp(1rem,2.6vw,1.38rem);font-weight:900;line-height:1.15;text-align:center;padding:.82rem .32rem;white-space:nowrap}
+.yc-tile-icon{margin-right:.35rem}
+.yc-progress{text-align:center;line-height:1;font-size:clamp(2.6rem,8vw,4.2rem);font-weight:900;letter-spacing:-.05em;margin:.65rem .25rem .08rem}
+.yc-progress strong{color:#b82e42!important;font-weight:950}
+.yc-progress span{color:#142344!important;font-weight:900}
+.yc-progress-desc{text-align:center;color:#536078!important;font-size:.79rem;line-height:1.3;min-height:2.5rem;padding:.15rem .45rem}
+.yc-tile-foot{text-align:center;color:#617089!important;font-size:.65rem;line-height:1.3;min-height:1.6rem;padding:.44rem .56rem 0}
+.st-key-home_daily_tile.st-key-home_daily_tile div[data-testid="stButton"]>button,
+.st-key-home_weekly_tile.st-key-home_weekly_tile div[data-testid="stButton"]>button{display:flex!important;width:calc(100% - 1.15rem)!important;min-width:0!important;max-width:none!important;height:2.65rem!important;min-height:2.65rem!important;margin:.3rem .57rem 0!important;padding:.3rem .3rem!important;align-items:center!important;justify-content:center!important;border-radius:12px!important;background:#b82e42!important;border:1px solid #922237!important;box-shadow:0 3px 0 #7e1d30!important;color:#fff!important}
+.st-key-home_daily_tile.st-key-home_daily_tile div[data-testid="stButton"]>button p,
+.st-key-home_weekly_tile.st-key-home_weekly_tile div[data-testid="stButton"]>button p{font-size:clamp(.83rem,2vw,.96rem)!important;line-height:1.1!important;color:#fff!important;font-family:inherit!important}
+.st-key-home_daily_tile button:hover,.st-key-home_weekly_tile button:hover{filter:brightness(1.07)}
+.yc-results-title{margin:.9rem 0 .35rem;font-weight:900;color:#142344!important;font-size:1.1rem}
+.yc-empty-results{border:1px solid #cbd5e1;border-radius:16px;background:#142344;padding:1.5rem;color:#f7f2ea!important;text-align:center;font-weight:700;font-size:.87rem}
+@media(max-width:640px){
+.yc-brand{font-size:clamp(1.28rem,5vw,1.85rem)}.yc-tagline{font-size:.61rem}
+.st-key-yc_header [data-testid="stHorizontalBlock"]{flex-wrap:wrap!important;gap:.32rem!important}
+.st-key-yc_header [data-testid="stColumn"]:first-child{flex:0 0 100%!important;width:100%!important;min-width:100%!important}
+.st-key-yc_header [data-testid="stColumn"]:not(:first-child){flex:1 1 29%!important;width:auto!important;min-width:0!important}
+.yc-card-head{font-size:1.2rem}.yc-progress{font-size:3.6rem}
+.st-key-yc_home_tiles [data-testid="stHorizontalBlock"]{gap:.7rem!important}
+}
+</style>""", unsafe_allow_html=True)
+
 initialize_state()
 initialize_daily_state()
 initialize_player_identity_state()
@@ -5191,7 +5376,6 @@ _remember_cookie_token = _browser_remember_cookie()
 _remember_cookie_restored = _restore_remembered_cookie_fast_path(_remember_cookie_token)
 if _remember_cookie_restored:
     # Skip the Components-v2 localStorage bridge entirely on the fast path.
-    # That avoids its browser -> Python state update and the extra script rerun.
     _remember_storage_state = {"token": "", "ready": True}
 else:
     _remember_storage_state = render_remember_storage_bridge()
@@ -5204,34 +5388,23 @@ if _pending_invite_code():
 if process_pending_group_invite():
     st.rerun()
 render_pending_remember_cookie_command()
-# Install near the top so dice taps stay visually anchored on mobile.
-# Dice taps are fragment-scoped in Phase 2K.5, so the old full-rerun scroll guard is no longer needed.
+# A small persistent Home action replaces the four tiny radio controls.
 st.markdown("<div id='app-top-anchor'></div>", unsafe_allow_html=True)
-st.markdown("<h1 class='top-title'>🎲 Yahtzee Coach</h1>", unsafe_allow_html=True)
-st.markdown("<div class='subtitle'>Hold Strategy Trainer</div>", unsafe_allow_html=True)
+with st.container(key="yc_header"):
+    branding, home_nav, practice_nav, player_nav = st.columns([4, 1.1, 1.35, 1.35], gap="small")
+    with branding:
+        st.markdown("<div class='yc-brand'>🎲 Yahtzee Coach</div><div class='yc-tagline'>Hold Strategy Trainer</div>", unsafe_allow_html=True)
+    with home_nav:
+        st.button("Home", key="home_nav", on_click=_set_app_mode, args=("Home",), use_container_width=True)
+    with practice_nav:
+        st.button("Practice", key="practice_nav", on_click=_set_app_mode, args=("Practice",), use_container_width=True)
+    with player_nav:
+        st.button("My Player", key="player_nav", on_click=_set_app_mode, args=("My Player",), use_container_width=True)
 
-mode = st.radio(
-    "Mode",
-    options=["Daily Challenge", "Weekly", "Practice", "My Player"],
-    horizontal=True,
-    key="app_mode",
-    label_visibility="collapsed",
-)
-if mode == "Practice":
-    player_note = "Unlimited hold-strategy practice"
-elif mode == "Weekly":
-    player_note = "Your weekly 13-round Yahtzee game"
-elif mode == "My Player":
-    player_note = "Your sprite · your all-time medals"
-    if not st.session_state.get("active_player_id"):
-        player_note = "Sign in from Daily Challenge to create your player"
-elif st.session_state.get("active_player_id"):
-    player_note = f"Today's Daily · {st.session_state.get('active_player_name')}"
-else:
-    player_note = "Today's Daily Challenge"
-st.markdown(f"<div class='mode-note'>{html.escape(player_note)}</div>", unsafe_allow_html=True)
-
-if mode == "Daily Challenge":
+mode = st.session_state.app_mode
+if mode == "Home":
+    render_challenge_hub()
+elif mode == "Daily Challenge":
     render_daily_mode()
 elif mode == "Weekly":
     render_weekly_mode()

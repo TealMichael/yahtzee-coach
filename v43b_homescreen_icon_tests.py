@@ -15,7 +15,7 @@ def run():
         ("Streamlit page keeps the custom dice icon", 'page_icon=APP_ICON_PATH' in app and 'APP_ICON_PATH = "apple_touch_icon.png"' in app),
         ("install-only metadata injection is gone", 'install_app_shell_metadata' not in app and 'apple-mobile-web-app-title' not in app),
         ("install-only navigation is gone", 'Add to Home Screen' not in app),
-        ("My Player remains a top-level destination beside Weekly", 'options=["Daily Challenge", "Weekly", "Practice", "My Player"]' in app),
+        ("My Player remains in top navigation and Weekly has a tile", 'st.button("My Player", key="player_nav"' in app and '_home_tile("Weekly Challenge"' in app),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:
