@@ -12,7 +12,7 @@ def _buttons(st):
     return [label for label, _ in st.buttons]
 
 
-def test_scorecard_confirmation_is_inline_with_selected_row():
+def test_scorecard_confirmation_is_near_selected_tile_row():
     st, store, scope, game = setup()
     dice = ui._visual_dice(game, scope)
     ui._reveal_first_roll(scope, game)
@@ -26,7 +26,7 @@ def test_scorecard_confirmation_is_inline_with_selected_row():
     buttons = _buttons(st)
     selected_index = buttons.index(category[0])
     confirm_index = next(i for i,label in enumerate(buttons) if label.startswith('Confirm '))
-    assert confirm_index == selected_index + 1, 'Confirm should appear directly after the selected category'
+    assert selected_index < confirm_index <= selected_index + 3, 'Confirm must follow the selected three-tile Upper row'
     assert not store.calls, 'Selecting or viewing a score does not make Supabase calls'
 
 
@@ -78,7 +78,7 @@ def test_player_instructions_short_and_saved_game_untouched():
 
 
 def test_mobile_header_and_yesterday_recap_preserved():
-    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.4"' in APP
+    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.5"' in APP
     assert 'if mode == "Home":' in APP
     assert 'home_nav = None' in APP
     assert 'st.button("Practice", key="practice_nav"' in APP

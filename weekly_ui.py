@@ -316,8 +316,69 @@ def _friends(groups):
             st.caption("Official scores only. Equal scores share a rank.")
 
 
+# Use exactly the short category labels shown on the Daily Challenge scorecard.
+# The actual scoring eligibility and point previews still come exclusively from
+# weekly_game.scoring_options (including Joker/forced-category rules).
+WEEKLY_DAILY_LABELS = (
+    "1s", "2s", "3s", "4s", "5s", "6s", "3K", "4K", "FH", "SS", "LS", "YTZ", "CH",
+)
+
+
+def _scorecard_tile_label(category, index, scores, options, revealed):
+    """Daily-style short label + saved score or preview; never predict hidden rolls."""
+    short = WEEKLY_DAILY_LABELS[index]
+    value = scores[category]
+    if value is not None:
+        return f"{short}  \n**{value}**", False, "filled"
+    if revealed and category in options:
+        return f"{short}  \n**+{options[category].points}**", True, "available"
+    # Daily's green OPEN text signifies unused categories, not an offered
+    # score. A game still requires Roll 1 before any box can be selected.
+    return f"{short}  \n**OPEN**", False, "open"
+
+
+def _render_weekly_tile_section(section, categories, indices, *, prefix, choice_key,
+                                options, scores, revealed, scope, game, current):
+    """Compact 3-across Upper and 4-across Lower layout from Daily's phone UI.
+
+    All score buttons are normal Streamlit widgets. Their callbacks only set a
+    local selected category, and the actual DB mutation is a separate Confirm.
+    The Confirm appears immediately after the selected tile's *row*, preventing
+    another 13-row scroll without risking a one-tap irreversible score.
+    """
+    count = 3 if section == "upper" else 4
+    with st.container(key=f"weekly_score_grid_{section}"):
+        st.markdown(f"<div class='weekly-score-section-heading'>{section.title()} section</div>",
+                    unsafe_allow_html=True)
+        for row_start in range(0, len(categories), count):
+            row_cats = categories[row_start:row_start+count]
+            with st.container(key=f"weekly_score_grid_{section}_row_{row_start // count}"):
+                columns = st.columns(count, gap="small")
+                for col_index, category in enumerate(row_cats):
+                    index = indices[row_start + col_index]
+                    label, enabled, status = _scorecard_tile_label(category, index, scores, options, revealed)
+                    with columns[col_index]:
+                        with st.container(key=f"weekly_score_tile_{index}_{status}"):
+                            st.button(label, key=f"{prefix}_category_{category}",
+                                      type="primary" if current == category else "secondary",
+                                      disabled=not enabled, use_container_width=True,
+                                      on_click=_choose_category, args=(choice_key, category),
+                                      help=("Select the category to preview a permanent score"
+                                            if enabled else "Already scored or roll first"))
+                if current in row_cats:
+                    category = current
+                    option = options[category]
+                    bonus = f" + {option.yahtzee_bonus} bonus" if option.yahtzee_bonus else ""
+                    with st.container(key="weekly_selected_score_action"):
+                        st.button(f"Confirm {option.points} points in {CATEGORY_LABELS[category]}{bonus}",
+                                  type="primary", use_container_width=True, key=f"{prefix}_confirm_score",
+                                  on_click=_queue,
+                                  args=(scope, action_request(game, {"kind":"score", "category":category})))
+                        st.caption("Only Confirm saves this score permanently.")
+
+
 def _scorecard_picker(game, scope, dice, revealed, prefix):
-    """All thirteen categories always visible; only legal open ones are tappable."""
+    """Daily-style, compact, tappable 13-category scorecard for Weekly."""
     state = game["state"]
     scores = dict(zip(CATEGORIES, state["scores"]))
     bonus_count = sum(r["yahtzee_bonus"] for r in state["rounds"]) // 100
@@ -331,47 +392,15 @@ def _scorecard_picker(game, scope, dice, revealed, prefix):
     with st.container(key="weekly_scorecard_interactive"):
         st.markdown(
             f"<div class='weekly-scorecard-heading'><span>Scorecard</span>"
-            f"<small>{sum(v is not None for v in scores.values())}/13 filled</small></div>",
+            f"<small>{sum(v is not None for v in scores.values())}/13 filled "
+            f"· Upper {totals['upper']}/63</small></div>",
             unsafe_allow_html=True)
-        for i, category in enumerate(CATEGORIES):
-            if i == 0 or i == 6:
-                st.markdown("<div class='weekly-score-section-heading'>" +
-                            ("Upper section" if i == 0 else "Lower section") + "</div>",
-                            unsafe_allow_html=True)
-            value = scores[category]
-            available = category in options
-            selected = current == category
-            if value is not None:
-                label, score, enabled = CATEGORY_LABELS[category] + " ✓", str(value), False
-            elif available:
-                label, score, enabled = CATEGORY_LABELS[category], "+" + str(options[category].points), True
-            else:
-                label, score, enabled = CATEGORY_LABELS[category], "—", False
-            with st.container(key=f"weekly_score_row_{i}"):
-                left, right = st.columns([3.7, 1], gap="small")
-                with left:
-                    st.button(label, key=f"{prefix}_category_{category}",
-                              type="primary" if selected else "secondary",
-                              disabled=not enabled, use_container_width=True,
-                              on_click=_choose_category, args=(choice_key, category),
-                              help=("Select this category" if enabled else
-                                    "Already scored or not currently available"))
-                with right:
-                    st.markdown(f"<div class='weekly-score-row-value'>{html.escape(score)}</div>",
-                                unsafe_allow_html=True)
-            if selected:
-                # Keep the irreversible confirmation exactly where the player tapped.
-                # Selection is local; this is the sole score mutation control.
-                with st.container(key="weekly_selected_score_action"):
-                    option = options[category]
-                    bonus = f" + {option.yahtzee_bonus} bonus" if option.yahtzee_bonus else ""
-                    st.button(
-                        f"Confirm {option.points} points in {CATEGORY_LABELS[category]}{bonus}",
-                        type="primary", use_container_width=True, key=f"{prefix}_confirm_score",
-                        on_click=_queue,
-                        args=(scope, action_request(game, {"kind":"score", "category":category}))
-                    )
-                    st.caption("Only Confirm saves this score permanently.")
+        _render_weekly_tile_section("upper", CATEGORIES[:6], range(6), prefix=prefix,
+                                    choice_key=choice_key, options=options, scores=scores,
+                                    revealed=revealed, scope=scope, game=game, current=current)
+        _render_weekly_tile_section("lower", CATEGORIES[6:], range(6,13), prefix=prefix,
+                                    choice_key=choice_key, options=options, scores=scores,
+                                    revealed=revealed, scope=scope, game=game, current=current)
         if not revealed:
             st.caption("Roll to see your scoring choices.")
         elif len(options) < sum(v is None for v in scores.values()):
@@ -683,6 +712,57 @@ def render_weekly(store, player_id):
             min-height:2.72rem!important;margin:0!important}
         .st-key-weekly_scorecard_interactive [data-testid="stCaptionContainer"] p{
             font-size:.76rem!important;line-height:1.24!important}
+    }
+    /* v44.0.5 — Daily's compact 3+4 scorecard language, as tappable native controls. */
+    .weekly-score-section-heading{background:transparent!important;letter-spacing:0!important;
+      text-transform:none!important;font-size:.85rem!important;margin:.3rem 0 .18rem!important;
+      padding:.1rem 0!important;color:#172746!important}
+    .st-key-weekly_scorecard_interactive{background:#fff!important;
+      border:1px solid #e0e2e6!important;padding:.7rem .65rem!important}
+    div[class*="st-key-weekly_score_grid_"] [data-testid="stHorizontalBlock"]{
+      flex-direction:row!important;flex-wrap:nowrap!important;align-items:stretch!important;
+      gap:.26rem!important;width:100%!important}
+    div[class*="st-key-weekly_score_grid_"] [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]{
+      flex:1 1 0!important;width:0!important;min-width:0!important;max-width:none!important}
+    div[class*="st-key-weekly_score_tile_"] [data-testid="stButton"]>button{
+      background:rgba(255,255,255,.92)!important;color:#142344!important;
+      border:1px solid #dadde2!important;border-radius:12px!important;
+      min-height:3.55rem!important;height:3.55rem!important;padding:.22rem .07rem!important;
+      width:100%!important;box-shadow:none!important;align-items:center!important;
+      justify-content:center!important;white-space:normal!important}
+    div[class*="st-key-weekly_score_tile_"] [data-testid="stButton"]>button p{
+      color:#69758b!important;font-size:.72rem!important;line-height:1.16!important;
+      text-align:center!important;margin:0!important}
+    div[class*="st-key-weekly_score_tile_"] [data-testid="stButton"]>button p strong{
+      font-size:1.05rem!important;font-weight:900!important;color:#142344!important}
+    div[class*="st-key-weekly_score_tile_"][class*="_open"] [data-testid="stButton"]>button p strong{
+      color:#16803b!important}
+    div[class*="st-key-weekly_score_tile_"][class*="_filled"] [data-testid="stButton"]>button{
+      background:#f5f6f8!important}
+    div[class*="st-key-weekly_score_tile_"] [data-testid="stButton"]>button:disabled{
+      cursor:default!important;opacity:1!important}
+    div[class*="st-key-weekly_score_tile_"] [data-testid="stButton"]>button:not(:disabled):hover{
+      background:#eef4ff!important;border-color:#709ce0!important}
+    div[class*="st-key-weekly_score_tile_"] [data-testid="stButton"]>button[kind="primary"]{
+      background:#fff2f4!important;border:2px solid #b82e42!important;
+      box-shadow:0 0 0 1px #b82e4240!important}
+    div[class*="st-key-weekly_score_grid_"] [data-testid="stVerticalBlock"]{
+      gap:.2rem!important}
+    .st-key-weekly_selected_score_action{margin:.2rem 0 .36rem!important}
+    .weekly-scorecard-heading{margin:0 0 .22rem!important}
+    @media(max-width:767px){
+      /* Higher specificity than the old outer play-layout mobile column stack. */
+      .st-key-weekly_play_layout div[class*="st-key-weekly_score_grid_"] [data-testid="stHorizontalBlock"]{
+        flex-wrap:nowrap!important;flex-direction:row!important;gap:.21rem!important}
+      .st-key-weekly_play_layout div[class*="st-key-weekly_score_grid_"] [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]{
+        flex:1 1 0!important;width:0!important;min-width:0!important}
+      .st-key-weekly_scorecard_interactive{padding:.62rem .52rem!important}
+      div[class*="st-key-weekly_score_tile_"] [data-testid="stButton"]>button{
+        min-height:3.2rem!important;height:3.2rem!important;border-radius:11px!important}
+      div[class*="st-key-weekly_score_tile_"] [data-testid="stButton"]>button p{
+        font-size:.67rem!important}
+      div[class*="st-key-weekly_score_tile_"] [data-testid="stButton"]>button p strong{
+        font-size:.98rem!important}
     }
     </style>""", unsafe_allow_html=True)
     st.markdown("<div class='weekly-page-title'>Weekly Yahtzee</div>", unsafe_allow_html=True)

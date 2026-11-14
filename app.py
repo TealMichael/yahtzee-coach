@@ -37,8 +37,8 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v44.0.4 Mobile Play Polish"
-APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.4"
+APP_RELEASE = "v44.0.5 Daily-Style Weekly Scorecard"
+APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.5"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
 YESTERDAY_RESULTS_STORAGE_PREFIX = "yc_yesterday_results_seen_v1"
@@ -5300,7 +5300,9 @@ def _home_yesterday_results() -> None:
 def _home_tile(title: str, icon: str, status: dict, *, which: str, target: str) -> None:
     with st.container(key=f"home_{which}_tile"):
         st.markdown(
-            f"<div class='yc-card-head'><span class='yc-tile-icon'>{icon}</span>{html.escape(title)}</div>"
+            f"<div class='yc-card-head'><span class='yc-tile-icon'>{icon}</span>"
+            f"<span class='yc-head-full'>{html.escape(title)}</span>"
+            f"<span class='yc-head-mobile'>{html.escape(title.split()[0])}</span></div>"
             f"<div class='yc-progress'><strong>{html.escape(status['value'])}</strong><span> / {html.escape(status['total'])}</span></div>"
             f"<div class='yc-progress-desc'>{html.escape(status['detail'])}</div>",
             unsafe_allow_html=True,
@@ -5386,6 +5388,42 @@ st.markdown("""
   flex:0 0 auto!important;width:auto!important;min-width:0!important}
 .st-key-yc_header.st-key-yc_header div[data-testid="stHorizontalBlock"] div[data-testid="stButton"]>button{
   height:2.35rem!important;min-height:2.35rem!important;padding:.2rem .65rem!important}
+}
+/* v44.0.5: Phone challenge tiles deliberately remain side-by-side, not stacked.
+   Streamlit wraps columns on narrow screens by default; scope the override to Home. */
+.yc-head-mobile{display:none}
+@media(max-width:767px){
+  .st-key-yc_home_tiles [data-testid="stHorizontalBlock"]{
+    display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;
+    align-items:stretch!important;gap:.48rem!important;width:100%!important}
+  .st-key-yc_home_tiles [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]{
+    flex:1 1 0!important;width:calc(50% - .24rem)!important;
+    max-width:calc(50% - .24rem)!important;min-width:0!important}
+  .st-key-home_daily_tile,.st-key-home_weekly_tile{
+    min-width:0!important;border-radius:15px!important;padding-bottom:.3rem!important}
+  .yc-card-head{font-size:clamp(.73rem,3.1vw,.96rem)!important;
+    padding:.67rem .12rem!important;letter-spacing:-.025em;white-space:nowrap}
+  .yc-head-full{display:inline}.yc-head-mobile{display:none}
+  .yc-tile-icon{margin-right:.17rem}
+  .yc-progress{font-size:clamp(2.25rem,9vw,3.35rem)!important;
+    margin:.5rem .08rem .02rem!important;letter-spacing:-.06em}
+  .yc-progress-desc{font-size:clamp(.64rem,2.4vw,.76rem)!important;
+    line-height:1.23!important;min-height:2.65rem!important;padding:.12rem .25rem!important}
+  .st-key-home_daily_tile.st-key-home_daily_tile div[data-testid="stButton"]>button,
+  .st-key-home_weekly_tile.st-key-home_weekly_tile div[data-testid="stButton"]>button{
+    margin:.12rem .3rem 0!important;width:calc(100% - .6rem)!important;
+    height:2.5rem!important;min-height:2.5rem!important;padding:.15rem!important;
+    border-radius:10px!important}
+  .st-key-home_daily_tile.st-key-home_daily_tile div[data-testid="stButton"]>button p,
+  .st-key-home_weekly_tile.st-key-home_weekly_tile div[data-testid="stButton"]>button p{
+    font-size:clamp(.69rem,2.5vw,.83rem)!important;line-height:1.14!important}
+  .yc-tile-foot{font-size:.59rem!important;line-height:1.2!important;
+    padding:.32rem .25rem 0!important;min-height:2rem!important}
+}
+@media(max-width:360px){
+  .yc-progress{font-size:2.18rem!important}
+  .yc-tile-foot{display:none!important}
+  .yc-progress-desc{min-height:3.15rem!important}
 }
 </style>""", unsafe_allow_html=True)
 
