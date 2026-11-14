@@ -44,8 +44,8 @@ def test_scorecard_retains_zero_scores_as_filled():
 
 
 def test_mobile_sticky_summary_reduced_motion_and_version():
-    assert 'position:sticky!important' in SOURCE
+    assert 'position:fixed!important' in SOURCE
     assert 'prefers-reduced-motion:reduce' in SOURCE
     assert 'flex:0 0 100%!important' in SOURCE
     assert 'weekly_scorecard_interactive' in SOURCE
-    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.3"' in APP
+    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.4"' in APP

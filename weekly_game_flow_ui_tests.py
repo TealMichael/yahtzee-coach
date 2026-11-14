@@ -177,7 +177,7 @@ def test_tappable_scorecard_does_not_save_until_confirmation():
     st.buttons.clear()
     ui._scorecard_picker(game,scope,shown,True,prefix)
     confirm=next((label,k) for label,k in st.buttons if label.startswith('Confirm '))
-    assert confirm[1]['disabled'] is False
+    assert confirm[1].get('disabled', False) is False
     confirm[1]['on_click'](*confirm[1]['args'])
     assert store.calls==[]
     assert ui._send_pending(store,scope)
@@ -200,6 +200,6 @@ def test_source_guards_performance_and_mobile_visibility():
     assert 'history_key not in st.session_state' in source
     assert 'entry["data"]' in source
     assert 'st.session_state.get(f"{scope}_dashboard_cache")' in source
-    assert 'position:sticky!important' in source
+    assert 'position:fixed!important' in source
     assert 'weekly_scorecard_interactive' in source
-    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.3"' in Path(__file__).with_name('app.py').read_text()
+    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.4"' in Path(__file__).with_name('app.py').read_text()

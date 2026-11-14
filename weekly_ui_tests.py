@@ -80,12 +80,12 @@ class WeeklyUiTests(unittest.TestCase):
     def test_score_requires_selection_and_zero_is_explicit(self):
         self.start()
         self.reveal_first_roll()
-        self.assertTrue(next(b for b in self.at.button if b.label == 'Confirm score').disabled)
+        self.assertFalse(any(b.label.startswith('Confirm ') for b in self.at.button))
         game = self.qa.alice_store.dashboard(self.qa.wk)['official']
         state = game['state']
         zero = next(o for o in scoring_options(state['rolls'][-1]['dice'],dict(zip(CATEGORIES,state['scores']))) if o.points==0)
         next(b for b in self.at.button if b.key.endswith('_category_' + zero.category)).click().run()
-        self.assertIn('Selected:',visible(self.at))
+        self.assertIn('Only Confirm saves',visible(self.at))
         next(b for b in self.at.button if b.label.startswith('Confirm 0 points')).click().run()
         state = self.qa.alice_store.dashboard(self.qa.wk)['official']['state']
         self.assertEqual(state['scores'][CATEGORIES.index(zero.category)],0)

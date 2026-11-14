@@ -107,6 +107,9 @@ def _send_pending(store, scope):
             game = store.act(pending["game_id"], expected_revision=pending["expected_revision"],
                              request_id=pending["request_id"], action=pending["action"])
             _replace_cached_game(scope, game)
+            if pending["action"].get("kind") == "score" and not game.get("completed_at"):
+                # Return to the next round after the authoritative save succeeds.
+                st.session_state[f"{scope}_scroll_after_score"] = True
         elif pending["operation"] == "start":
             game = store.start_official(pending["week_id"], request_id=pending["request_id"])
             _replace_cached_game(scope, game)
@@ -356,21 +359,23 @@ def _scorecard_picker(game, scope, dice, revealed, prefix):
                 with right:
                     st.markdown(f"<div class='weekly-score-row-value'>{html.escape(score)}</div>",
                                 unsafe_allow_html=True)
+            if selected:
+                # Keep the irreversible confirmation exactly where the player tapped.
+                # Selection is local; this is the sole score mutation control.
+                with st.container(key="weekly_selected_score_action"):
+                    option = options[category]
+                    bonus = f" + {option.yahtzee_bonus} bonus" if option.yahtzee_bonus else ""
+                    st.button(
+                        f"Confirm {option.points} points in {CATEGORY_LABELS[category]}{bonus}",
+                        type="primary", use_container_width=True, key=f"{prefix}_confirm_score",
+                        on_click=_queue,
+                        args=(scope, action_request(game, {"kind":"score", "category":category}))
+                    )
+                    st.caption("Only Confirm saves this score permanently.")
         if not revealed:
-            st.caption("Roll the dice to see your available scoring choices.")
+            st.caption("Roll to see your scoring choices.")
         elif len(options) < sum(v is None for v in scores.values()):
             st.caption("Joker rule: only eligible categories can be chosen.")
-        if current:
-            option = options[current]
-            st.caption(f"Selected: {CATEGORY_LABELS[current]} · {option.points} points" +
-                       (f" + {option.yahtzee_bonus} Yahtzee bonus" if option.yahtzee_bonus else ""))
-        st.button(
-            "Confirm " + (f"{options[current].points} points in {CATEGORY_LABELS[current]}" if current else "score"),
-            disabled=current is None, type="primary", use_container_width=True,
-            key=f"{prefix}_confirm_score", on_click=_queue,
-            args=(scope, action_request(game, {"kind":"score", "category":current}))
-        )
-        st.caption("Confirming a score is permanent. Choosing a row alone does not save it.")
         st.markdown(
             f"<div class='weekly-score-detail'><span>Upper section</span><b>{totals['upper']}/63</b></div>"
             f"<div class='weekly-score-detail'><span>Upper bonus</span><b>+{totals['upper_bonus']}</b></div>"
@@ -402,19 +407,22 @@ def _play(game, scope):
     with st.container(key="weekly_play_layout"):
         play_col, card_col = st.columns([1.07, 0.93], gap="medium")
         with play_col:
-            st.markdown(f"### Round {rounds_done + 1} of 13 · " +
-                        ("Ready for roll 1" if not revealed else f"Roll {roll_number} of 3"))
-            st.progress(rounds_done / 13, text=f"{rounds_done} rounds saved · {game['total_score']} points")
+            phase = "Ready to roll" if not revealed else f"Roll {roll_number} of 3"
+            st.markdown(
+                f"<div class='weekly-play-head'><strong>Round {rounds_done + 1} of 13</strong>"
+                f"<span>{phase}</span><b>{game['total_score']} pts</b></div>",
+                unsafe_allow_html=True)
+            st.progress(rounds_done / 13)
             if not revealed:
-                st.caption("Tap Roll Dice to begin this round. This reveals your already-saved first roll.")
+                st.caption("Tap Roll Dice to start.")
                 with st.container(key="weekly_unrevealed_dice"):
                     st.markdown('<div class="weekly-five-unrolled">' + '<div>?</div>'*5 + '</div>',
                                 unsafe_allow_html=True)
                 st.button("🎲 Roll Dice · 1 of 3", type="primary", use_container_width=True,
                           key=f"{prefix}_first_roll", on_click=_reveal_first_roll, args=(scope, game))
             else:
-                st.caption("Tap dice to hold or release them." if roll_number < 3 else
-                           "Final roll. Choose a scoring category on the right or below.")
+                st.caption("Tap dice to hold." if roll_number < 3 else
+                           "Final roll. Choose a category.")
                 with st.container(key="weekly_dice"):
                     # Same st.pills widget, symbols and unique invisible position IDs as Daily.
                     options = _dice_pill_options(dice)
@@ -432,16 +440,64 @@ def _play(game, scope):
                     st.markdown(_roll_animation_css(animate_indices), unsafe_allow_html=True)
                 held_indices = _selected_die_indices(dice, chosen)
                 if roll_number < 3:
-                    st.caption(f"Holding {len(held_indices)} of 5 dice · selection saved when you roll")
+                    st.caption(f"Holding {len(held_indices)} of 5 dice")
                     st.button(f"🎲 Roll Dice · {roll_number + 1} of 3", type="primary",
                               use_container_width=True, key=f"{prefix}_roll",
                               disabled=len(held_indices) == 5,
                               on_click=_queue_roll, args=(scope, game, dice, pill_key))
                     if len(held_indices) == 5:
                         st.caption("Release a die to reroll, or score this hand.")
-                st.caption("Your rolls and scored rounds are saved. Dice selections update locally.")
+                # Game actions are still saved server-side; local selection needs no explanation.
         with card_col:
             _scorecard_picker(game, scope, dice, revealed, prefix)
+    _mobile_summary_visibility_watcher(st.session_state.pop(f"{scope}_scroll_after_score", False))
+
+
+def _mobile_summary_visibility_watcher(scroll_after_score=False):
+    """Mobile-only scroll affordance; DOM observer never touches game or DB state.
+
+    Streamlit renders this 0-height component after the play controls. No network,
+    session state, or click interception. If a browser disallows parent access,
+    the full in-flow round header continues to provide the same information.
+    """
+    components = getattr(st, "components", None)
+    if components is None or not hasattr(components, "v1"):
+        return  # Also keeps the isolated test shim fully offline.
+    scroll_command = "true" if scroll_after_score else "false"
+    components.v1.html(r"""
+    <script>
+    (() => {
+      try {
+        const win = window.parent, doc = win.document;
+        if (typeof win.__ycWeeklyMiniCleanup === 'function') win.__ycWeeklyMiniCleanup();
+        const bar = doc.querySelector('.st-key-weekly_mobile_summary');
+        const dice = doc.querySelector('.st-key-weekly_dice') ||
+                     doc.querySelector('.st-key-weekly_unrevealed_dice');
+        if (!bar || !dice) return;
+        const update = () => {
+          const edge = dice.getBoundingClientRect().bottom;
+          const mobile = win.matchMedia('(max-width:767px)').matches;
+          bar.classList.toggle('yc-mini-active', mobile && edge < 120);
+        };
+        win.addEventListener('scroll', update, {passive:true});
+        win.addEventListener('resize', update, {passive:true});
+        const obs = new MutationObserver(update);
+        obs.observe(dice, {childList:true,subtree:true});
+        win.__ycWeeklyMiniCleanup = () => {
+          win.removeEventListener('scroll', update);
+          win.removeEventListener('resize', update);
+          obs.disconnect();
+        };
+        update();
+        if (SCROLL_AFTER_SCORE) {
+          win.requestAnimationFrame(() => win.requestAnimationFrame(() => {
+            const head = doc.querySelector('.weekly-play-head');
+            if (head) head.scrollIntoView({behavior:'smooth', block:'start'});
+          }));
+        }
+      } catch (_) { /* Full round header remains visible without the mini bar. */ }
+    })();
+    </script>""".replace("SCROLL_AFTER_SCORE", scroll_command), height=0, scrolling=False)
 
 
 @st.fragment
@@ -509,10 +565,13 @@ def render_weekly(store, player_id):
         100%{content:'';opacity:0}
     }
     @media(max-width:767px){
-        .st-key-weekly_mobile_summary{display:block!important;position:sticky!important;
-            top:3.1rem;z-index:45;background:#f8f3ea;border:1px solid #dfd4c5;
-            border-radius:11px;padding:.42rem .72rem;margin:.35rem 0 .65rem;
+        .st-key-weekly_mobile_summary{display:none!important;position:fixed!important;
+            top:6.1rem;left:50%;transform:translateX(-50%);z-index:45;
+            width:min(calc(100vw - 1.15rem),750px);max-width:750px;
+            background:#f8f3ea;border:1px solid #dfd4c5;
+            border-radius:11px;padding:.3rem .6rem;margin:0!important;
             box-shadow:0 2px 8px #1423441a}
+        .st-key-weekly_mobile_summary.yc-mini-active{display:block!important}
         .weekly-summary-line{display:flex;justify-content:space-between;align-items:center;
             gap:.5rem;white-space:nowrap;font-size:clamp(.73rem,2.6vw,.88rem);color:#142344}
         .weekly-summary-line strong{font-size:.98rem;color:#b82e42}
@@ -582,8 +641,51 @@ def render_weekly(store, player_id):
         div[class*="st-key-weekly_score_row_"] div[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:last-child{
             flex:0 0 21%!important;width:21%!important}
     }
+
+    /* v44.0.4: compact reading and touch targets; unchanged game semantics. */
+    .weekly-page-title{font-size:clamp(1.3rem,2.6vw,1.6rem);font-weight:900;
+        line-height:1.13;color:#142344;letter-spacing:-.03em;margin:.05rem 0 .25rem}
+    .weekly-play-head{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;
+        color:#142344;margin:0 0 .15rem;line-height:1.2}
+    .weekly-play-head strong{font-weight:900;font-size:1.13rem}
+    .weekly-play-head span{color:#627087;font-size:.85rem;flex:1;white-space:nowrap}
+    .weekly-play-head b{color:#b82e42;font-size:.97rem;white-space:nowrap}
+    .st-key-weekly_selected_score_action{padding:.3rem .35rem .4rem;
+        background:#fff2f3;border:1px solid #e9b3bd;border-radius:9px;margin:.12rem 0 .28rem}
+    .st-key-weekly_selected_score_action [data-testid="stVerticalBlock"]{gap:.13rem!important}
+    .st-key-weekly_selected_score_action div[data-testid="stButton"]>button{
+        min-height:2.45rem!important;height:auto!important;border-radius:8px!important;
+        background:#b82e42!important;color:#fff!important}
+    .st-key-weekly_selected_score_action div[data-testid="stButton"]>button p{
+        color:#fff!important;font-weight:800!important;font-size:.84rem!important}
+    .st-key-weekly_selected_score_action [data-testid="stCaptionContainer"] p{font-size:.73rem!important}
+    div[class*="st-key-weekly_score_row_"] [data-testid="stVerticalBlock"]{
+        gap:0!important;row-gap:0!important}
+    div[class*="st-key-weekly_score_row_"] [data-testid="stHorizontalBlock"]{
+        gap:.1rem!important;align-items:center!important;min-height:2.7rem!important}
+    div[class*="st-key-weekly_score_row_"] div[data-testid="stButton"]>button{
+        min-height:2.65rem!important;height:2.65rem!important;
+        font-size:.87rem!important;line-height:1.2!important;cursor:pointer}
+    div[class*="st-key-weekly_score_row_"] div[data-testid="stButton"]>button p{
+        font-size:.87rem!important}
+    div[class*="st-key-weekly_score_row_"] .weekly-score-row-value{
+        font-size:.9rem!important;padding:.4rem .2rem!important}
+    @media(max-width:767px){
+        .weekly-page-title{font-size:1.35rem;margin:0 0 .12rem}
+        .weekly-play-head{margin:0 0 .1rem}
+        .weekly-play-head strong{font-size:1.08rem}
+        .weekly-play-head span{font-size:.77rem}
+        .st-key-weekly_play_layout [data-testid="stVerticalBlock"]{gap:.45rem!important}
+        .st-key-weekly_scorecard_interactive{padding:.58rem .52rem .68rem!important}
+        .weekly-scorecard-heading{font-size:1.03rem;margin-bottom:.25rem}
+        .weekly-score-section-heading{padding:.27rem .4rem;margin:.26rem 0 .1rem}
+        div[class*="st-key-weekly_score_row_"] div[data-testid="stHorizontalBlock"]{
+            min-height:2.72rem!important;margin:0!important}
+        .st-key-weekly_scorecard_interactive [data-testid="stCaptionContainer"] p{
+            font-size:.76rem!important;line-height:1.24!important}
+    }
     </style>""", unsafe_allow_html=True)
-    st.markdown("## Weekly Yahtzee")
+    st.markdown("<div class='weekly-page-title'>Weekly Yahtzee</div>", unsafe_allow_html=True)
     # Never reuse a cached dashboard for a different signed-in device session.
     scope = f"weekly_{player_id}_{store._actor.session_id}"
     try:
@@ -600,6 +702,7 @@ def render_weekly(store, player_id):
         if st.session_state.get(selected_key) not in weeks:
             st.session_state[selected_key] = current
         week_id = st.selectbox("Challenge week", weeks, key=selected_key,
+                               label_visibility="collapsed",
                                format_func=lambda w: week_label(w) + (" · This week" if w == current else ""))
         if len(history) == 52 or older:
             if st.button("Load older weeks", key=f"{scope}_history"):
@@ -620,7 +723,7 @@ def render_weekly(store, player_id):
         start = datetime.fromisoformat(dashboard["starts_at"].replace("Z", "+00:00"))
         is_open = start <= now < end
         official, replay = dashboard["official"], dashboard["replay"]
-        st.caption(f"Closes Monday, {end.astimezone(ZoneInfo('America/New_York')):%b %d} at 12:00 a.m. Eastern. Unfinished games receive no official score.")
+        st.caption(f"Closes {end.astimezone(ZoneInfo('America/New_York')):%b %d}, midnight Eastern · Finish all 13 rounds to count.")
         if official is None:
             st.write("One official game. Thirteen rounds. The same hidden dice opportunities for everyone, with your choices deciding the score.")
             st.caption("No coaching during your official game. After finishing, see friend standings and replay this week's dice for practice.")
@@ -630,7 +733,6 @@ def render_weekly(store, player_id):
                 st.info("This week is closed.")
         elif official["completed_at"] is None:
             if is_open:
-                st.caption("Official game · one attempt")
                 _play(official, scope)
             else:
                 st.info("This official game expired unfinished. No score was entered in the standings.")

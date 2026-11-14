@@ -37,8 +37,8 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v44.0.3 Weekly Game Flow"
-APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.3"
+APP_RELEASE = "v44.0.4 Mobile Play Polish"
+APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.4"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
 YESTERDAY_RESULTS_STORAGE_PREFIX = "yc_yesterday_results_seen_v1"
@@ -5257,13 +5257,12 @@ def _home_weekly_status() -> dict:
 
 def _home_yesterday_results() -> None:
     """Read-only stage. Do not mark the once-per-day Daily ceremony as viewed."""
-    st.markdown("<div class='yc-results-title'>🏆 Yesterday's Results</div>", unsafe_allow_html=True)
     yesterday = _previous_daily_date_key(st.session_state.daily_date_key)
     try:
         daily = _home_registered_daily(yesterday)
         groups = _load_player_groups()
         if not daily or not groups:
-            st.markdown("<div class='yc-empty-results'>Yesterday's friend podium appears here when results are available.</div>", unsafe_allow_html=True)
+            st.markdown("<div class='yc-results-title'>🏆 Yesterday's Results</div><div class='yc-empty-results'>No friend podium is available yet. Your saved results remain in Daily Challenge.</div>", unsafe_allow_html=True)
             return
         snapshots = {}
         eligible = []
@@ -5276,7 +5275,7 @@ def _home_yesterday_results() -> None:
                 eligible.append(group)
                 snapshots[group.group_id] = snapshot
         if not eligible:
-            st.markdown("<div class='yc-empty-results'>No completed friend standings are available for yesterday yet.</div>", unsafe_allow_html=True)
+            st.markdown("<div class='yc-results-title'>🏆 Yesterday's Results</div><div class='yc-empty-results'>No completed friend standings are available for yesterday yet.</div>", unsafe_allow_html=True)
             return
         active = render_group_selector(eligible, key="home_yesterday_group_selector")
         board = [dict(row) for row in snapshots[active.group_id]["leaderboard"]]
@@ -5295,7 +5294,7 @@ def _home_yesterday_results() -> None:
         components.html(picture, height=560, scrolling=False)
         st.caption("Your original Daily awards and full results remain available in Daily Challenge.")
     except Exception:
-        st.markdown("<div class='yc-empty-results'>Yesterday's results couldn't load right now. Your saved medals and history are unchanged.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='yc-results-title'>🏆 Yesterday's Results</div><div class='yc-empty-results'>Yesterday's results couldn't load right now. Your saved medals and history are unchanged.</div>", unsafe_allow_html=True)
 
 
 def _home_tile(title: str, icon: str, status: dict, *, which: str, target: str) -> None:
@@ -5359,6 +5358,17 @@ st.markdown("""
 .st-key-home_daily_tile button:hover,.st-key-home_weekly_tile button:hover{filter:brightness(1.07)}
 .yc-results-title{margin:.9rem 0 .35rem;font-weight:900;color:#142344!important;font-size:1.1rem}
 .yc-empty-results{border:1px solid #cbd5e1;border-radius:16px;background:#142344;padding:1.5rem;color:#f7f2ea!important;text-align:center;font-weight:700;font-size:.87rem}
+@media(max-width:767px){
+/* Streamlit's default phone header/blocks add excess top padding. */
+[data-testid="stAppViewBlockContainer"], .main .block-container {padding-top:.18rem!important}
+.st-key-yc_header [data-testid="stVerticalBlock"]{gap:0!important}
+.st-key-yc_header{margin-bottom:.2rem!important}
+.st-key-yc_header div[data-testid="stButton"]>button{
+  border:0!important;box-shadow:none!important;background:transparent!important;
+  padding:.12rem .2rem!important;min-height:1.75rem!important;height:1.75rem!important;
+  color:#142344!important}
+.st-key-yc_header div[data-testid="stButton"]>button p{font-size:.8rem!important;font-weight:700!important}
+}
 @media(max-width:640px){
 .yc-brand{font-size:clamp(1.28rem,5vw,1.85rem)}.yc-tagline{font-size:.61rem}
 .st-key-yc_header [data-testid="stHorizontalBlock"]{flex-wrap:wrap!important;gap:.32rem!important}
@@ -5366,6 +5376,16 @@ st.markdown("""
 .st-key-yc_header [data-testid="stColumn"]:not(:first-child){flex:1 1 29%!important;width:auto!important;min-width:0!important}
 .yc-card-head{font-size:1.2rem}.yc-progress{font-size:3.6rem}
 .st-key-yc_home_tiles [data-testid="stHorizontalBlock"]{gap:.7rem!important}
+.st-key-yc_header.st-key-yc_header div[data-testid="stHorizontalBlock"] div[data-testid="stButton"]>button{
+  border:0!important;background:transparent!important;box-shadow:none!important;
+  min-height:1.75rem!important;height:1.75rem!important;border-radius:7px!important;
+  padding:.1rem!important}
+.st-key-yc_header.st-key-yc_header [data-testid="stHorizontalBlock"]{
+  row-gap:0!important;column-gap:.12rem!important;justify-content:flex-end!important}
+.st-key-yc_header.st-key-yc_header [data-testid="stColumn"]:not(:first-child){
+  flex:0 0 auto!important;width:auto!important;min-width:0!important}
+.st-key-yc_header.st-key-yc_header div[data-testid="stHorizontalBlock"] div[data-testid="stButton"]>button{
+  height:2.35rem!important;min-height:2.35rem!important;padding:.2rem .65rem!important}
 }
 </style>""", unsafe_allow_html=True)
 
@@ -5390,18 +5410,23 @@ if process_pending_group_invite():
 render_pending_remember_cookie_command()
 # A small persistent Home action replaces the four tiny radio controls.
 st.markdown("<div id='app-top-anchor'></div>", unsafe_allow_html=True)
+mode = st.session_state.app_mode
 with st.container(key="yc_header"):
-    branding, home_nav, practice_nav, player_nav = st.columns([4, 1.1, 1.35, 1.35], gap="small")
+    if mode == "Home":
+        branding, practice_nav, player_nav = st.columns([4.8, 1.3, 1.4], gap="small")
+        home_nav = None
+    else:
+        branding, home_nav, practice_nav, player_nav = st.columns([4, 1.1, 1.35, 1.35], gap="small")
     with branding:
         st.markdown("<div class='yc-brand'>🎲 Yahtzee Coach</div><div class='yc-tagline'>Hold Strategy Trainer</div>", unsafe_allow_html=True)
-    with home_nav:
-        st.button("Home", key="home_nav", on_click=_set_app_mode, args=("Home",), use_container_width=True)
+    if home_nav is not None:
+        with home_nav:
+            st.button("Home", key="home_nav", on_click=_set_app_mode, args=("Home",), use_container_width=True)
     with practice_nav:
         st.button("Practice", key="practice_nav", on_click=_set_app_mode, args=("Practice",), use_container_width=True)
     with player_nav:
         st.button("My Player", key="player_nav", on_click=_set_app_mode, args=("My Player",), use_container_width=True)
 
-mode = st.session_state.app_mode
 if mode == "Home":
     render_challenge_hub()
 elif mode == "Daily Challenge":
