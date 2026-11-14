@@ -37,8 +37,8 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v44.0.2 Weekly Playability Polish"
-APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.2"
+APP_RELEASE = "v44.0.3 Weekly Game Flow"
+APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.3"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
 YESTERDAY_RESULTS_STORAGE_PREFIX = "yc_yesterday_results_seen_v1"

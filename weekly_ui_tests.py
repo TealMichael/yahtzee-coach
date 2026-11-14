@@ -33,14 +33,20 @@ class WeeklyUiTests(unittest.TestCase):
         return self.qa.alice_store.dashboard(self.qa.wk)['official']
 
     def score(self):
-        box = next(x for x in self.at.selectbox if x.label == 'Scoring category')
+        self.reveal_first_roll()
         game = self.qa.alice_store.dashboard(self.qa.wk)['official']
         replay = self.qa.alice_store.dashboard(self.qa.wk)['replay']
         if replay and replay['completed_at'] is None: game = replay
         state = game['state']
         category = scoring_options(state['rolls'][-1]['dice'],dict(zip(CATEGORIES,state['scores'])))[0].category
-        box.select(category).run()
-        button(self.at,'Score this round').click().run()
+        next(b for b in self.at.button if b.key.endswith('_category_' + category)).click().run()
+        next(b for b in self.at.button if b.label.startswith('Confirm ') and not b.disabled).click().run()
+        self.assertFalse(self.at.exception)
+
+    def reveal_first_roll(self):
+        first = [b for b in self.at.button if 'Roll Dice · 1 of 3' in b.label]
+        if first:
+            first[0].click().run()
         self.assertFalse(self.at.exception)
 
     def test_intro_shows_only_friend_count(self):
@@ -50,42 +56,37 @@ class WeeklyUiTests(unittest.TestCase):
         self.assertNotIn('<th>Rank</th>',text)
         self.assertTrue(button(self.at,'Start Official Game'))
 
-    def test_holds_persist_and_resume_in_fresh_ui(self):
+    def test_dice_taps_are_local_and_saved_only_on_reroll(self):
         game = self.start()
-        dice_button = next(b for b in self.at.button if b.key.endswith('_die_1'))
-        dice_button.click().run()
-        saved = self.qa.alice_store.dashboard(self.qa.wk)['official']
-        self.assertEqual(saved['state']['held'],[game['state']['rolls'][-1]['dice'][1]])
-        # Fresh Streamlit session over the same saved database and actor.
-        script = f'''from weekly_store import SupabaseWeeklyStore, WeeklyActor
-from weekly_postgres_tests import PgClient
-from weekly_ui import render_weekly
-store = SupabaseWeeklyStore(PgClient({self.qa.uri!r}), WeeklyActor({self.qa.alice.player_id!r},{self.qa.alice.session_id!r},{self.qa.alice.token_hash!r}))
-render_weekly(store, {self.qa.alice.player_id!r})'''
-        fresh = AppTest.from_string(script,default_timeout=30).run()
-        self.assertFalse(fresh.exception)
-        self.assertIn('Held: '+str(saved['state']['held'][0]),visible(fresh))
-        button(fresh,'Roll remaining dice').click().run()
-        self.assertEqual(self.qa.alice_store.dashboard(self.qa.wk)['official']['revision'],2)
+        self.reveal_first_roll()
+        # A first-roll reveal is visual only, not an extra game action.
+        self.assertEqual(self.qa.alice_store.dashboard(self.qa.wk)['official']['revision'], 0)
+        self.assertFalse(self.at.exception)
+        self.assertTrue(any('Roll Dice · 2 of 3' in b.label for b in self.at.button))
+        # Duplicate-die click/hold behavior is covered by the offline UI test,
+        # because AppTest versions differ in their st.pills widget support.
+        button(self.at,'🎲 Roll Dice · 2 of 3').click().run()
+        self.assertFalse(self.at.exception)
+        self.assertEqual(self.qa.alice_store.dashboard(self.qa.wk)['official']['revision'],1)
 
     def test_third_roll_disables_holds_and_reroll(self):
         self.start()
-        button(self.at,'Roll remaining dice').click().run()
-        button(self.at,'Roll remaining dice').click().run()
-        self.assertNotIn('Roll remaining dice',[b.label for b in self.at.button])
-        self.assertTrue(all(b.disabled for b in self.at.button if '_die_' in b.key))
+        self.reveal_first_roll()
+        button(self.at,'🎲 Roll Dice · 2 of 3').click().run()
+        button(self.at,'🎲 Roll Dice · 3 of 3').click().run()
+        self.assertFalse(any('Roll Dice · 4 of 3' in b.label for b in self.at.button))
         self.assertIn('Final roll',visible(self.at))
 
     def test_score_requires_selection_and_zero_is_explicit(self):
         self.start()
-        self.assertTrue(button(self.at,'Score this round').disabled)
-        box = next(x for x in self.at.selectbox if x.label == 'Scoring category')
+        self.reveal_first_roll()
+        self.assertTrue(next(b for b in self.at.button if b.label == 'Confirm score').disabled)
         game = self.qa.alice_store.dashboard(self.qa.wk)['official']
         state = game['state']
         zero = next(o for o in scoring_options(state['rolls'][-1]['dice'],dict(zip(CATEGORIES,state['scores']))) if o.points==0)
-        box.select(zero.category).run()
-        self.assertIn('Score 0 in',visible(self.at))
-        button(self.at,'Score this round').click().run()
+        next(b for b in self.at.button if b.key.endswith('_category_' + zero.category)).click().run()
+        self.assertIn('Selected:',visible(self.at))
+        next(b for b in self.at.button if b.label.startswith('Confirm 0 points')).click().run()
         state = self.qa.alice_store.dashboard(self.qa.wk)['official']['state']
         self.assertEqual(state['scores'][CATEGORIES.index(zero.category)],0)
         self.assertIn('Round 2 of 13',visible(self.at))
@@ -97,7 +98,7 @@ render_weekly(store, {self.qa.alice.player_id!r})'''
         self.assertIn('Official Score (locked)',text)
         self.assertIn('Bob',text)
         self.assertIn('<th>Rank</th>',text)
-        self.assertNotIn('Scoring category',[x.label for x in self.at.selectbox])
+        self.assertFalse(any(x.label == 'Scoring category' for x in self.at.selectbox))
         self.assertTrue(button(self.at,"Replay This Week's Dice"))
         self.assertEqual(len(self.qa.alice_store.dashboard(self.qa.wk)['official']['state']['rounds']),13)
 
@@ -113,11 +114,12 @@ render_weekly(store, {self.qa.alice.player_id!r})'''
     def test_lost_commit_response_retries_exact_request_once(self):
         self.start()
         self.at.session_state['qa_lose_response'] = True
-        button(self.at,'Roll remaining dice').click().run()
+        self.reveal_first_roll()
+        button(self.at,'🎲 Roll Dice · 2 of 3').click().run()
         self.assertIn("save wasn't confirmed",visible(self.at))
         saved = self.qa.alice_store.dashboard(self.qa.wk)['official']
         self.assertEqual(saved['revision'],1)
-        self.assertNotIn('Roll remaining dice',[b.label for b in self.at.button])
+        self.assertFalse(any('Roll Dice · 2 of 3' in b.label for b in self.at.button))
         button(self.at,'Retry save').click().run()
         self.assertEqual(self.qa.alice_store.dashboard(self.qa.wk)['official'],saved)
         self.assertIn('Roll 2 of 3',visible(self.at))
@@ -125,7 +127,8 @@ render_weekly(store, {self.qa.alice.player_id!r})'''
     def test_stale_tab_click_loads_saved_game_without_second_roll(self):
         game = self.start()
         newer = self.qa.act(game,{'kind':'reroll'})
-        button(self.at,'Roll remaining dice').click().run()
+        self.reveal_first_roll()
+        button(self.at,'🎲 Roll Dice · 2 of 3').click().run()
         self.assertIn('another tab',visible(self.at))
         self.assertEqual(self.qa.alice_store.dashboard(self.qa.wk)['official'],newer)
 
@@ -134,7 +137,7 @@ render_weekly(store, {self.qa.alice.player_id!r})'''
         self.at.run()
         self.assertIn('Bob',visible(self.at))
         self.qa.admin.execute('update public.player_sessions set revoked_at=clock_timestamp() where session_id=%s',(self.qa.alice.session_id,))
-        self.at.run()
+        next(b for b in self.at.button if b.label.startswith('Refresh saved game')).click().run()
         self.assertFalse(self.at.exception)
         self.assertIn('sign-in expired',visible(self.at))
         self.assertNotIn('Bob',visible(self.at))
@@ -144,7 +147,7 @@ render_weekly(store, {self.qa.alice.player_id!r})'''
         self.qa.finish(self.qa.start())
         self.at.run()
         self.qa.admin.execute('delete from public.group_members where player_id=%s',(self.qa.alice.player_id,))
-        button(self.at,'Refresh saved game').click().run()
+        next(b for b in self.at.button if b.label.startswith('Refresh saved game')).click().run()
         self.assertNotIn('Bob',visible(self.at))
         self.assertIn('Join or create a friend group',visible(self.at))
 
@@ -154,8 +157,8 @@ render_weekly(store, {self.qa.alice.player_id!r})'''
         self.at.run()
         self.assertIn('expired unfinished',visible(self.at))
         self.assertNotIn('Bob',visible(self.at))
-        self.assertNotIn('Roll remaining dice',[b.label for b in self.at.button])
-        self.assertNotIn('Score this round',[b.label for b in self.at.button])
+        self.assertFalse(any('Roll Dice · 2 of 3' in b.label for b in self.at.button))
+        self.assertFalse(any(b.label.startswith('Confirm ') for b in self.at.button))
 
     def test_no_future_pools_or_solver_output_in_active_screen(self):
         self.start()

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import date, datetime, timedelta
+from hashlib import sha256
+import random
 import html
 import json
 from uuid import NAMESPACE_URL, uuid4, uuid5
@@ -67,25 +69,51 @@ def _queue_start(scope, week_id, operation, expected_replay_id=None):
                    "request_id": str(uuid4()), "expected_replay_id": expected_replay_id})
 
 
+def _replace_cached_game(scope, game):
+    """Use the authenticated mutation result; avoid an extra dashboard read."""
+    entry = st.session_state.get(f"{scope}_dashboard_cache")
+    if entry and entry["week_id"] == game["week_id"]:
+        entry["data"]["official" if game["mode"] == "official" else "replay"] = game
+        if game.get("completed_at"):
+            # Completion changes the server-side friends reveal policy.
+            st.session_state.pop(f"{scope}_dashboard_cache", None)
+
+
 def _send_pending(store, scope):
+    """Save only actual game actions; retries keep the identical IDs/revisions."""
     key = f"{scope}_pending"
     pending = st.session_state.get(key)
     if not pending:
         return True
     try:
-        if pending["operation"] == "act":
-            store.act(pending["game_id"], expected_revision=pending["expected_revision"],
-                      request_id=pending["request_id"], action=pending["action"])
-            # Animate only a successfully saved reroll or the newly dealt hand.
-            # This marker is private UI state: no extra RNG, requests, or dice data.
-            if pending["action"]["kind"] in ("reroll", "score"):
-                st.session_state[f"{scope}_animate_roll"] = (
-                    pending["game_id"], pending["expected_revision"] + 1)
+        if pending["operation"] == "roll_chain":
+            # Save the final held multiset and then the roll, not each die tap.
+            # Each operation has its own deterministic idempotency key.
+            requests = pending["requests"]
+            while pending["step"] < len(requests):
+                request = requests[pending["step"]]
+                game = store.act(request["game_id"], expected_revision=request["expected_revision"],
+                                 request_id=request["request_id"], action=request["action"])
+                _replace_cached_game(scope, game)
+                pending["step"] += 1
+            visual = _new_visual_roll(game, scope, pending["display_before"], pending["held_positions"])
+            visual_key = (game["game_id"], len(game["state"]["rounds"]) + 1, len(game["state"]["rolls"]))
+            st.session_state[f"{scope}_visual_rolls"][visual_key] = visual
+            st.session_state.setdefault(f"{scope}_visual_held", {})[visual_key] = list(pending["held_positions"])
+            st.session_state[f"{scope}_animate_roll"] = (
+                game["game_id"], game["revision"], tuple(i for i in range(5)
+                                                    if i not in pending["held_positions"]))
+        elif pending["operation"] == "act":
+            game = store.act(pending["game_id"], expected_revision=pending["expected_revision"],
+                             request_id=pending["request_id"], action=pending["action"])
+            _replace_cached_game(scope, game)
         elif pending["operation"] == "start":
-            store.start_official(pending["week_id"], request_id=pending["request_id"])
+            game = store.start_official(pending["week_id"], request_id=pending["request_id"])
+            _replace_cached_game(scope, game)
         else:
-            store.start_replay(pending["week_id"], expected_replay_id=pending["expected_replay_id"],
-                               request_id=pending["request_id"])
+            game = store.start_replay(pending["week_id"], expected_replay_id=pending["expected_replay_id"],
+                                      request_id=pending["request_id"])
+            _replace_cached_game(scope, game)
         st.session_state.pop(key, None)
         return True
     except WeeklyAuthRequired:
@@ -93,15 +121,112 @@ def _send_pending(store, scope):
         raise
     except (StaleState, GameExpired, GameComplete, WeeklyGameNotFound, InvalidAction) as exc:
         st.session_state.pop(key, None)
+        st.session_state.pop(f"{scope}_dashboard_cache", None)
         st.warning(str(exc))
-        return True  # Display the current saved state, without replaying the action.
+        return True  # Refetch authoritative saved state instead of guessing.
     except (WeeklyStoreError, WeeklyGameError):
         st.warning("The save wasn't confirmed. Your game may already be saved. Retry the same action or reload the saved game.")
         st.button("Retry save", key=f"{scope}_retry", use_container_width=True)
         if st.button("Reload saved game", key=f"{scope}_discard", use_container_width=True):
             st.session_state.pop(key, None)
+            st.session_state.pop(f"{scope}_dashboard_cache", None)
             st.rerun()
         return False
+
+
+def _deterministically_mixed(values, game_id, round_number, roll_number):
+    """Mix visible *saved* faces; this has no access to future dice pools."""
+    faces = list(values)
+    seed = int.from_bytes(sha256(f"weekly-visual-v1|{game_id}|{round_number}|{roll_number}".encode()).digest(), "big")
+    random.Random(seed).shuffle(faces)
+    return faces
+
+
+def _new_visual_roll(game, scope, previous, held_indices):
+    """Keep each tapped die at its original screen position after a saved roll."""
+    state = game["state"]
+    current = state["rolls"][-1]
+    held_indices = set(held_indices)
+    held = [previous[i] for i in range(5) if i in held_indices]
+    leftovers = list((Counter(current["dice"]) - Counter(held)).elements())
+    if len(leftovers) != 5 - len(held_indices):
+        raise WeeklyGameError("Saved rolled dice don't match the held dice.")
+    new_faces = iter(_deterministically_mixed(leftovers, game["game_id"], len(state["rounds"]) + 1,
+                                              len(state["rolls"])))
+    return [previous[i] if i in held_indices else next(new_faces) for i in range(5)]
+
+
+def _visual_dice(game, scope):
+    """Project sorted backend rolls into stable physical positions for the UI.
+
+    Existing v44 states are untouched. On reconnect, duplicate held faces have
+    no stored physical identity; reconstruct a deterministic, valid layout.
+    """
+    state = game["state"]
+    round_number = len(state["rounds"]) + 1
+    rolls = state["rolls"]
+    positions = st.session_state.setdefault(f"{scope}_visual_rolls", {})
+    current_key = (game["game_id"], round_number, len(rolls))
+    cached = positions.get(current_key)
+    if cached is not None and Counter(cached) == Counter(rolls[-1]["dice"]):
+        return list(cached)
+    first_key = (game["game_id"], round_number, 1)
+    displayed = positions.get(first_key)
+    if displayed is None or Counter(displayed) != Counter(rolls[0]["dice"]):
+        displayed = _deterministically_mixed(rolls[0]["dice"], game["game_id"], round_number, 1)
+        positions[first_key] = displayed
+    for number, roll in enumerate(rolls[1:], 2):
+        key = (game["game_id"], round_number, number)
+        existing = positions.get(key)
+        if existing is not None and Counter(existing) == Counter(roll["dice"]):
+            displayed = existing
+            continue
+        previously_held = held_positions(displayed, roll["held_before"])
+        displayed = _new_visual_roll(
+            {"game_id":game["game_id"],"state":{"rolls":rolls[:number],"rounds":state["rounds"]}},
+            scope, displayed, previously_held)
+        positions[key] = displayed
+    # Restrict memory to the active and immediately preceding round.
+    if len(positions) > 9:
+        keep = {k:v for k,v in positions.items() if k[0] == game["game_id"] and k[1] >= round_number - 1}
+        st.session_state[f"{scope}_visual_rolls"] = keep
+    return list(displayed)
+
+
+def _dice_pill_options(dice):
+    # Exactly the Daily picker: Unicode faces plus invisible unique position IDs.
+    return [FACES[int(face) - 1] + ("\u200b" * (i + 1)) for i, face in enumerate(dice)]
+
+
+def _selected_die_indices(dice, selected):
+    identifiers = {label:i for i, label in enumerate(_dice_pill_options(dice))}
+    return sorted(identifiers[label] for label in (selected or []) if label in identifiers)
+
+
+def _queue_roll(scope, game, displayed, pill_key):
+    selected = _selected_die_indices(displayed, st.session_state.get(pill_key, []))
+    if len(selected) == 5:
+        return
+    hold = sorted(displayed[i] for i in selected)
+    state = game["state"]
+    requests = []
+    if hold != state["held"]:
+        requests.append(action_request(game, {"kind":"hold", "held":hold}))
+    following = dict(game, revision=game["revision"] + len(requests))
+    requests.append(action_request(following, {"kind":"reroll"}))
+    _queue(scope, {"operation":"roll_chain", "requests":requests, "step":0,
+                   "game_id":game["game_id"], "held_positions":selected,
+                   "display_before":list(displayed)})
+
+
+def _reveal_first_roll(scope, game):
+    state = game["state"]
+    st.session_state[f"{scope}_revealed_round"] = (game["game_id"],len(state["rounds"]) + 1)
+    st.session_state[f"{scope}_animate_roll"] = (game["game_id"], game["revision"], (0,1,2,3,4))
+
+
+def _choose_category(key, category):
+    st.session_state[key] = category
 
 
 def _scorecard(state):
@@ -135,26 +260,26 @@ def _scorecard(state):
 
 
 def _roll_animation_css(indices):
-    """Visual-only dice shake/faces; final values already came from saved state."""
+    """Shake only saved, newly rolled dice using the very same Daily pill faces."""
     if not indices:
         return ""
-    selectors = [
-        f'.st-key-weekly_dice [data-testid="stHorizontalBlock"] > '
-        f'[data-testid="stColumn"]:nth-child({i + 1}) '
-        '[data-testid="stButton"] > button'
-        for i in indices
-    ]
-    rules = []
-    for pos, selector in enumerate(selectors):
-        delay = pos * 55
-        rules.append(f"{selector}{{animation:weekly-die-bounce .58s {delay}ms ease-out both!important;"
-                     "position:relative!important;overflow:hidden!important}}")
-        rules.append(f"{selector}::after{{content:'⚀';position:absolute;inset:0;z-index:1;"
-                     "display:flex;align-items:center;justify-content:center;"
-                     "border-radius:inherit;background:#f8fafc;color:#142344;"
-                     "font-size:clamp(2.75rem,11vw,3.5rem);font-weight:500;"
-                     f"animation:weekly-face-shuffle .58s {delay}ms steps(1,end) both!important;}}")
-    return "<style>" + "".join(rules) + "</style>"
+    css = []
+    for pos, index in enumerate(indices):
+        delay = pos * 45
+        css.append(
+            f'.st-key-weekly_dice div[role="group"] > button:nth-child({index + 1})'
+            f'{{animation:weekly-die-bounce .6s {delay}ms ease-out both!important;'
+            'position:relative!important;overflow:hidden!important}}'
+        )
+        css.append(
+            f'.st-key-weekly_dice div[role="group"] > button:nth-child({index + 1})::after'
+            "{content:'⚀';position:absolute;inset:0;z-index:1;"
+            'display:flex;align-items:center;justify-content:center;'
+            'border-radius:inherit;background:#f8fafc;color:#142344;'
+            'font-size:3.3rem;font-weight:500;'
+            f'animation:weekly-face-shuffle .6s {delay}ms steps(1,end) both!important;}}'
+        )
+    return '<style>' + ''.join(css) + '</style>'
 
 
 def _review(state, prefix):
@@ -188,88 +313,142 @@ def _friends(groups):
             st.caption("Official scores only. Equal scores share a rank.")
 
 
+def _scorecard_picker(game, scope, dice, revealed, prefix):
+    """All thirteen categories always visible; only legal open ones are tappable."""
+    state = game["state"]
+    scores = dict(zip(CATEGORIES, state["scores"]))
+    bonus_count = sum(r["yahtzee_bonus"] for r in state["rounds"]) // 100
+    totals = score_totals(scores, bonus_count)
+    options = {o.category:o for o in scoring_options(dice, scores)} if revealed else {}
+    choice_key = f"{scope}_{game['game_id']}_{len(state['rounds']) + 1}_category_choice"
+    current = st.session_state.get(choice_key)
+    if current not in options:
+        current = None
+        st.session_state.pop(choice_key, None)
+    with st.container(key="weekly_scorecard_interactive"):
+        st.markdown(
+            f"<div class='weekly-scorecard-heading'><span>Scorecard</span>"
+            f"<small>{sum(v is not None for v in scores.values())}/13 filled</small></div>",
+            unsafe_allow_html=True)
+        for i, category in enumerate(CATEGORIES):
+            if i == 0 or i == 6:
+                st.markdown("<div class='weekly-score-section-heading'>" +
+                            ("Upper section" if i == 0 else "Lower section") + "</div>",
+                            unsafe_allow_html=True)
+            value = scores[category]
+            available = category in options
+            selected = current == category
+            if value is not None:
+                label, score, enabled = CATEGORY_LABELS[category] + " ✓", str(value), False
+            elif available:
+                label, score, enabled = CATEGORY_LABELS[category], "+" + str(options[category].points), True
+            else:
+                label, score, enabled = CATEGORY_LABELS[category], "—", False
+            with st.container(key=f"weekly_score_row_{i}"):
+                left, right = st.columns([3.7, 1], gap="small")
+                with left:
+                    st.button(label, key=f"{prefix}_category_{category}",
+                              type="primary" if selected else "secondary",
+                              disabled=not enabled, use_container_width=True,
+                              on_click=_choose_category, args=(choice_key, category),
+                              help=("Select this category" if enabled else
+                                    "Already scored or not currently available"))
+                with right:
+                    st.markdown(f"<div class='weekly-score-row-value'>{html.escape(score)}</div>",
+                                unsafe_allow_html=True)
+        if not revealed:
+            st.caption("Roll the dice to see your available scoring choices.")
+        elif len(options) < sum(v is None for v in scores.values()):
+            st.caption("Joker rule: only eligible categories can be chosen.")
+        if current:
+            option = options[current]
+            st.caption(f"Selected: {CATEGORY_LABELS[current]} · {option.points} points" +
+                       (f" + {option.yahtzee_bonus} Yahtzee bonus" if option.yahtzee_bonus else ""))
+        st.button(
+            "Confirm " + (f"{options[current].points} points in {CATEGORY_LABELS[current]}" if current else "score"),
+            disabled=current is None, type="primary", use_container_width=True,
+            key=f"{prefix}_confirm_score", on_click=_queue,
+            args=(scope, action_request(game, {"kind":"score", "category":current}))
+        )
+        st.caption("Confirming a score is permanent. Choosing a row alone does not save it.")
+        st.markdown(
+            f"<div class='weekly-score-detail'><span>Upper section</span><b>{totals['upper']}/63</b></div>"
+            f"<div class='weekly-score-detail'><span>Upper bonus</span><b>+{totals['upper_bonus']}</b></div>"
+            f"<div class='weekly-score-detail'><span>Extra Yahtzees</span><b>+{totals['yahtzee_bonus']}</b></div>"
+            f"<div class='weekly-score-total'><span>Total score</span><strong>{totals['total']}</strong></div>",
+            unsafe_allow_html=True)
+
+
 def _play(game, scope):
     state = game["state"]
-    dice = state["rolls"][-1]["dice"]
+    dice = _visual_dice(game, scope)  # Physical screen positions; never sorted after each roll.
     roll_number, rounds_done = len(state["rolls"]), len(state["rounds"])
-    selected = held_positions(dice, state["held"])
     prefix = f"{scope}_{game['game_id']}_{game['revision']}"
+    revealed = (roll_number > 1 or st.session_state.get(f"{scope}_revealed_round") ==
+                (game["game_id"], rounds_done + 1))
 
-    # Mobile-only summary stays in view while scrolling a full, readable scorecard.
-    # On desktop the scorecard is alongside the play controls.
     game_type = "Official" if state["mode"] == "official" else "Practice replay"
     with st.container(key="weekly_mobile_summary"):
         st.markdown(
             f"<div class='weekly-summary-line'><span>{game_type} · Round {rounds_done + 1}/13 "
-            f"· Roll {roll_number}/3</span><strong>{game['total_score']} pts</strong></div>",
-            unsafe_allow_html=True)
+            f"· {'Ready for roll 1' if not revealed else f'Roll {roll_number}/3'}</span>"
+            f"<strong>{game['total_score']} pts</strong></div>", unsafe_allow_html=True)
 
     animate_indices = []
-    animation_marker = st.session_state.pop(f"{scope}_animate_roll", None)
-    if animation_marker == (game["game_id"], game["revision"]):
-        # On a saved reroll, exclude the dice that were held before that roll.
-        # On a newly scored round, animate the five already-saved first-roll dice.
-        held_before = state["rolls"][-1]["held_before"] if roll_number > 1 else []
-        held_copy_indices = set(held_positions(dice, held_before))
-        animate_indices = [i for i in range(5) if i not in held_copy_indices]
+    marker = st.session_state.pop(f"{scope}_animate_roll", None)
+    if marker and len(marker) == 3 and marker[:2] == (game["game_id"], game["revision"]):
+        animate_indices = list(marker[2])
 
     with st.container(key="weekly_play_layout"):
         play_col, card_col = st.columns([1.07, 0.93], gap="medium")
         with play_col:
-            st.markdown(f"### Round {rounds_done + 1} of 13 · Roll {roll_number} of 3")
+            st.markdown(f"### Round {rounds_done + 1} of 13 · " +
+                        ("Ready for roll 1" if not revealed else f"Roll {roll_number} of 3"))
             st.progress(rounds_done / 13, text=f"{rounds_done} rounds saved · {game['total_score']} points")
-            st.caption("Tap dice to hold or release them." if roll_number < 3 else
-                       "Final roll. Choose a scoring category.")
-            with st.container(key="weekly_dice"):
-                # The same physical-die buttons and symbols as the Daily player.
-                # The existing server-authenticated multiset hold actions are unchanged.
-                cols = st.columns(5, gap="small")
-                for i, face in enumerate(dice):
-                    held = list(selected)
-                    if i in held:
-                        held.remove(i)
-                    else:
-                        held.append(i)
-                    action = {"kind": "hold", "held": sorted(dice[j] for j in held)}
-                    cols[i].button(FACES[face - 1], type="primary" if i in selected else "secondary",
-                                   key=f"{prefix}_die_{i}", disabled=roll_number >= 3,
-                                   use_container_width=True,
-                                   help=f"Die {i + 1}: {face}. {'Held; tap to release.' if i in selected else 'Tap to hold.'}",
-                                   on_click=_queue, args=(scope, action_request(game, action)))
-            if animate_indices:
-                st.markdown(_roll_animation_css(animate_indices), unsafe_allow_html=True)
-            if roll_number < 3:
-                st.caption("Held: " + (", ".join(str(v) for v in state["held"]) or "none"))
-                st.button("Roll remaining dice", type="primary", use_container_width=True,
-                          key=f"{prefix}_roll", disabled=len(selected) == 5,
-                          on_click=_queue, args=(scope, action_request(game, {"kind": "reroll"})))
-                if len(selected) == 5:
-                    st.caption("Release a die to roll again, or score this hand.")
-            scores = dict(zip(CATEGORIES, state["scores"]))
-            options = scoring_options(dice, scores)
-            by_category = {o.category: o for o in options}
-            if len(options) < sum(v is None for v in scores.values()):
-                st.caption("The Joker rule limits where this Yahtzee can be scored.")
-            chosen = st.selectbox("Scoring category", options=list(by_category), index=None,
-                                  placeholder="Choose an unused category", key=f"{prefix}_category",
-                                  format_func=lambda c: f"{CATEGORY_LABELS[c]} — {by_category[c].points} points")
-            if chosen:
-                opt = by_category[chosen]
-                st.caption(f"Score {opt.points} in {CATEGORY_LABELS[chosen]}" +
-                           (f" plus a {opt.yahtzee_bonus}-point Yahtzee bonus." if opt.yahtzee_bonus else ".") +
-                           " This choice is permanent.")
-            st.button("Score this round", disabled=chosen is None, type="primary", use_container_width=True,
-                      key=f"{prefix}_score", on_click=_queue,
-                      args=(scope, action_request(game, {"kind": "score", "category": chosen})))
-            st.caption("Saved after every action. You can leave Weekly and return to this game.")
+            if not revealed:
+                st.caption("Tap Roll Dice to begin this round. This reveals your already-saved first roll.")
+                with st.container(key="weekly_unrevealed_dice"):
+                    st.markdown('<div class="weekly-five-unrolled">' + '<div>?</div>'*5 + '</div>',
+                                unsafe_allow_html=True)
+                st.button("🎲 Roll Dice · 1 of 3", type="primary", use_container_width=True,
+                          key=f"{prefix}_first_roll", on_click=_reveal_first_roll, args=(scope, game))
+            else:
+                st.caption("Tap dice to hold or release them." if roll_number < 3 else
+                           "Final roll. Choose a scoring category on the right or below.")
+                with st.container(key="weekly_dice"):
+                    # Same st.pills widget, symbols and unique invisible position IDs as Daily.
+                    options = _dice_pill_options(dice)
+                    selected_positions = held_positions(dice, state["held"]) if roll_number < 3 else []
+                    visual_key = (game["game_id"], rounds_done + 1, roll_number)
+                    exact_indices = st.session_state.get(f"{scope}_visual_held", {}).get(visual_key)
+                    if exact_indices is not None and Counter(dice[i] for i in exact_indices) == Counter(state["held"]):
+                        selected_positions = list(exact_indices)
+                    pill_key = f"{prefix}_pills_v2"
+                    if pill_key not in st.session_state:
+                        st.session_state[pill_key] = [options[i] for i in selected_positions]
+                    chosen = st.pills("Dice to hold", options=options, selection_mode="multi", key=pill_key,
+                                      label_visibility="collapsed", disabled=roll_number >= 3)
+                if animate_indices:
+                    st.markdown(_roll_animation_css(animate_indices), unsafe_allow_html=True)
+                held_indices = _selected_die_indices(dice, chosen)
+                if roll_number < 3:
+                    st.caption(f"Holding {len(held_indices)} of 5 dice · selection saved when you roll")
+                    st.button(f"🎲 Roll Dice · {roll_number + 1} of 3", type="primary",
+                              use_container_width=True, key=f"{prefix}_roll",
+                              disabled=len(held_indices) == 5,
+                              on_click=_queue_roll, args=(scope, game, dice, pill_key))
+                    if len(held_indices) == 5:
+                        st.caption("Release a die to reroll, or score this hand.")
+                st.caption("Your rolls and scored rounds are saved. Dice selections update locally.")
         with card_col:
-            _scorecard(state)  # Not an expander. Always visible during play.
+            _scorecard_picker(game, scope, dice, revealed, prefix)
 
 
+@st.fragment
 def render_weekly(store, player_id):
     """store is actor-scoped; all data is freshly authorized on each rerun."""
     st.markdown("""<style>
-    /* Weekly v44.0.2 — consistent with Daily dice; only Weekly controls are scoped. */
+    /* Weekly v44.0.3 — exact Daily st.pills dice, tappable rows, stable layout. */
     .weekly-scorecard-panel{background:#fbf8f3;border:1px solid #ddd5c9;border-radius:16px;
         padding:.78rem .8rem .8rem;box-shadow:0 3px 12px #14234410;color:#142344}
     .weekly-scorecard-heading{display:flex;justify-content:space-between;align-items:center;
@@ -355,14 +534,66 @@ def render_weekly(store, player_id):
         .st-key-weekly_dice button{animation:none!important}
         .st-key-weekly_dice button::after{animation:none!important;opacity:0!important;content:none!important}
     }
+
+    /* Native st.pills in Weekly deliberately inherit the SAME face styling as Daily
+       in app.py. Do not shrink or substitute button glyphs. */
+    .st-key-weekly_dice div[data-testid="stButtonGroup"],
+    .st-key-weekly_dice div[data-testid="stPills"]{width:100%!important}
+    .st-key-weekly_dice div[role="group"]{justify-content:center!important;gap:.32rem!important;flex-wrap:nowrap!important}
+    .st-key-weekly_dice div[role="group"]>button{flex-shrink:0!important}
+    .weekly-five-unrolled{display:flex;gap:.42rem;justify-content:center;margin:.5rem 0 .85rem}
+    .weekly-five-unrolled>div{width:clamp(54px,16vw,68px);height:clamp(54px,16vw,68px);
+        display:flex;align-items:center;justify-content:center;border:2px solid #d1d5db;
+        border-radius:15px;background:#f8fafc;box-shadow:0 4px 0 #c7c9cc,0 7px 14px #00000026;
+        color:#a7b0bf;font-size:2.3rem;font-weight:800}
+    .st-key-weekly_scorecard_interactive{background:#fbf8f3;border:1px solid #ddd5c9;
+        border-radius:16px;padding:.78rem .8rem .8rem;box-shadow:0 3px 12px #14234410}
+    .weekly-score-section-heading{font-weight:900;letter-spacing:.06em;text-transform:uppercase;
+        color:#142344;background:#e9edf4;border-radius:5px;padding:.36rem .42rem;
+        font-size:.76rem;margin:.4rem 0 .2rem}
+    div[class*="st-key-weekly_score_row_"]{border-bottom:1px solid #dce0e9;margin:0!important;padding:0!important}
+    div[class*="st-key-weekly_score_row_"] div[data-testid="stHorizontalBlock"]{
+        align-items:center!important;gap:.15rem!important;flex-wrap:nowrap!important}
+    div[class*="st-key-weekly_score_row_"] div[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:first-child{
+        width:78%!important;min-width:0!important;flex:0 0 78%!important}
+    div[class*="st-key-weekly_score_row_"] div[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:last-child{
+        width:21%!important;min-width:0!important;flex:0 0 21%!important}
+    div[class*="st-key-weekly_score_row_"] div[data-testid="stButton"]>button{
+        justify-content:flex-start!important;border:0!important;background:transparent!important;
+        color:#142344!important;box-shadow:none!important;min-height:1.65rem!important;
+        height:1.65rem!important;width:100%!important;padding:.15rem .28rem!important;
+        border-radius:4px!important;font-size:.82rem!important;text-align:left!important}
+    div[class*="st-key-weekly_score_row_"] div[data-testid="stButton"]>button p{
+        font-size:.82rem!important;color:inherit!important;line-height:1.2!important}
+    div[class*="st-key-weekly_score_row_"] div[data-testid="stButton"]>button:not(:disabled):hover{
+        background:#f8dce1!important;color:#922237!important}
+    div[class*="st-key-weekly_score_row_"] div[data-testid="stButton"]>button[kind="primary"]{
+        background:#b82e42!important;color:#fff!important}
+    div[class*="st-key-weekly_score_row_"] div[data-testid="stButton"]>button:disabled{
+        color:#7c8595!important;opacity:1!important}
+    .weekly-score-row-value{font-weight:800;color:#142344;font-size:.82rem;
+        white-space:nowrap;text-align:right;padding:.25rem .35rem}
+    @media(max-width:767px){
+        /* Override the mobile play-column stacking for the scorecard's own rows. */
+        div[class*="st-key-weekly_score_row_"] div[data-testid="stHorizontalBlock"]{
+            flex-wrap:nowrap!important}
+        div[class*="st-key-weekly_score_row_"] div[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:first-child{
+            flex:0 0 78%!important;width:78%!important}
+        div[class*="st-key-weekly_score_row_"] div[data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:last-child{
+            flex:0 0 21%!important;width:21%!important}
+    }
     </style>""", unsafe_allow_html=True)
     st.markdown("## Weekly Yahtzee")
-    scope = f"weekly_{player_id}"
+    # Never reuse a cached dashboard for a different signed-in device session.
+    scope = f"weekly_{player_id}_{store._actor.session_id}"
     try:
         if not _send_pending(store, scope):
             return
         current = current_week_id()
-        history = store.history(limit=52)
+        history_key = f"{scope}_history_cache"
+        if history_key not in st.session_state:
+            st.session_state[history_key] = store.history(limit=52)
+        history = st.session_state[history_key]
         older = st.session_state.get(f"{scope}_older", [])
         weeks = sorted({current, *(row["week_id"] for row in history), *older}, reverse=True)
         selected_key = f"{scope}_week"
@@ -377,8 +608,14 @@ def render_weekly(store, player_id):
                 if page:
                     st.rerun()
                 st.caption("No earlier Weekly games.")
-        dashboard = store.dashboard(week_id)
-        now = datetime.fromisoformat(dashboard["server_now"].replace("Z", "+00:00"))
+        cache_key = f"{scope}_dashboard_cache"
+        entry = st.session_state.get(cache_key)
+        if not entry or entry["week_id"] != week_id:
+            entry = {"week_id": week_id, "data": store.dashboard(week_id)}
+            st.session_state[cache_key] = entry
+        dashboard = entry["data"]
+        # Fresh local time prevents a cached dashboard keeping an expired week open.
+        now = datetime.now(ZoneInfo('America/New_York'))
         end = datetime.fromisoformat(dashboard["ends_at"].replace("Z", "+00:00"))
         start = datetime.fromisoformat(dashboard["starts_at"].replace("Z", "+00:00"))
         is_open = start <= now < end
@@ -416,7 +653,10 @@ def render_weekly(store, player_id):
                 st.button("Replay This Week's Dice", use_container_width=True, key=f"{scope}_replay_{week_id}",
                           on_click=_queue_start, args=(scope, week_id, "replay", replay["game_id"] if replay else None))
         _friends(dashboard["groups"])
-        st.button("Refresh saved game", key=f"{scope}_refresh", use_container_width=True)
+        if st.button("Refresh saved game and friend standings", key=f"{scope}_refresh", use_container_width=True):
+            st.session_state.pop(cache_key, None)
+            st.session_state.pop(history_key, None)
+            st.rerun()
     except WeeklyAuthRequired:
         clear_weekly_state()
         st.warning("Your sign-in expired. Sign out and sign in again to continue your saved Weekly game.")
