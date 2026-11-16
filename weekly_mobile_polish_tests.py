@@ -78,7 +78,7 @@ def test_player_instructions_short_and_saved_game_untouched():
 
 
 def test_mobile_header_and_yesterday_recap_preserved():
-    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.5"' in APP
+    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.7"' in APP
     assert 'if mode == "Home":' in APP
     assert 'home_nav = None' in APP
     assert 'st.button("Practice", key="practice_nav"' in APP

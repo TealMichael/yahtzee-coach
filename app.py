@@ -37,8 +37,8 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v44.0.6 Weekly Game Polish"
-APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.6"
+APP_RELEASE = "v44.0.7 Light Theme Contrast Hotfix"
+APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.7"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
 YESTERDAY_RESULTS_STORAGE_PREFIX = "yc_yesterday_results_seen_v1"
@@ -52,6 +52,20 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="collapsed",
 )
+
+# Visual-only fallback for browsers retaining a dark OS/Streamlit preference.
+# .streamlit/config.toml supplies matching light palettes for both system modes;
+# these root backgrounds and native input hints protect the custom light cards.
+# Do not override the deliberately dark navy results/podium components.
+st.markdown("""<style>
+:root { color-scheme: light !important; }
+html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+    color-scheme: light !important;
+}
+[data-testid="stAppViewContainer"], [data-testid="stMain"] {
+    background-color: #ffffff !important;
+}
+</style>""", unsafe_allow_html=True)
 
 
 # Phase 2K.4.1: browser-local remembered-login bridge.

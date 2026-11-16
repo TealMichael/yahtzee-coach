@@ -48,4 +48,4 @@ def test_mobile_sticky_summary_reduced_motion_and_version():
     assert 'prefers-reduced-motion:reduce' in SOURCE
     assert 'flex:0 0 100%!important' in SOURCE
     assert 'weekly_scorecard_interactive' in SOURCE
-    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.5"' in APP
+    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.7"' in APP

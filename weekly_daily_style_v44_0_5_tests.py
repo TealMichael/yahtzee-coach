@@ -110,5 +110,5 @@ def test_weekly_dice_and_hidden_stream_safeguards_are_untouched():
 
 
 def test_release_label_and_no_new_supabase_migration():
-    assert 'Yahtzee Coach · v44.0.5' in APP
+    assert 'Yahtzee Coach · v44.0.7' in APP
     assert 'RUN_THIS_ONCE_IN_SUPABASE_v44_0_5' not in APP

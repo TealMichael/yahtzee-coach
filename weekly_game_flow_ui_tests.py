@@ -202,4 +202,4 @@ def test_source_guards_performance_and_mobile_visibility():
     assert 'st.session_state.get(f"{scope}_dashboard_cache")' in source
     assert 'position:fixed!important' in source
     assert 'weekly_scorecard_interactive' in source
-    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.5"' in Path(__file__).with_name('app.py').read_text()
+    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.7"' in Path(__file__).with_name('app.py').read_text()

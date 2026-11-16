@@ -814,6 +814,44 @@ def render_weekly(store, player_id):
       [data-testid="stButton"]>button p strong{color:#16733c!important}
     div[class*="st-key-weekly_score_tile_"][class*="_available_zero"]
       [data-testid="stButton"]>button p strong{color:#69758b!important}
+    /* v44.0.7: force legible Daily-style tiles even when a device prefers dark.
+       Not gameplay logic: no changed widgets, eligibility, scores, or DB reads.
+       Target bare buttons as well as stButton wrappers (Streamlit versions vary). */
+    .st-key-weekly_scorecard_interactive {color-scheme:light!important;
+      background:#ffffff!important;color:#142344!important}
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"] button,
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"] [data-testid="stButton"]>button {
+      color-scheme:light!important;background:#ffffff!important;color:#142344!important;
+      border:1px solid #d8dde5!important;filter:none!important;
+      -webkit-text-fill-color:#142344!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"] button:disabled,
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"] button:disabled * {
+      opacity:1!important;filter:none!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"] button p,
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"] button span {
+      color:#536078!important;-webkit-text-fill-color:#536078!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"] button strong {
+      color:#142344!important;-webkit-text-fill-color:#142344!important;
+      font-weight:900!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"][class*="_filled"] button {
+      background:#f3f5f8!important;border-color:#d8dde5!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"][class*="_open"] button strong,
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"][class*="_available_gain"] button strong {
+      color:#16733c!important;-webkit-text-fill-color:#16733c!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"][class*="_available_zero"] button strong,
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"][class*="_available_zero"] [data-testid="stButton"]>button p strong {
+      color:#536078!important;-webkit-text-fill-color:#536078!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"] button[kind="primary"],
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"] button[aria-pressed="true"] {
+      background:#fff2f4!important;border:2px solid #b82e42!important;
+    }
     @media(prefers-reduced-motion:reduce){
       .st-key-weekly_dice div[role="group"]>button{animation:none!important}
       .st-key-weekly_dice div[role="group"]>button::after{animation:none!important;content:none!important}
