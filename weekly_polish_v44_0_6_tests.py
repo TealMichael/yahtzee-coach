@@ -63,7 +63,7 @@ def test_rendered_animation_is_only_for_unheld_dice():
 
 
 def test_no_database_migration_and_version_only_cosmetic_changes():
-    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.7"' in APP
+    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.8"' in APP
     assert 'def _new_visual_roll' in SRC
     assert 'def _send_pending' in SRC
     assert 'def _queue_roll' in SRC

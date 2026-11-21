@@ -7,6 +7,7 @@ No solver, advice, or friend-review endpoint is used during official play.
 from __future__ import annotations
 
 from collections import Counter
+from contextlib import nullcontext
 from datetime import date, datetime, timedelta
 from hashlib import sha256
 import random
@@ -86,39 +87,54 @@ def _send_pending(store, scope):
     if not pending:
         return True
     try:
-        if pending["operation"] == "roll_chain":
-            # Save the final held multiset and then the roll, not each die tap.
-            # Each operation has its own deterministic idempotency key.
-            requests = pending["requests"]
-            while pending["step"] < len(requests):
-                request = requests[pending["step"]]
-                game = store.act(request["game_id"], expected_revision=request["expected_revision"],
-                                 request_id=request["request_id"], action=request["action"])
+        label = ("Saving dice roll…" if pending["operation"] == "roll_chain"
+                 else "Saving score…" if pending.get("action", {}).get("kind") == "score"
+                 else "Opening saved Weekly game…")
+        context = st.spinner(label) if hasattr(st, "spinner") else nullcontext()
+        with context:
+            if pending["operation"] == "roll_chain":
+                # Save the final held multiset and then the roll, not each die tap.
+                # Each operation has its own deterministic idempotency key.
+                requests = pending["requests"]
+                while pending["step"] < len(requests):
+                    request = requests[pending["step"]]
+                    game = store.act(request["game_id"], expected_revision=request["expected_revision"],
+                                     request_id=request["request_id"], action=request["action"])
+                    _replace_cached_game(scope, game)
+                    pending["step"] += 1
+                visual = _new_visual_roll(game, scope, pending["display_before"], pending["held_positions"])
+                visual_key = (game["game_id"], len(game["state"]["rounds"]) + 1, len(game["state"]["rolls"]))
+                st.session_state[f"{scope}_visual_rolls"][visual_key] = visual
+                st.session_state.setdefault(f"{scope}_visual_held", {})[visual_key] = list(pending["held_positions"])
+                st.session_state[f"{scope}_animate_roll"] = (
+                    game["game_id"], game["revision"], tuple(i for i in range(5)
+                                                        if i not in pending["held_positions"]))
+            elif pending["operation"] == "act":
+                game = store.act(pending["game_id"], expected_revision=pending["expected_revision"],
+                                 request_id=pending["request_id"], action=pending["action"])
                 _replace_cached_game(scope, game)
-                pending["step"] += 1
-            visual = _new_visual_roll(game, scope, pending["display_before"], pending["held_positions"])
-            visual_key = (game["game_id"], len(game["state"]["rounds"]) + 1, len(game["state"]["rolls"]))
-            st.session_state[f"{scope}_visual_rolls"][visual_key] = visual
-            st.session_state.setdefault(f"{scope}_visual_held", {})[visual_key] = list(pending["held_positions"])
-            st.session_state[f"{scope}_animate_roll"] = (
-                game["game_id"], game["revision"], tuple(i for i in range(5)
-                                                    if i not in pending["held_positions"]))
-        elif pending["operation"] == "act":
-            game = store.act(pending["game_id"], expected_revision=pending["expected_revision"],
-                             request_id=pending["request_id"], action=pending["action"])
-            _replace_cached_game(scope, game)
-            if pending["action"].get("kind") == "score" and not game.get("completed_at"):
-                # Return to the next round after the authoritative save succeeds.
-                st.session_state[f"{scope}_scroll_after_score"] = True
-        elif pending["operation"] == "start":
-            game = store.start_official(pending["week_id"], request_id=pending["request_id"])
-            _replace_cached_game(scope, game)
-        else:
-            game = store.start_replay(pending["week_id"], expected_replay_id=pending["expected_replay_id"],
-                                      request_id=pending["request_id"])
-            _replace_cached_game(scope, game)
-        st.session_state.pop(key, None)
-        return True
+                if pending["action"].get("kind") == "score":
+                    rounds = (game.get("state") or {}).get("rounds") or []
+                    if rounds and rounds[-1].get("category") == pending["action"].get("category"):
+                        # Only the server-confirmed score earns a success message.
+                        final_round = rounds[-1]
+                        st.session_state[f"{scope}_score_notice"] = {
+                            "game_id": game["game_id"], "rounds_saved": len(rounds),
+                            "category": final_round["category"], "points": final_round["points"],
+                            "bonus": final_round.get("yahtzee_bonus", 0),
+                        }
+                    if not game.get("completed_at"):
+                        # Return to the next round after the authoritative save succeeds.
+                        st.session_state[f"{scope}_scroll_after_score"] = True
+            elif pending["operation"] == "start":
+                game = store.start_official(pending["week_id"], request_id=pending["request_id"])
+                _replace_cached_game(scope, game)
+            else:
+                game = store.start_replay(pending["week_id"], expected_replay_id=pending["expected_replay_id"],
+                                          request_id=pending["request_id"])
+                _replace_cached_game(scope, game)
+            st.session_state.pop(key, None)
+            return True
     except WeeklyAuthRequired:
         st.session_state.pop(key, None)
         raise
@@ -445,8 +461,20 @@ def _play(game, scope):
                 f"<span>{phase}</span><b>{game['total_score']} pts</b></div>",
                 unsafe_allow_html=True)
             st.progress(rounds_done / 13)
+            notice = st.session_state.pop(f"{scope}_score_notice", None)
+            notice_is_current = (notice is not None and
+                                 notice.get("game_id") == game["game_id"] and
+                                 notice.get("rounds_saved") == rounds_done)
+            if notice_is_current:
+                saved_name = html.escape(CATEGORY_LABELS[notice["category"]])
+                bonus_copy = (f" · +{int(notice['bonus'])} Yahtzee bonus"
+                              if notice.get("bonus") else "")
+                st.markdown(f'<div class="weekly-score-flash" role="status" aria-live="polite">'
+                            f'✓ {saved_name} +{int(notice["points"])} saved{bonus_copy} · Next round ready</div>',
+                            unsafe_allow_html=True)
             if not revealed:
-                st.caption("Tap Roll Dice to start.")
+                if not notice_is_current:
+                    st.caption("Tap Roll Dice to start.")
                 with st.container(key="weekly_unrevealed_dice"):
                     st.markdown('<div class="weekly-five-unrolled">' + '<div>?</div>'*5 + '</div>',
                                 unsafe_allow_html=True)
@@ -852,6 +880,37 @@ def render_weekly(store, player_id):
     .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"] button[aria-pressed="true"] {
       background:#fff2f4!important;border:2px solid #b82e42!important;
     }
+    /* v44.0.8: The saved (including zero) / open / available / selected states
+       must remain readable on iPhone, even if native disabled styles apply. */
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"][class*="_filled"] button:disabled {
+      background:#edf1f6!important;border:1px solid #b5c0cf!important;
+      color:#30415e!important;opacity:1!important;filter:none!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"][class*="_filled"] button:disabled p,
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"][class*="_filled"] button:disabled p strong {
+      color:#30415e!important;-webkit-text-fill-color:#30415e!important;opacity:1!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"][class*="_open"] button:disabled {
+      background:#f8fafc!important;border-color:#d3dbe5!important;opacity:1!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"][class*="_open"] button:disabled p {
+      color:#536078!important;-webkit-text-fill-color:#536078!important;opacity:1!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"][class*="_open"] button:disabled p strong {
+      color:#16733c!important;-webkit-text-fill-color:#16733c!important;opacity:1!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"][class*="_available_gain"] button:not(:disabled) p strong {
+      color:#16733c!important;-webkit-text-fill-color:#16733c!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"][class*="_available_zero"] button:not(:disabled) p strong {
+      color:#536078!important;-webkit-text-fill-color:#536078!important;
+    }
+    .st-key-weekly_scorecard_interactive div[class*="st-key-weekly_score_tile_"] button[kind="primary"] {
+      background:#fff1f2!important;border:2px solid #b82e42!important;
+    }
+    .weekly-score-flash {color:#166534;background:#eef8f0;border:1px solid #bbdfc4;
+      border-radius:8px;padding:.28rem .42rem;margin:.15rem 0 .22rem;
+      font-size:.83rem;font-weight:800;line-height:1.25;min-height:1.6rem}
     @media(prefers-reduced-motion:reduce){
       .st-key-weekly_dice div[role="group"]>button{animation:none!important}
       .st-key-weekly_dice div[role="group"]>button::after{animation:none!important;content:none!important}
@@ -911,6 +970,7 @@ def render_weekly(store, player_id):
                 _scorecard(official["state"])
                 _review(official["state"], scope)
         else:
+            st.session_state.pop(f"{scope}_score_notice", None)
             st.success(f"Official Score (locked): {official['total_score']}")
             _scorecard(official["state"])
             _review(official["state"], scope)

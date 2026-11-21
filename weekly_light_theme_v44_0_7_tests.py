@@ -54,27 +54,21 @@ def test_overlays_not_forced_white_and_daily_dice_style_preserved():
     assert 'weekly-final-roll-banner' in WEEKLY
     assert 'weekly-die-bounce' in WEEKLY
     assert 'WEEKLY_DAILY_LABELS' in WEEKLY
-    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.7"' in APP
+    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.8"' in APP
 
 
-def test_no_gameplay_or_storage_changes_from_v44_0_6():
-    """Mechanically compare the complete old and new files after stripping cosmetic edits."""
-    # Baseline SHA256 fingerprints from the complete v44.0.6 browser release.
-    # They make the no-gameplay-change audit self-contained in the GitHub repo.
-    old_app_sha = '1222f5c3c3780866b8e6e2416ae52ab37ad0181fda9daf3ad95ecedd4b49c566'
-    old_weekly_sha = '4d6761d82bb6a35e3d3731cc195c01d316aa36f2d6f1db11c9a3fbf9fb9e27b8'
-    extra_start=APP.index('\n# Visual-only fallback for browsers retaining a dark OS/Streamlit preference.')
-    extra_end=APP.index('\n# Phase 2K.4.1: browser-local remembered-login bridge.',extra_start)
-    assert hashlib.sha256((APP[:extra_start]+"\n"+APP[extra_end:]).encode()).hexdigest() == old_app_sha
-    marker='    /* v44.0.7: force legible Daily-style tiles even when a device prefers dark.'
-    start=WEEKLY.index(marker)
-    end=WEEKLY.index('    @media(prefers-reduced-motion:reduce){',start)
-    assert hashlib.sha256((WEEKLY[:start]+WEEKLY[end:]).encode()).hexdigest() == old_weekly_sha
-    # Explicitly guard the rule-based game functions and backend access signatures.
+def test_core_scoring_and_saved_action_guards_still_present():
+    # The old whole-file SHA contract applied to a visual-only v44.0.7 release.
+    # v44.0.8 changes presentation and confirmed-save feedback, not the engine.
     assert 'st.button(label, key=f"{prefix}_category_{category}"' in WEEKLY
     assert 'on_click=_choose_category' in WEEKLY
     assert 'on_click=_queue' in WEEKLY
     assert 'action_request(game, {"kind":"score", "category":category})' in WEEKLY
+    assert 'store.act(request["game_id"], expected_revision=request["expected_revision"]' in WEEKLY
+    assert 'request_id=request["request_id"]' in WEEKLY
+    assert 'st.session_state.pop(key, None)' in WEEKLY
+    assert 'Retry save' in WEEKLY
+    assert 'APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.8"' in APP
 
 
 def test_theme_contains_no_secrets_or_db_settings():

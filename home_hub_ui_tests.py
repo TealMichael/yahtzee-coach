@@ -120,14 +120,17 @@ def test_unregistered_daily_does_not_activate_six_and_does_not_guess():
 
 def test_weekly_one_official_state_transitions():
     examples = [
-        (None, ('0', 'Play Weekly')),
-        ({'completed_at': None, 'state': {'rounds': [1,2,3,4]}}, ('0', 'Resume Weekly')),
-        ({'completed_at': '2026-11-14T12:00:00Z', 'state': {'rounds': list(range(13))}}, ('1', 'View Weekly Standings')),
+        (None, ('0', '1', 'Play Weekly')),
+        ({'completed_at': None, 'state': {'rounds': [1,2,3,4]}}, ('4', '13', 'Resume Weekly')),
+        ({'completed_at': '2026-11-14T12:00:00Z', 'total_score': 151,
+          'state': {'rounds': list(range(13))}}, ('1', '1', 'View Standings')),
     ]
     for official, expected in examples:
         ns, store = env(official=official)
         result = ns['_home_weekly_status']()
-        assert (result['value'], result['action']) == expected
+        assert (result['value'], result['total'], result['action']) == expected
+        if official and official.get('completed_at'):
+            assert result['detail'] == '151 pts · official score locked'
         assert store.reads == ['weekly_dashboard_read']
 
 

@@ -37,8 +37,8 @@ from daily_store import (
 
 APP_ICON_PATH = "apple_touch_icon.png"
 PUBLIC_APP_URL = "https://teals-yahtzee-coach.streamlit.app/"
-APP_RELEASE = "v44.0.7 Light Theme Contrast Hotfix"
-APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.7"
+APP_RELEASE = "v44.0.8 Usability Refinements"
+APP_PUBLIC_VERSION = "Yahtzee Coach · v44.0.8"
 REMEMBER_COOKIE_NAME = "yc_remember_device_v1"
 REMEMBER_STORAGE_KEY = "yc_remember_device_v2"
 YESTERDAY_RESULTS_STORAGE_PREFIX = "yc_yesterday_results_seen_v1"
@@ -4253,8 +4253,8 @@ def _close_friend_review():
 
 
 def render_leaderboard_cards(board, *, allow_review=False, question_count=None):
-    question_count = question_count or _daily_count()
     """Render a clean, scan-friendly leaderboard. Friend review lives below the standings."""
+    question_count = question_count or _daily_count()
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
     active_player_id = str(st.session_state.get("active_player_id") or "")
     rows = []
@@ -5262,9 +5262,15 @@ def _home_weekly_status() -> dict:
         if official is None:
             return {**base, "value": "0", "detail": "Official game completed this week", "action": "Play Weekly"}
         if official.get("completed_at"):
-            return {**base, "value": "1", "detail": "Official score locked · view friend standings", "action": "View Weekly Standings", "note": "Practice replays are unlocked. Your official score stays locked."}
-        rounds = len((official.get("state") or {}).get("rounds") or [])
-        return {**base, "value": "0", "detail": f"Official game in progress · round {min(rounds + 1, 13)}/13", "action": "Resume Weekly"}
+            locked_total = official.get("total_score")
+            score_copy = f"{int(locked_total)} pts · official score locked" if locked_total is not None else "Official score locked"
+            return {**base, "value": "1", "detail": score_copy, "action": "View Standings",
+                    "note": "Replays are practice only. Your official score cannot change."}
+        rounds = min(12, len((official.get("state") or {}).get("rounds") or []))
+        # One official attempt is still the underlying rule. Once underway,
+        # show 13-round progress instead of the unhelpful static 0/1.
+        return {**base, "value": str(rounds), "total": "13",
+                "detail": "Rounds saved · official game in progress", "action": "Resume Weekly"}
     except Exception:
         return base
 
@@ -5439,6 +5445,37 @@ st.markdown("""
   .yc-tile-foot{display:none!important}
   .yc-progress-desc{min-height:3.15rem!important}
 }
+/* v44.0.8: Native Streamlit text + Daily headings must remain legible in light mode.
+   Avoid blanket descendant color rules: buttons, pills and podium keep their own palettes. */
+[data-testid="stMain"] [data-testid="stMarkdown"] > [data-testid="stMarkdownContainer"] > h1,
+[data-testid="stMain"] [data-testid="stMarkdown"] > [data-testid="stMarkdownContainer"] > h2,
+[data-testid="stMain"] [data-testid="stMarkdown"] > [data-testid="stMarkdownContainer"] > h3,
+[data-testid="stMain"] [data-testid="stMarkdown"] > [data-testid="stMarkdownContainer"] > h4,
+[data-testid="stMain"] [data-testid="stMarkdown"] > [data-testid="stMarkdownContainer"] > p {
+  color:#142344!important;
+  -webkit-text-fill-color:#142344!important;
+}
+[data-testid="stMain"] [data-testid="stCaptionContainer"] p {
+  color:#536078!important;
+  -webkit-text-fill-color:#536078!important;
+}
+/* Native expander labels were also nearly white on white in Daily results.
+   Color only the summary text, never a button or dark results panel. */
+[data-testid="stMain"] [data-testid="stExpander"] summary,
+[data-testid="stMain"] [data-testid="stExpander"] summary p,
+[data-testid="stMain"] [data-testid="stExpander"] summary span {
+  color:#142344!important;-webkit-text-fill-color:#142344!important;
+}
+.daily-progress-copy b,.score-section-head,.score-section-title,
+.scorecard-heading-main {color:#142344!important;-webkit-text-fill-color:#142344!important}
+.daily-progress-copy span,.scorecard-heading-sub,.score-section-note,
+.score-label {color:#536078!important;-webkit-text-fill-color:#536078!important}
+.score-box {color:#142344!important;background:#fff!important}
+.score-box .filled-value {color:#334155!important;-webkit-text-fill-color:#334155!important}
+.score-box .open-value {color:#16733c!important;-webkit-text-fill-color:#16733c!important}
+.leaderboard-list .leaderboard-row {color:#142344!important}
+.leaderboard-list .leaderboard-name,.leaderboard-list .leaderboard-rank,
+.leaderboard-list .leaderboard-score b {color:#142344!important;-webkit-text-fill-color:#142344!important}
 </style>""", unsafe_allow_html=True)
 
 initialize_state()
